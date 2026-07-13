@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="100" fill="#e8f4fd"/>
+  <!-- Head -->
+  <ellipse cx="100" cy="62" rx="28" ry="30" fill="#1e293b"/>
+  <!-- Neck -->
+  <rect x="90" y="86" width="20" height="18" fill="#1e293b"/>
+  <!-- Shirt collar left -->
+  <polygon points="90,100 70,130 90,115" fill="#f8fafc"/>
+  <!-- Shirt collar right -->
+  <polygon points="110,100 130,130 110,115" fill="#f8fafc"/>
+  <!-- Tie -->
+  <polygon points="97,104 103,104 106,130 100,138 94,130" fill="#1e293b"/>
+  <!-- Tie knot -->
+  <polygon points="96,100 104,100 103,107 97,107" fill="#334155"/>
+  <!-- Suit body -->
+  <path d="M40,200 C40,155 60,135 90,115 L90,100 C90,100 95,108 100,110 C105,108 110,100 110,100 L110,115 C140,135 160,155 160,200 Z" fill="#1e293b"/>
+  <!-- Suit lapel left -->
+  <path d="M90,100 L70,130 L90,145 L90,115" fill="#2d3e50"/>
+  <!-- Suit lapel right -->
+  <path d="M110,100 L130,130 L110,145 L110,115" fill="#2d3e50"/>
+</svg>

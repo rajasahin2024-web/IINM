@@ -1,0 +1,14 @@
+with open("src/app/admin/components/CourseManager.tsx", "r", encoding="utf-8") as f:
+    text = f.read()
+
+old = '<label key={c.id} onClick={(e) => { e.preventDefault(); toggleChapter(c.id); selectActiveChapter(c.id); }} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", background: isActive ? "#e0f2fe" : isChecked ? "#f0fdf4" : "#f8fafc", padding: "12px 16px", borderRadius: 12, border: `2px solid ${isActive ? "#38bdf8" : isChecked ? "#22c55e" : "#f1f5f9"}`, transition: "all 0.2s" }}>\n                                                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 20, height: 20, borderRadius: 6, border: `2px solid ${isChecked ? "#22c55e" : "#cbd5e1"}`, background: isChecked ? "#22c55e" : "#fff", color: "#fff", transition: "all 0.2s", flexShrink: 0 }}>\n                                                           {isChecked && <Icon name="check" size={12} />}\n                                                        </div>\n                                                        <span style={{ fontSize: 13.5, fontWeight: isChecked || isActive ? 700 : 600, color: isActive ? "#0369a1" : isChecked ? "#15803d" : "#475569", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.title}</span>\n                                                     </label>'
+
+new = '<div key={c.id} onClick={() => selectActiveChapter(c.id)} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", background: isActive ? "#e0f2fe" : isChecked ? "#f0fdf4" : "#f8fafc", padding: "12px 16px", borderRadius: 12, border: `2px solid ${isActive ? "#38bdf8" : isChecked ? "#22c55e" : "#f1f5f9"}`, transition: "all 0.2s", userSelect: "none" }}>\n                                                        <div onClick={(e) => { e.stopPropagation(); toggleChapter(c.id); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 20, height: 20, borderRadius: 6, border: `2px solid ${isChecked ? "#22c55e" : "#cbd5e1"}`, background: isChecked ? "#22c55e" : "#fff", color: "#fff", transition: "all 0.2s", flexShrink: 0, cursor: "pointer" }}>\n                                                           {isChecked && <Icon name="check" size={12} />}\n                                                        </div>\n                                                        <span style={{ fontSize: 13.5, fontWeight: isChecked || isActive ? 700 : 600, color: isActive ? "#0369a1" : isChecked ? "#15803d" : "#475569", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.title}</span>\n                                                     </div>'
+
+if old in text:
+    text = text.replace(old, new)
+    with open("src/app/admin/components/CourseManager.tsx", "w", encoding="utf-8") as f:
+        f.write(text)
+    print("OK: patched successfully")
+else:
+    print("ERROR: old block not found")

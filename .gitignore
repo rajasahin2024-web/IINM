@@ -1,0 +1,39 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.local
+backend/data.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+backend/venv/
+backend/.venv/
+.venv/
+
+# Node
+node_modules/
+.next/
+out/
+build/
+
+# Uploads (user-generated content)
+backend/uploads/
+
+# Logs
+*.log
+backend/*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Project archive
+project.zip

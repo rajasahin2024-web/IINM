@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api
+Disallow: /login
+Disallow: /device-admin
+Disallow: /device-request
+
+Sitemap: https://iinmedu.com/sitemap.xml

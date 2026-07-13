@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="100" fill="#fdf2f8"/>
+  <!-- Hair (bob style) -->
+  <path d="M62,72 C62,30 138,30 138,72 L138,90 C138,90 125,105 100,105 C75,105 62,90 62,90 Z" fill="#1e293b"/>
+  <!-- Hair sides extending down -->
+  <path d="M62,72 L58,110 C58,115 65,118 68,110 L68,85" fill="#1e293b"/>
+  <path d="M138,72 L142,110 C142,115 135,118 132,110 L132,85" fill="#1e293b"/>
+  <!-- Face -->
+  <ellipse cx="100" cy="68" rx="24" ry="26" fill="#cbd5e1"/>
+  <!-- Neck -->
+  <rect x="91" y="89" width="18" height="16" fill="#cbd5e1"/>
+  <!-- V-neck collar left -->
+  <polygon points="91,102 72,130 91,118" fill="#f8fafc"/>
+  <!-- V-neck collar right -->
+  <polygon points="109,102 128,130 109,118" fill="#f8fafc"/>
+  <!-- Jacket body -->
+  <path d="M38,200 C38,158 58,138 91,118 L91,102 C91,102 96,112 100,114 C104,112 109,102 109,102 L109,118 C142,138 162,158 162,200 Z" fill="#1e293b"/>
+  <!-- Lapel left -->
+  <path d="M91,102 L72,130 L91,148 L91,118" fill="#2d3e50"/>
+  <!-- Lapel right -->
+  <path d="M109,102 L128,130 L109,148 L109,118" fill="#2d3e50"/>
+  <!-- V-neck opening -->
+  <polygon points="91,102 109,102 100,128" fill="#f8fafc"/>
+</svg>

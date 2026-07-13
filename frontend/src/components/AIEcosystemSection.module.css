@@ -1,0 +1,265 @@
+/* ───────────────────────────────────────────────
+   AI Ecosystem Section — Simple & Readable
+   ─────────────────────────────────────────────── */
+
+.section {
+  position: relative;
+  width: 100%;
+  background: #020b23;
+  overflow: hidden;
+}
+
+.track {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 100px 48px;
+}
+
+/* ─── Particle Canvas ─── */
+.particleCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ─── Content Layout ─── */
+.content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 80px;
+  align-items: center;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0;
+}
+
+/* ─── Left Text Column ─── */
+.textCol {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.label {
+  display: inline-flex;
+  width: fit-content;
+  padding: 6px 16px;
+  border-radius: 100px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.heading {
+  font-size: clamp(32px, 4vw, 52px);
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.1;
+  letter-spacing: -1.5px;
+  margin: 0;
+}
+
+.accent {
+  background: linear-gradient(135deg, #4facfe, #00f2fe);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.lead {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.45);
+  line-height: 1.7;
+  max-width: 400px;
+  margin: 0;
+}
+
+/* ─── Right Accordion Column ─── */
+.cardsCol {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.accordionItem {
+  position: relative;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background-color 0.4s ease, border-color 0.4s ease;
+  overflow: hidden;
+}
+
+.accordionItem:hover,
+.accordionItem.active {
+  background: rgba(255, 255, 255, 0.045);
+  border-color: var(--card-accent, rgba(79, 172, 254, 0.25));
+}
+
+.accordionItem:hover .cardGlow,
+.accordionItem.active .cardGlow {
+  opacity: 1;
+}
+
+.accordionHeader {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 24px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.cardNumber {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--card-accent, #4facfe);
+  opacity: 0.6;
+  min-width: 28px;
+  line-height: 1.4;
+}
+
+.cardTitle {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: -0.3px;
+}
+
+.accordionIcon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--card-accent, #4facfe);
+  opacity: 0.5;
+  transition: transform 0.4s ease, opacity 0.3s ease;
+  flex-shrink: 0;
+}
+
+.accordionItem:hover .accordionIcon,
+.accordionItem.active .accordionIcon {
+  opacity: 1;
+  transform: rotate(180deg);
+}
+
+.accordionPanel {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-height 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.3s ease,
+              padding 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0 24px;
+}
+
+.accordionItem:hover .accordionPanel,
+.accordionItem.active .accordionPanel {
+  max-height: 300px;
+  opacity: 1;
+  padding: 0 24px 18px 68px;
+}
+
+.cardDesc {
+  font-size: 13px;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0;
+}
+
+.cardGlow {
+  position: absolute;
+  top: -20px;
+  right: -20px;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--card-accent, #4facfe) 0%, transparent 70%);
+  opacity: 0;
+  filter: blur(20px);
+  transition: opacity 0.6s ease;
+  pointer-events: none;
+}
+
+/* ─── Desktop hover disable on touch ─── */
+@media (hover: none) {
+  .accordionItem:hover {
+    background: rgba(255, 255, 255, 0.02);
+    border-color: rgba(255, 255, 255, 0.05);
+  }
+  .accordionItem:hover .accordionPanel {
+    max-height: 0;
+    opacity: 0;
+    padding: 0 24px;
+  }
+  .accordionItem:hover .accordionIcon {
+    transform: rotate(0deg);
+    opacity: 0.5;
+  }
+  .accordionItem:hover .cardGlow {
+    opacity: 0;
+  }
+}
+
+/* ─── Mobile ─── */
+@media (max-width: 860px) {
+  .track {
+    padding: 80px 48px;
+  }
+
+  .content {
+    grid-template-columns: 1fr;
+    gap: 48px;
+    padding: 0 24px;
+  }
+
+  .heading {
+    font-size: 30px;
+  }
+
+  .lead {
+    max-width: none;
+  }
+
+  .cardsCol {
+    gap: 8px;
+  }
+
+  .accordionHeader {
+    padding: 14px 18px;
+  }
+
+  .accordionItem:hover .accordionPanel,
+  .accordionItem.active .accordionPanel {
+    padding: 0 18px 14px 60px;
+  }
+}
+
+/* Tablet */
+@media (min-width: 861px) and (max-width: 1100px) {
+  .content {
+    gap: 48px;
+    padding: 0 48px;
+  }
+
+  .heading {
+    font-size: 36px;
+  }
+}
