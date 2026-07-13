@@ -37,3 +37,6 @@ Thumbs.db
 
 # Project archive
 project.zip
+
+# Backup of nested frontend git repository
+.git-frontend-backup/
