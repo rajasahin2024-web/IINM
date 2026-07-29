@@ -31,9 +31,9 @@ interface ContactData {
 }
 
 const DEFAULT_REVIEW_BADGES = [
-  { name: "Google Reviews", rating: "4.8", accent: "#4285F4" },
-  { name: "Trustpilot", rating: "4.0", accent: "#00B67A" },
-  { name: "Just Dial", rating: "4.8", accent: "#F97316" },
+  { name: "Google Reviews", rating: "4.8", icon: "/icons/google-logo.svg" },
+  { name: "Trustpilot", rating: "4.0", icon: "/icons/trust-pilot.svg" },
+  { name: "Just Dial", rating: "4.8", icon: "/icons/just-dial.svg" },
 ];
 
 const DEFAULT_STATES = [
@@ -67,7 +67,7 @@ const LOCATION_ICON = (
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "14px 16px",
-  borderRadius: 10,
+  borderRadius: 4,
   border: "1.5px solid #e2e8f0",
   outline: "none",
   fontSize: 14,
@@ -88,7 +88,7 @@ const labelStyle: React.CSSProperties = {
 
 const cardStyle: React.CSSProperties = {
   background: "#fff",
-  borderRadius: 20,
+  borderRadius: 6,
   border: "1px solid #e2e8f0",
   boxShadow: "0 4px 24px rgba(0,0,0,.05)",
   padding: "24px",
@@ -156,8 +156,6 @@ export default function ContactUsPage() {
     }
   };
 
-  const pageTitle = v("page_title", "Get In Touch");
-  const pageSubtitle = v("page_subtitle", "Get in touch with us for any inquiries or assistance.");
   const getHeading = v("get_in_touch_heading", "Get In Touch");
   const getDescription = v("get_in_touch_description", "Get in touch with us for any inquiries or assistance. Our team is here to help you.\nYou can reach us via email or phone:");
   const emailLabel = v("contact_email_label", "Email");
@@ -178,10 +176,8 @@ export default function ContactUsPage() {
     <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "'Inter','Segoe UI',sans-serif" }}>
       <PublicNavbar />
 
-      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "40px 24px" }}>
-        <h1 style={{ fontSize: "clamp(28px,5vw,40px)", fontWeight: 800, color: "#0f172a", marginBottom: 8 }}>{pageTitle}</h1>
-        {pageSubtitle && <p style={{ color: "#64748b", fontSize: 16, lineHeight: 1.6, marginBottom: 40 }}>{pageSubtitle}</p>}
-
+      <main style={{ padding: "40px 48px" }}>
+        <div style={{ maxWidth: 1400, margin: "0 auto" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 40, alignItems: "start" }}>
           {/* Left */}
           <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
@@ -222,10 +218,11 @@ export default function ContactUsPage() {
           </div>
 
           {/* Right form */}
-          <div style={{ ...cardStyle, padding: 32, boxShadow: "0 10px 40px rgba(0,0,0,.08)", borderRadius: 24 }}>
-            <div style={{ marginBottom: 24 }}>
-              <h2 style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", marginBottom: 4 }}>{formTitle}</h2>
-              {formSubtitle && <p style={{ fontSize: 14, color: "#64748b" }}>{formSubtitle}</p>}
+          <div style={{ ...cardStyle, padding: 32, boxShadow: "0 10px 40px rgba(0,0,0,.08)", borderLeft: "4px solid #f97317" }}>
+            <div style={{ marginBottom: 24, display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 4, height: 22, background: "#f97317", borderRadius: 2, flexShrink: 0 }} />
+              <h2 style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", margin: 0 }}>{formTitle}</h2>
+              {formSubtitle && <p style={{ fontSize: 14, color: "#64748b", margin: 0 }}>{formSubtitle}</p>}
             </div>
 
             {status === "success" ? (
@@ -233,7 +230,7 @@ export default function ContactUsPage() {
                 <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#dcfce7", color: "#16a34a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 16px" }}>✓</div>
                 <h3 style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>Thank You!</h3>
                 <p style={{ color: "#64748b", fontSize: 15, lineHeight: 1.6 }}>{successMsg}</p>
-                <button onClick={() => setStatus("idle")} style={{ marginTop: 20, background: "#2563eb", color: "#fff", border: "none", borderRadius: 10, padding: "12px 24px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Submit Another</button>
+                <button onClick={() => setStatus("idle")} style={{ marginTop: 20, background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, padding: "12px 24px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Submit Another</button>
               </div>
             ) : (
               <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -289,7 +286,7 @@ export default function ContactUsPage() {
                   <p style={{ fontSize: 13, color: "#dc2626", background: "#fef2f2", borderRadius: 8, padding: "10px 14px" }}>Something went wrong. Please try again.</p>
                 )}
 
-                <button type="submit" disabled={!form.terms || status === "submitting"} style={{ width: "100%", padding: "14px", borderRadius: 10, border: "none", background: "#2563eb", color: "#fff", fontSize: 15, fontWeight: 700, cursor: !form.terms || status === "submitting" ? "not-allowed" : "pointer", opacity: !form.terms || status === "submitting" ? 0.6 : 1, transition: "all .2s", boxShadow: "0 6px 20px rgba(37,99,235,.25)", marginTop: 4 }}>
+                <button type="submit" disabled={!form.terms || status === "submitting"} style={{ width: "100%", padding: "14px", borderRadius: 6, border: "none", background: "#2563eb", color: "#fff", fontSize: 15, fontWeight: 700, cursor: !form.terms || status === "submitting" ? "not-allowed" : "pointer", opacity: !form.terms || status === "submitting" ? 0.6 : 1, transition: "all .2s", boxShadow: "0 6px 20px rgba(37,99,235,.25)", marginTop: 4 }}>
                   {status === "submitting" ? "Submitting..." : "Submit"}
                 </button>
               </form>
@@ -297,17 +294,22 @@ export default function ContactUsPage() {
           </div>
         </div>
 
-        {/* Review badges */}
-        <div style={{ marginTop: 56, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 16 }}>
+          {/* Review badges */}
+          <div style={{ marginTop: 56, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 16 }}>
           {reviewBadges.map((b: any) => (
-            <div key={b.name} style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "14px 20px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 4px 20px rgba(0,0,0,.04)" }}>
-              <div style={{ width: 40, height: 40, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 14, fontWeight: 800, background: b.accent || "#0f172a" }}>{b.name.charAt(0)}</div>
+            <div key={b.name} style={{ background: "#fff", borderRadius: 6, border: "1px solid #e2e8f0", padding: "14px 20px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 4px 20px rgba(0,0,0,.04)" }}>
+              {b.icon ? (
+                <img src={b.icon} alt={b.name} width={40} height={40} style={{ objectFit: "contain", flexShrink: 0 }} />
+              ) : (
+                <div style={{ width: 40, height: 40, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 14, fontWeight: 800, background: b.accent || "#0f172a" }}>{b.name.charAt(0)}</div>
+              )}
               <div>
-                <p style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}>{b.name}</p>
+                <p style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{b.name}</p>
                 <p style={{ fontSize: 12, color: "#64748b" }}>Rated {b.rating}</p>
               </div>
             </div>
           ))}
+          </div>
         </div>
       </main>
 
@@ -320,12 +322,12 @@ export default function ContactUsPage() {
               Call Us Now
             </a>
           )}
-          {contact.whatsapp && (
-            <a href={`https://wa.me/${contact.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, background: "#fff", borderRadius: 50, padding: "10px 18px", boxShadow: "0 6px 24px rgba(0,0,0,.12)", border: "1px solid #e2e8f0", textDecoration: "none", color: "#0f172a", fontSize: 14, fontWeight: 700 }}>
+          {(contact.whatsapp || phone) && (
+            <a href={`https://wa.me/${(contact.whatsapp || phone).replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, background: "#fff", borderRadius: 50, padding: "10px 18px", boxShadow: "0 6px 24px rgba(0,0,0,.12)", border: "1px solid #e2e8f0", textDecoration: "none", color: "#0f172a", fontSize: 14, fontWeight: 700 }}>
               <span style={{ width: 32, height: 32, borderRadius: "50%", background: "#22c55e", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
               </span>
-              Chat On Whatsapp
+              Whatsapp Us
             </a>
           )}
           <button onClick={() => setShowFloat(false)} style={{ alignSelf: "flex-end", width: 32, height: 32, borderRadius: "50%", background: "#e2e8f0", color: "#475569", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 18 }} aria-label="Close">×</button>

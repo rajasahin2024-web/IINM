@@ -187,7 +187,7 @@ function ContactUsSettingsInner() {
   const TABS = [
     { id: "settings", label: "Contact Info", icon: "phone" },
     { id: "banners", label: "Carousel Banners", icon: "image" },
-    { id: "inquiries", label: "Inquiries", icon: "mail" },
+    { id: "inquiries", label: "Enquiries", icon: "mail" },
   ] as const;
 
   return (
@@ -315,7 +315,7 @@ function ContactUsSettingsInner() {
                 <div style={{ marginBottom: 8 }}><FInput label="Terms Text (HTML allowed)" value={settings.terms_text} onChange={set("terms_text")} isTextArea /></div>
                 <div style={{ marginBottom: 8 }}><FInput label="State Options (JSON array)" value={settings.state_options} onChange={set("state_options")} isTextArea /></div>
                 <FInput label="Qualification Options (JSON array)" value={settings.qualification_options} onChange={set("qualification_options")} isTextArea />
-                <FInput label="Review Badges (JSON array: [{name, rating, accent}])" value={settings.review_badges} onChange={set("review_badges")} isTextArea />
+                <FInput label="Review Badges (JSON array: [{name, rating, icon}])" value={settings.review_badges} onChange={set("review_badges")} isTextArea />
               </div>
             </div>
             <div style={{ padding: "16px 32px", background: "#f8fafc", display: "flex", justifyContent: "flex-end" }}>
@@ -388,12 +388,12 @@ function ContactUsSettingsInner() {
         </div>
       )}
 
-      {/* ── Tab: Inquiries ── */}
+      {/* ── Tab: Enquiries ── */}
       {tab === "inquiries" && (
         <div style={cardStyle}>
           <div style={{ padding: "20px 28px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#0f172a" }}>Submitted Inquiries</h2>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#0f172a" }}>Submitted Enquiries</h2>
               <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748b" }}>{inquiries.length} total</p>
             </div>
             <button onClick={fetchInquiries} style={{ background: "#f1f5f9", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
@@ -403,7 +403,7 @@ function ContactUsSettingsInner() {
           {inquiries.length === 0 ? (
             <div style={{ padding: "48px 32px", textAlign: "center", color: "#94a3b8" }}>
               <Icon name="mail" size={40} />
-              <p style={{ marginTop: 12, fontWeight: 600 }}>No inquiries yet</p>
+              <p style={{ marginTop: 12, fontWeight: 600 }}>No enquiries yet</p>
             </div>
           ) : (
             <div>
@@ -420,6 +420,10 @@ function ContactUsSettingsInner() {
                     </div>
                     <div style={{ fontSize: 13, color: "#64748b", marginTop: 2 }}>{inq.email}{inq.phone && ` · ${inq.phone}`}</div>
                     {inq.message && <p style={{ margin: "6px 0 0", fontSize: 13, color: "#475569", lineHeight: 1.5 }}>{inq.message}</p>}
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                      <span style={{ background: "#e0f2fe", color: "#0369a1", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>Contact Type: Enquiries</span>
+                      <span style={{ background: "#f1f5f9", color: "#475569", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>Page: Contact</span>
+                    </div>
                     <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{inq.created_at ? new Date(inq.created_at).toLocaleString() : ""}</div>
                   </div>
                 </div>
