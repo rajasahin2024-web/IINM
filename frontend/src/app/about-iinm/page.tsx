@@ -1,11 +1,123 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
-import Link from "next/link";
+import Image from "next/image";
 import PublicNavbar from "@/components/PublicNavbar";
 import PublicFooter from "@/components/PublicFooter";
+import AboutInstitutionalLayout from "@/components/AboutInstitutionalLayout";
 import { API_BASE_URL, BASE_URL } from "@/lib/config";
 import { apiFetch } from "@/lib/apiFetch";
 import "../home.css";
+import "../about-institutional.css";
+
+// ── Type definitions ──
+interface AboutSettingsData {
+  mission_statement: string;
+  vision_statement: string;
+  story_title: string;
+  story_text: string;
+  stats_years: string;
+  stats_students: string;
+  stats_courses: string;
+  director_name: string;
+  director_title: string;
+  director_message: string;
+  director_image_url: string;
+  hero_eyebrow: string;
+  hero_title: string;
+  hero_subtitle: string;
+  hero_note: string;
+  hero_image_1: string;
+  hero_image_2: string;
+  hero_image_3: string;
+  hero_image_4: string;
+  hero_image_5: string;
+  hero_image_6: string;
+  difference_eyebrow: string;
+  difference_title: string;
+  difference_video_url: string;
+  difference_at_iinm_heading: string;
+  difference_traditional_heading: string;
+  difference_rows_json: string;
+  alumni_eyebrow: string;
+  alumni_title: string;
+  alumni_description: string;
+}
+
+interface FounderData {
+  name: string;
+  role: string;
+  bio: string;
+  quote: string;
+  image_url: string;
+  video_url: string;
+  linkedin_url: string;
+  business_logo_url: string;
+}
+
+interface GalleryItem {
+  id: string;
+  image_url: string;
+  caption: string;
+}
+
+interface TimelineItem {
+  id: string;
+  year: string;
+  title: string;
+  description: string;
+  icon_name: string;
+}
+
+interface DifferenceRow {
+  at_iinm: string;
+  traditional: string;
+}
+
+interface AlumniLogoItem {
+  id: string;
+  image_url: string;
+}
+
+interface ExtendedData {
+  founder1: FounderData;
+  founder2: FounderData;
+  gallery: GalleryItem[];
+  timeline: TimelineItem[];
+  alumni_logos: AlumniLogoItem[];
+}
+
+interface TeamMember {
+  id: number;
+  name: string;
+  designation: string;
+  image_url: string;
+  bio: string;
+}
+
+interface CoreValue {
+  id: number;
+  title: string;
+  description: string;
+  icon_name: string;
+}
+
+interface SelectOption {
+  value: string;
+  label: string;
+}
+
+type InputChangeEvent = React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>;
+type FileChangeEvent = React.ChangeEvent<HTMLInputElement>;
+
+interface FormInputProps {
+  label: string;
+  value: string | undefined;
+  onChange: (e: InputChangeEvent) => void;
+  type?: string;
+  isTextArea?: boolean;
+  rows?: number;
+  selectOptions?: SelectOption[] | null;
+}
 
 // Remove /api from API_BASE_URL to get backend root URL for file absolute paths
 const BACKEND_BASE = API_BASE_URL.replace("/api", "");
@@ -81,7 +193,7 @@ const ICONS: Record<string, React.ReactNode> = {
 /* ══════════════════════════════════════════════════════
    FORM INPUT FIELD
    ══════════════════════════════════════════════════════ */
-function FormInput({ label, value, onChange, type = "text", isTextArea = false, rows = 3, selectOptions = null }: any) {
+function FormInput({ label, value, onChange, type = "text", isTextArea = false, rows = 3, selectOptions = null }: FormInputProps) {
   const [f, setF] = useState(false);
   const has = value !== "" && value !== null && value !== undefined;
   
@@ -109,7 +221,7 @@ function FormInput({ label, value, onChange, type = "text", isTextArea = false, 
     <div style={{ position: "relative", width: "100%", marginBottom: 14 }}>
       {selectOptions ? (
         <select style={base} value={value || ""} onChange={onChange} onFocus={() => setF(true)} onBlur={() => setF(false)}>
-          {selectOptions.map((opt: any) => (
+          {selectOptions.map((opt: SelectOption) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </select>
@@ -123,57 +235,187 @@ function FormInput({ label, value, onChange, type = "text", isTextArea = false, 
   );
 }
 
+/* ══════════════════════════════════════════════════════
+   SCROLL-REVEAL — lightweight IntersectionObserver hook
+   ══════════════════════════════════════════════════════ */
+function useInView(threshold = 0.15) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      { threshold }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [threshold]);
+
+  return { ref, inView };
+}
+
+function Reveal({ children, delay = 0, direction = "up", className = "", style = {} }: {
+  children: React.ReactNode;
+  delay?: number;
+  direction?: "up" | "left" | "right" | "scale";
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const { ref, inView } = useInView();
+  const hiddenTransform =
+    direction === "left" ? "translateX(-44px)" :
+    direction === "right" ? "translateX(44px)" :
+    direction === "scale" ? "scale(0.92)" :
+    "translateY(34px)";
+
+  return (
+    <div
+      ref={ref}
+      className={className}
+      style={{
+        opacity: inView ? 1 : 0,
+        transform: inView ? "none" : hiddenTransform,
+        transition: `opacity 0.7s cubic-bezier(0.16,1,0.3,1) ${delay}ms, transform 0.7s cubic-bezier(0.16,1,0.3,1) ${delay}ms`,
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
+   ANIMATED COUNTER — counts up numeric stats when in view
+   ══════════════════════════════════════════════════════ */
+function AnimatedCounter({ value, duration = 1400 }: { value: string; duration?: number }) {
+  const { ref, inView } = useInView(0.4);
+  const [display, setDisplay] = useState<string>(value.replace(/[0-9,]/g, (c) => (c === "," ? "," : "0")));
+
+  useEffect(() => {
+    if (!inView) return;
+    const match = value.match(/^([\d,]+)(.*)$/);
+    if (!match) return;
+    const target = parseInt(match[1].replace(/,/g, ""), 10);
+    const suffix = match[2] || "";
+    if (isNaN(target)) return;
+
+    let start: number | null = null;
+    let raf = 0;
+    const step = (ts: number) => {
+      if (start === null) start = ts;
+      const progress = Math.min((ts - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = Math.floor(eased * target);
+      setDisplay(current.toLocaleString() + suffix);
+      if (progress < 1) raf = requestAnimationFrame(step);
+      else setDisplay(target.toLocaleString() + suffix);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [inView, value, duration]);
+
+  return <span ref={ref}>{display}</span>;
+}
+
 export default function AboutIinmPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
 
   // States for fetched data
-  const [settings, setSettings] = useState<any>({
+  const [settings, setSettings] = useState<AboutSettingsData>({
     mission_statement: "", vision_statement: "", story_title: "", story_text: "",
     stats_years: "", stats_students: "", stats_courses: "",
-    director_name: "", director_title: "", director_message: "", director_image_url: ""
+    director_name: "", director_title: "", director_message: "", director_image_url: "",
+    hero_eyebrow: "", hero_title: "", hero_subtitle: "", hero_note: "",
+    hero_image_1: "", hero_image_2: "", hero_image_3: "", hero_image_4: "", hero_image_5: "", hero_image_6: "",
+    difference_eyebrow: "", difference_title: "", difference_video_url: "",
+    difference_at_iinm_heading: "", difference_traditional_heading: "", difference_rows_json: "",
+    alumni_eyebrow: "", alumni_title: "", alumni_description: ""
   });
-  const [extended, setExtended] = useState<any>({
-    founder1: { name: "", role: "", bio: "", quote: "", image_url: "", video_url: "" },
-    founder2: { name: "", role: "", bio: "", quote: "", image_url: "", video_url: "" },
+  const [extended, setExtended] = useState<ExtendedData>({
+    founder1: { name: "", role: "", bio: "", quote: "", image_url: "", video_url: "", linkedin_url: "", business_logo_url: "" },
+    founder2: { name: "", role: "", bio: "", quote: "", image_url: "", video_url: "", linkedin_url: "", business_logo_url: "" },
     gallery: [],
-    timeline: []
+    timeline: [],
+    alumni_logos: []
   });
-  const [team, setTeam] = useState<any[]>([]);
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [values, setValues] = useState<CoreValue[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Active play state for founder YouTube videos
   const [videoPlay, setVideoPlay] = useState<Record<string, boolean>>({});
 
   // Active editor modals
-  const [editorModal, setEditorModal] = useState<"story" | "founders" | "gallery" | "timeline" | null>(null);
+  const [editorModal, setEditorModal] = useState<"story" | "founders" | "gallery" | "timeline" | "hero" | "who" | "purpose" | "alumni" | null>(null);
   
   // Temporal editor form states
-  const [editSettings, setEditSettings] = useState<any>({});
-  const [editExtended, setEditExtended] = useState<any>({});
+  const [editSettings, setEditSettings] = useState<Record<string, string>>({});
+  const [editDifferenceRows, setEditDifferenceRows] = useState<DifferenceRow[]>([]);
+  const [editExtended, setEditExtended] = useState<ExtendedData>({
+    founder1: { name: "", role: "", bio: "", quote: "", image_url: "", video_url: "", linkedin_url: "", business_logo_url: "" },
+    founder2: { name: "", role: "", bio: "", quote: "", image_url: "", video_url: "", linkedin_url: "", business_logo_url: "" },
+    gallery: [],
+    timeline: [],
+    alumni_logos: []
+  });
   const [uploading, setUploading] = useState(false);
+  const [alumniUploadKey, setAlumniUploadKey] = useState(0);
+
+  // Lightbox preview for gallery images
+  const [lightbox, setLightbox] = useState<string | null>(null);
+  // Back-to-top floating button visibility
+  const [showBackToTop, setShowBackToTop] = useState(false);
+
+  // Page title from site settings
+  useEffect(() => {
+    const cached = typeof window !== "undefined" ? localStorage.getItem("iinm_site_settings") : null;
+    if (cached) {
+      const d = JSON.parse(cached);
+      document.title = `About Us | ${d.site_name || "IINM"}`;
+    }
+    fetch(`${BASE_URL}/api/settings/site`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("iinm_site_settings", JSON.stringify(d));
+        }
+        document.title = `About Us | ${d.site_name || "IINM"}`;
+      })
+      .catch(() => {});
+  }, []);
 
   // Fetch all page data
   const loadPageData = async () => {
     try {
       setLoading(true);
-      const [sRes, eRes, tRes] = await Promise.all([
+      const [sRes, eRes, tRes, vRes] = await Promise.all([
         apiFetch(`${API_BASE_URL}/about/settings`),
         apiFetch(`${API_BASE_URL}/about/extended`),
-        apiFetch(`${API_BASE_URL}/leadership/public`)
+        apiFetch(`${API_BASE_URL}/leadership/public`),
+        apiFetch(`${API_BASE_URL}/about/core-values`)
       ]);
 
-      if (sRes.ok) setSettings(await sRes.json());
+      if (sRes.ok) setSettings(await sRes.json() as AboutSettingsData);
       if (eRes.ok) {
-        const d = await eRes.json();
+        const d = await eRes.json() as Partial<ExtendedData>;
         setExtended({
-          founder1: d?.founder1 || { name: "", role: "", bio: "", quote: "", image_url: "", video_url: "" },
-          founder2: d?.founder2 || { name: "", role: "", bio: "", quote: "", image_url: "", video_url: "" },
+          founder1: d?.founder1 || { name: "", role: "", bio: "", quote: "", image_url: "", video_url: "", linkedin_url: "", business_logo_url: "" },
+          founder2: d?.founder2 || { name: "", role: "", bio: "", quote: "", image_url: "", video_url: "", linkedin_url: "", business_logo_url: "" },
           gallery: d?.gallery || [],
-          timeline: d?.timeline || []
+          timeline: d?.timeline || [],
+          alumni_logos: d?.alumni_logos || []
         });
       }
-      if (tRes.ok) setTeam(await tRes.json());
+      if (tRes.ok) setTeam(await tRes.json() as TeamMember[]);
+      if (vRes.ok) setValues(await vRes.json() as CoreValue[]);
     } catch (e) {
       console.error("Error loading About page data:", e);
     } finally {
@@ -190,6 +432,7 @@ export default function AboutIinmPage() {
       if (totalScroll > 0) {
         setScrollProgress((window.scrollY / totalScroll) * 100);
       }
+      setShowBackToTop(window.scrollY > 480);
     };
     window.addEventListener("scroll", handleScroll);
 
@@ -216,12 +459,39 @@ export default function AboutIinmPage() {
     return `${BACKEND_BASE}${url}`;
   };
 
+  // 3D tilt effect for team cards (mouse-driven, no library)
+  const handleCardTilt = (e: React.MouseEvent<HTMLDivElement>) => {
+    const card = e.currentTarget;
+    const rect = card.getBoundingClientRect();
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const rotateX = ((e.clientY - rect.top - cy) / cy) * -6;
+    const rotateY = ((e.clientX - rect.left - cx) / cx) * 6;
+    card.style.transform = `perspective(900px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-6px)`;
+    card.style.borderColor = "rgba(230, 57, 70, 0.3)";
+  };
+  const resetCardTilt = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.currentTarget.style.transform = "none";
+    e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
+  };
+
   // Open inline modal forms
-  const openEditor = (type: "story" | "founders" | "gallery" | "timeline") => {
-    if (type === "story") {
+  const openEditor = (type: "story" | "founders" | "gallery" | "timeline" | "hero" | "who" | "purpose" | "alumni") => {
+    if (type === "story" || type === "hero" || type === "purpose") {
       setEditSettings({ ...settings });
+      if (type === "purpose") {
+        try {
+          const rows = JSON.parse(settings.difference_rows_json || "[]") as DifferenceRow[];
+          setEditDifferenceRows(Array.isArray(rows) ? rows : []);
+        } catch {
+          setEditDifferenceRows([]);
+        }
+      }
+    } else if (type === "who" || type === "alumni") {
+      setEditSettings({ ...settings });
+      setEditExtended(JSON.parse(JSON.stringify(extended)) as ExtendedData);
     } else {
-      setEditExtended(JSON.parse(JSON.stringify(extended)));
+      setEditExtended(JSON.parse(JSON.stringify(extended)) as ExtendedData);
     }
     setEditorModal(type);
   };
@@ -236,7 +506,7 @@ export default function AboutIinmPage() {
         body: JSON.stringify(editSettings)
       });
       if (res.ok) {
-        setSettings(editSettings);
+        setSettings(editSettings as unknown as AboutSettingsData);
         setEditorModal(null);
       }
     } catch (e) {
@@ -246,8 +516,32 @@ export default function AboutIinmPage() {
     }
   };
 
+  // Save THE DIFFERENCE section settings and comparison rows
+  const savePurpose = async () => {
+    setUploading(true);
+    const updatedSettings = {
+      ...editSettings,
+      difference_rows_json: JSON.stringify(editDifferenceRows),
+    };
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/about/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedSettings)
+      });
+      if (res.ok) {
+        setSettings(updatedSettings as unknown as AboutSettingsData);
+        setEditorModal(null);
+      }
+    } catch (e) {
+      console.error("Save difference section error", e);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   // Save Extended Config (Founders, Gallery, or Timeline)
-  const saveExtended = async (updatedData = editExtended) => {
+  const saveExtended = async (updatedData: ExtendedData = editExtended) => {
     setUploading(true);
     try {
       const res = await apiFetch(`${API_BASE_URL}/about/extended`, {
@@ -266,6 +560,62 @@ export default function AboutIinmPage() {
     }
   };
 
+  // Save Alumni Section (settings + extended logos)
+  const saveAlumni = async () => {
+    setUploading(true);
+    try {
+      const [settingsRes, extendedRes] = await Promise.all([
+        apiFetch(`${API_BASE_URL}/about/settings`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(editSettings)
+        }),
+        apiFetch(`${API_BASE_URL}/about/extended`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(editExtended)
+        })
+      ]);
+      if (settingsRes.ok && extendedRes.ok) {
+        setSettings(editSettings as unknown as AboutSettingsData);
+        setExtended(JSON.parse(JSON.stringify(editExtended)) as ExtendedData);
+        setEditorModal(null);
+      }
+    } catch (e) {
+      console.error("Save alumni error", e);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Save Who We Are (both settings + extended gallery)
+  const saveWho = async () => {
+    setUploading(true);
+    try {
+      const [settingsRes, extendedRes] = await Promise.all([
+        apiFetch(`${API_BASE_URL}/about/settings`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(editSettings)
+        }),
+        apiFetch(`${API_BASE_URL}/about/extended`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(editExtended)
+        })
+      ]);
+      if (settingsRes.ok && extendedRes.ok) {
+        setSettings(editSettings as unknown as AboutSettingsData);
+        setExtended(JSON.parse(JSON.stringify(editExtended)) as ExtendedData);
+        setEditorModal(null);
+      }
+    } catch (e) {
+      console.error("Save who error", e);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   // Upload inline images
   const handleImageUpload = async (fieldPath: string[], file: File) => {
     setUploading(true);
@@ -277,16 +627,16 @@ export default function AboutIinmPage() {
         body: fd
       });
       if (res.ok) {
-        const d = await res.json();
-        const updated = JSON.parse(JSON.stringify(editExtended));
+        const d = await res.json() as { url: string };
+        const updated = JSON.parse(JSON.stringify(editExtended)) as ExtendedData;
         
         // Deep nested update
         if (fieldPath.length === 1) {
-          updated[fieldPath[0]] = d.url;
+          (updated as unknown as Record<string, string>)[fieldPath[0]] = d.url;
         } else if (fieldPath.length === 2) {
-          updated[fieldPath[0]][fieldPath[1]] = d.url;
+          ((updated as unknown as Record<string, Record<string, string>>)[fieldPath[0]])[fieldPath[1]] = d.url;
         } else if (fieldPath.length === 3) {
-          updated[fieldPath[0]][fieldPath[1]][fieldPath[2]] = d.url;
+          ((updated as unknown as Record<string, Record<string, Record<string, string>>>)[fieldPath[0]])[fieldPath[1]][fieldPath[2]] = d.url;
         }
         setEditExtended(updated);
       }
@@ -297,12 +647,158 @@ export default function AboutIinmPage() {
     }
   };
 
+  // Upload a hero collage image
+  const handleHeroImageUpload = async (slot: number, file: File) => {
+    setUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/about/upload-about-image`, {
+        method: "POST",
+        body: fd
+      });
+      if (res.ok) {
+        const d = await res.json() as { url: string };
+        setEditSettings((previous) => ({ ...previous, [`hero_image_${slot}`]: d.url }));
+      }
+    } catch (e) {
+      console.error("Hero upload error", e);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   if (loading) {
     return (
-      <div style={{ background: "#f8fafc", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#0a1628", fontFamily: "'Inter', sans-serif" }}>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ width: 44, height: 44, border: "3px solid rgba(10,22,40,0.08)", borderTopColor: "#e63946", borderRadius: "50%", animation: "tickerScroll 1s linear infinite", margin: "0 auto 16px" }} />
-          <h2 style={{ fontSize: 15, fontWeight: 700, letterSpacing: 0.5, color: "#475569" }}>Loading About IINM...</h2>
+      <div className="about-skeleton">
+        {/* Nav bar skeleton */}
+        <div className="about-skeleton-bar" />
+
+        {/* Hero skeleton */}
+        <div className="about-skeleton-hero">
+          <div className="about-skeleton-hero-text">
+            <div className="about-skeleton-line w-sm h-sm" />
+            <div className="about-skeleton-line h-xl w-lg" />
+            <div className="about-skeleton-line h-xl w-md" />
+            <div className="about-skeleton-line w-full" />
+            <div className="about-skeleton-line w-md" />
+            {/* Stats skeleton */}
+            <div className="about-skeleton-stats">
+              <div className="about-skeleton-stat">
+                <div className="about-skeleton-line h-lg w-sm" style={{ margin: "0 auto 8px" }} />
+                <div className="about-skeleton-line h-sm w-sm" style={{ margin: "0 auto" }} />
+              </div>
+              <div className="about-skeleton-stat">
+                <div className="about-skeleton-line h-lg w-sm" style={{ margin: "0 auto 8px" }} />
+                <div className="about-skeleton-line h-sm w-sm" style={{ margin: "0 auto" }} />
+              </div>
+              <div className="about-skeleton-stat">
+                <div className="about-skeleton-line h-lg w-sm" style={{ margin: "0 auto 8px" }} />
+                <div className="about-skeleton-line h-sm w-sm" style={{ margin: "0 auto" }} />
+              </div>
+            </div>
+          </div>
+          <div>
+            <div className="about-skeleton-img hero" />
+            <div className="about-skeleton-float-badge">
+              <div className="about-skeleton-img sm" />
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div className="about-skeleton-line w-sm" />
+                <div className="about-skeleton-line h-sm w-sm" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Mission & Vision skeleton */}
+        <div className="about-skeleton-section" style={{ background: "#0a1628" }}>
+          <div style={{ textAlign: "center", marginBottom: 50 }}>
+            <div className="about-skeleton-line w-sm h-sm" style={{ margin: "0 auto 10px" }} />
+            <div className="about-skeleton-line h-xl w-md" style={{ margin: "0 auto" }} />
+          </div>
+          <div className="about-skeleton-grid-2">
+            <div className="about-skeleton-card-dark">
+              <div className="about-skeleton-img sm" />
+              <div className="about-skeleton-line h-lg w-sm" />
+              <div className="about-skeleton-line w-full" />
+              <div className="about-skeleton-line w-full" />
+              <div className="about-skeleton-line w-md" />
+            </div>
+            <div className="about-skeleton-card-dark">
+              <div className="about-skeleton-img sm" />
+              <div className="about-skeleton-line h-lg w-sm" />
+              <div className="about-skeleton-line w-full" />
+              <div className="about-skeleton-line w-full" />
+              <div className="about-skeleton-line w-md" />
+            </div>
+          </div>
+        </div>
+
+        {/* Founders skeleton */}
+        <div className="about-skeleton-section">
+          <div style={{ textAlign: "center", marginBottom: 50 }}>
+            <div className="about-skeleton-line w-sm h-sm" style={{ margin: "0 auto 10px" }} />
+            <div className="about-skeleton-line h-xl w-md" style={{ margin: "0 auto" }} />
+          </div>
+          <div className="about-skeleton-grid-2">
+            <div className="about-skeleton-card">
+              <div className="about-skeleton-img md" />
+              <div className="about-skeleton-line h-lg w-sm" />
+              <div className="about-skeleton-line h-lg w-md" />
+              <div className="about-skeleton-line w-full" />
+              <div className="about-skeleton-line w-full" />
+              <div className="about-skeleton-line w-md" />
+            </div>
+            <div className="about-skeleton-card">
+              <div className="about-skeleton-img md" />
+              <div className="about-skeleton-line h-lg w-sm" />
+              <div className="about-skeleton-line h-lg w-md" />
+              <div className="about-skeleton-line w-full" />
+              <div className="about-skeleton-line w-full" />
+              <div className="about-skeleton-line w-md" />
+            </div>
+          </div>
+        </div>
+
+        {/* Gallery skeleton */}
+        <div className="about-skeleton-section" style={{ background: "#0a1628" }}>
+          <div style={{ textAlign: "center", marginBottom: 50 }}>
+            <div className="about-skeleton-line w-sm h-sm" style={{ margin: "0 auto 10px" }} />
+            <div className="about-skeleton-line h-xl w-md" style={{ margin: "0 auto" }} />
+          </div>
+          <div className="about-skeleton-grid-3">
+            <div className="about-skeleton-img md" />
+            <div className="about-skeleton-img md" />
+            <div className="about-skeleton-img md" />
+          </div>
+        </div>
+
+        {/* Timeline skeleton */}
+        <div className="about-skeleton-section">
+          <div style={{ textAlign: "center", marginBottom: 50 }}>
+            <div className="about-skeleton-line w-sm h-sm" style={{ margin: "0 auto 10px" }} />
+            <div className="about-skeleton-line h-xl w-md" style={{ margin: "0 auto" }} />
+          </div>
+          <div className="about-skeleton-grid-3">
+            <div className="about-skeleton-card">
+              <div className="about-skeleton-line h-xl w-sm" />
+              <div className="about-skeleton-line h-lg w-md" />
+              <div className="about-skeleton-line w-full" />
+              <div className="about-skeleton-line w-md" />
+            </div>
+            <div className="about-skeleton-card">
+              <div className="about-skeleton-line h-xl w-sm" />
+              <div className="about-skeleton-line h-lg w-md" />
+              <div className="about-skeleton-line w-full" />
+              <div className="about-skeleton-line w-md" />
+            </div>
+            <div className="about-skeleton-card">
+              <div className="about-skeleton-line h-xl w-sm" />
+              <div className="about-skeleton-line h-lg w-md" />
+              <div className="about-skeleton-line w-full" />
+              <div className="about-skeleton-line w-md" />
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -329,54 +825,83 @@ export default function AboutIinmPage() {
       {/* Navigation */}
       <PublicNavbar />
 
+      <AboutInstitutionalLayout
+        settings={settings}
+        extended={extended}
+        values={values}
+        team={team}
+        isAdmin={isAdmin}
+        videoPlay={videoPlay}
+        getAssetUrl={getAssetUrl}
+        onEdit={openEditor}
+        onPlayFounder={(key) => setVideoPlay((previous) => ({ ...previous, [key]: true }))}
+      />
+
+      <div className="about-legacy-layout">
       {/* ══════════════════════════════════════════════════════
          ABOUT US HERO — Light, clean, image on right
          ══════════════════════════════════════════════════════ */}
-      <section style={{ position: "relative", padding: "100px 48px 90px", overflow: "hidden", background: "radial-gradient(circle at 30% 30%, #ffffff 0%, #f3f7ff 50%, #ebf1ff 100%)" }}>
+      <section style={{ position: "relative", padding: "100px 32px 90px", overflow: "hidden", background: "radial-gradient(circle at 30% 30%, #ffffff 0%, #f3f7ff 50%, #ebf1ff 100%)" }}>
         {/* Dot grid backdrop */}
         <div style={{ position: "absolute", inset: 0, opacity: 0.35, backgroundImage: "radial-gradient(rgba(10,22,40,0.05) 1px, transparent 1px)", backgroundSize: "24px 24px", pointerEvents: "none" }} />
 
-        <div style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 56, alignItems: "center", position: "relative", zIndex: 2 }}>
+        <div style={{ maxWidth: 1400, margin: "0 auto", display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 56, alignItems: "center", position: "relative", zIndex: 2 }}>
           {/* Left: Text content */}
           <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
             {/* Badge */}
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(230, 57, 70, 0.08)", border: "1px solid rgba(230, 57, 70, 0.2)", borderRadius: 30, padding: "7px 18px", alignSelf: "flex-start" }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#e63946", animation: "tickerFade 1.5s infinite" }} />
-              <span style={{ fontSize: 11, fontWeight: 800, color: "#e63946", letterSpacing: 1.5, textTransform: "uppercase" }}>About IINM</span>
-            </div>
+            <Reveal delay={0}>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(230, 57, 70, 0.08)", border: "1px solid rgba(230, 57, 70, 0.2)", borderRadius: 30, padding: "7px 18px", alignSelf: "flex-start" }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#e63946", animation: "tickerFade 1.5s infinite" }} />
+                <span style={{ fontSize: 11, fontWeight: 800, color: "#e63946", letterSpacing: 1.5, textTransform: "uppercase" }}>About IINM</span>
+              </div>
+            </Reveal>
 
             {/* Heading */}
-            <h1 style={{ fontSize: "clamp(34px, 5vw, 52px)", fontWeight: 900, letterSpacing: "-1.5px", lineHeight: 1.15, color: "#0a1628", margin: 0 }}>
-              Connecting the Dots of<br />
-              <span style={{ background: "linear-gradient(135deg, #e63946 0%, #a21824 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", display: "inline-block" }}>Artificial Intelligence</span>
-            </h1>
+            <Reveal delay={80}>
+              <h1 style={{ fontSize: "clamp(34px, 5vw, 52px)", fontWeight: 900, letterSpacing: "-1.5px", lineHeight: 1.15, color: "#0a1628", margin: 0 }}>
+                Connecting the Dots of<br />
+                <span className="about-gradient-text">Artificial Intelligence</span>
+              </h1>
+            </Reveal>
 
             {/* Description */}
-            <p style={{ fontSize: "clamp(15px, 2vw, 17px)", color: "#475569", lineHeight: 1.7, maxWidth: 520, margin: 0, fontWeight: 500 }}>
-              IINM is dedicated to building highly-skilled global leaders ready for the cognitive computing landscape. Discover our narrative, meet the pioneers, and explore our roadmap.
-            </p>
+            <Reveal delay={160}>
+              <p style={{ fontSize: "clamp(15px, 2vw, 17px)", color: "#475569", lineHeight: 1.7, maxWidth: 520, margin: 0, fontWeight: 500 }}>
+                IINM is dedicated to building highly-skilled global leaders ready for the cognitive computing landscape. Discover our narrative, meet the pioneers, and explore our roadmap.
+              </p>
+            </Reveal>
 
             {/* Stats row */}
-            <div style={{ display: "flex", gap: 0, maxWidth: 440, background: "#fff", border: "1px solid rgba(10,22,40,0.06)", borderRadius: 16, padding: "22px 12px", boxShadow: "0 4px 20px rgba(10,22,40,0.05)" }}>
-              <div style={{ flex: 1, textAlign: "center" }}>
-                <div style={{ fontSize: "clamp(24px, 3vw, 32px)", fontWeight: 900, color: "#e63946" }}>{settings.stats_years || "3+"}</div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 2 }}>Years</div>
+            <Reveal delay={240}>
+              <div style={{ display: "flex", gap: 0, maxWidth: 440, background: "#fff", border: "1px solid rgba(10,22,40,0.06)", borderRadius: 16, padding: "22px 12px", boxShadow: "0 4px 20px rgba(10,22,40,0.05)" }}>
+                <div style={{ flex: 1, textAlign: "center" }}>
+                  <div style={{ fontSize: "clamp(24px, 3vw, 32px)", fontWeight: 900, color: "#e63946" }}><AnimatedCounter value={settings.stats_years || ""} /></div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 2 }}>Years</div>
+                </div>
+                <div style={{ flex: 1, textAlign: "center", borderLeft: "1px solid rgba(10,22,40,0.06)", borderRight: "1px solid rgba(10,22,40,0.06)" }}>
+                  <div style={{ fontSize: "clamp(24px, 3vw, 32px)", fontWeight: 900, color: "#0a1628" }}><AnimatedCounter value={settings.stats_students || ""} /></div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 2 }}>Students</div>
+                </div>
+                <div style={{ flex: 1, textAlign: "center" }}>
+                  <div style={{ fontSize: "clamp(24px, 3vw, 32px)", fontWeight: 900, color: "#e63946" }}><AnimatedCounter value={settings.stats_courses || ""} /></div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 2 }}>Courses</div>
+                </div>
               </div>
-              <div style={{ flex: 1, textAlign: "center", borderLeft: "1px solid rgba(10,22,40,0.06)", borderRight: "1px solid rgba(10,22,40,0.06)" }}>
-                <div style={{ fontSize: "clamp(24px, 3vw, 32px)", fontWeight: 900, color: "#0a1628" }}>{settings.stats_students || "10,000+"}</div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 2 }}>Students</div>
-              </div>
-              <div style={{ flex: 1, textAlign: "center" }}>
-                <div style={{ fontSize: "clamp(24px, 3vw, 32px)", fontWeight: 900, color: "#e63946" }}>{settings.stats_courses || "50+"}</div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 2 }}>Courses</div>
-              </div>
-            </div>
+            </Reveal>
 
             {/* CTA buttons */}
-            <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
-              <a href="#story" style={{ background: "linear-gradient(135deg, #e63946 0%, #c1202f 100%)", color: "#fff", border: "none", borderRadius: 8, padding: "12px 28px", fontSize: 14, fontWeight: 700, textDecoration: "none", boxShadow: "0 4px 14px rgba(230,57,70,0.2)", transition: "all 0.25s ease", display: "inline-block" }}>Our Story</a>
-              <a href="#team" style={{ background: "#fff", color: "#0a1628", border: "1px solid #cbd5e1", borderRadius: 8, padding: "12px 28px", fontSize: 14, fontWeight: 700, textDecoration: "none", boxShadow: "0 2px 4px rgba(0,0,0,0.02)", transition: "all 0.25s ease", display: "inline-block" }}>Meet the Team</a>
-            </div>
+            <Reveal delay={320}>
+              <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+                <a href="#story" style={{ background: "linear-gradient(135deg, #e63946 0%, #c1202f 100%)", color: "#fff", border: "none", borderRadius: 8, padding: "12px 28px", fontSize: 14, fontWeight: 700, textDecoration: "none", boxShadow: "0 4px 14px rgba(230,57,70,0.2)", transition: "transform 0.2s ease, box-shadow 0.2s ease", display: "inline-block" }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 20px rgba(230,57,70,0.3)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "0 4px 14px rgba(230,57,70,0.2)"; }}
+                >Our Story</a>
+                <a href="#team" style={{ background: "#fff", color: "#0a1628", border: "1px solid #cbd5e1", borderRadius: 8, padding: "12px 28px", fontSize: 14, fontWeight: 700, textDecoration: "none", boxShadow: "0 2px 4px rgba(0,0,0,0.02)", transition: "transform 0.2s ease, box-shadow 0.2s ease", display: "inline-block" }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 6px 16px rgba(10,22,40,0.1)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "0 2px 4px rgba(0,0,0,0.02)"; }}
+                >Meet the Team</a>
+              </div>
+            </Reveal>
           </div>
 
           {/* Right: Single image */}
@@ -385,17 +910,45 @@ export default function AboutIinmPage() {
             <div style={{ position: "absolute", top: "-30px", right: "-30px", width: 180, height: 180, background: "radial-gradient(circle, rgba(230,57,70,0.08) 0%, transparent 70%)", pointerEvents: "none" }} />
             <div style={{ position: "absolute", bottom: "-40px", left: "-40px", width: 200, height: 200, background: "radial-gradient(circle, rgba(10,22,40,0.06) 0%, transparent 70%)", pointerEvents: "none" }} />
 
-            <div style={{ position: "relative", width: "100%", maxWidth: 480, borderRadius: 16, overflow: "hidden", boxShadow: "0 20px 50px -12px rgba(10,22,40,0.2)", border: "1px solid rgba(10,22,40,0.06)" }}>
-              <img
-                src={settings.director_image_url ? getAssetUrl(settings.director_image_url) : "/female-teacher.png"}
-                alt="About IINM"
-                style={{ width: "100%", height: "auto", display: "block", objectFit: "cover" }}
-              />
-              {/* Subtle gradient overlay at bottom */}
-              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "40%", background: "linear-gradient(to top, rgba(10,22,40,0.15) 0%, transparent 100%)", pointerEvents: "none" }} />
-            </div>
+            <Reveal delay={200} direction="scale" style={{ width: "100%", maxWidth: 480, position: "relative" }}>
+              <div style={{ position: "relative", width: "100%", borderRadius: 16, overflow: "hidden", boxShadow: "0 20px 50px -12px rgba(10,22,40,0.2)", border: "1px solid rgba(10,22,40,0.06)" }}>
+                {settings.director_image_url ? (
+                  <Image
+                    src={getAssetUrl(settings.director_image_url)}
+                    alt="About IINM"
+                    width={480}
+                    height={360}
+                    unoptimized
+                    priority
+                    style={{ width: "100%", height: "auto", display: "block", objectFit: "cover" }}
+                  />
+                ) : (
+                  <div style={{ width: "100%", height: 360, background: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <span style={{ color: "#94a3b8", fontSize: 14, fontWeight: 600 }}>No image set</span>
+                  </div>
+                )}
+                {/* Subtle gradient overlay at bottom */}
+                <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "40%", background: "linear-gradient(to top, rgba(10,22,40,0.15) 0%, transparent 100%)", pointerEvents: "none" }} />
+              </div>
+
+              {/* Floating trust badge */}
+              <div className="about-float-badge" style={{ position: "absolute", bottom: -22, left: -22, background: "#fff", border: "1px solid rgba(10,22,40,0.08)", borderRadius: 14, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, boxShadow: "0 12px 30px rgba(10,22,40,0.15)" }}>
+                <div style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(230,57,70,0.1)", color: "#e63946", display: "flex", alignItems: "center", justifyContent: "center" }}>{ICONS.Star}</div>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 900, color: "#0a1628", lineHeight: 1.1 }}>{settings.stats_students || ""}</div>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: "#64748b" }}>Trusted Learners</div>
+                </div>
+              </div>
+            </Reveal>
           </div>
         </div>
+
+        {/* Scroll cue */}
+        <a href="#story" style={{ position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, color: "#94a3b8", textDecoration: "none", zIndex: 2 }}>
+          <span className="about-scroll-cue" style={{ display: "flex" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+          </span>
+        </a>
 
         {/* Responsive */}
         <style>{`
@@ -406,7 +959,7 @@ export default function AboutIinmPage() {
             }
           }
           @media (max-width: 576px) {
-            section[style*="padding: 100px 48px 90px"] {
+            section[style*="padding: 100px 32px 90px"] {
               padding: 60px 20px !important;
             }
           }
@@ -416,57 +969,65 @@ export default function AboutIinmPage() {
       {/* ══════════════════════════════════════════════════════
          MISSION & STORY SECTION — Dark navy
          ══════════════════════════════════════════════════════ */}
-      <section style={{ padding: "90px 24px", position: "relative", background: "#0a1628", overflow: "hidden" }}>
+      <section id="story" style={{ padding: "90px 32px", position: "relative", background: "#0a1628", overflow: "hidden" }}>
         {/* Subtle radial glow */}
         <div style={{ position: "absolute", top: "20%", left: "50%", transform: "translateX(-50%)", width: "60%", height: "60%", background: "radial-gradient(circle, rgba(230,57,70,0.06) 0%, transparent 70%)", pointerEvents: "none" }} />
 
         {isAdmin && (
           <div style={{ display: "flex", justifyContent: "center", marginBottom: 36, position: "relative", zIndex: 2 }}>
-            <button onClick={() => openEditor("story")} className="fd-cta-btn-primary" style={{ padding: "8px 18px", fontSize: 13, gap: 6 }}>
+            <button onClick={() => openEditor("story")} className="about-admin-edit-btn">
               {ICONS.Edit} Edit General Settings & Narrative
             </button>
           </div>
         )}
 
-        <div style={{ maxWidth: 1100, margin: "0 auto", position: "relative", zIndex: 2 }}>
+        <div style={{ maxWidth: 1400, margin: "0 auto", position: "relative", zIndex: 2 }}>
           {/* Section heading */}
-          <div style={{ textAlign: "center", marginBottom: 50 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: "#e63946", textTransform: "uppercase", letterSpacing: 2, marginBottom: 10 }}>Who We Are</div>
-            <h2 style={{ fontSize: "clamp(28px, 4vw, 38px)", fontWeight: 900, color: "#fff" }}>Our Mission & Vision</h2>
-          </div>
+          <Reveal>
+            <div style={{ textAlign: "center", marginBottom: 50 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#e63946", textTransform: "uppercase", letterSpacing: 2, marginBottom: 10 }}>Who We Are</div>
+              <h2 style={{ fontSize: "clamp(28px, 4vw, 38px)", fontWeight: 900, color: "#fff" }}>Our Mission & Vision</h2>
+            </div>
+          </Reveal>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 28 }}>
             {/* Mission Box */}
-            <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", padding: "40px 32px", borderRadius: 20, backdropFilter: "blur(12px)" }}>
-              <div style={{ width: 48, height: 48, borderRadius: 14, background: "rgba(230,57,70,0.12)", display: "flex", alignItems: "center", justifyContent: "center", color: "#e63946", marginBottom: 22 }}>
-                {ICONS.Target}
+            <Reveal direction="left">
+              <div className="about-lift-card" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", padding: "40px 32px", borderRadius: 20, backdropFilter: "blur(12px)", height: "100%" }}>
+                <div style={{ width: 48, height: 48, borderRadius: 14, background: "rgba(230,57,70,0.12)", display: "flex", alignItems: "center", justifyContent: "center", color: "#e63946", marginBottom: 22 }}>
+                  {ICONS.Target}
+                </div>
+                <h3 style={{ fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 14 }}>Our Mission</h3>
+                <p style={{ fontSize: 15, color: "#94a3b8", lineHeight: 1.75, margin: 0 }}>
+                  {settings.mission_statement || ""}
+                </p>
               </div>
-              <h3 style={{ fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 14 }}>Our Mission</h3>
-              <p style={{ fontSize: 15, color: "#94a3b8", lineHeight: 1.75, margin: 0 }}>
-                {settings.mission_statement || "To empower global learners through institutional access to cutting-edge AI skills, world-class mentors, and certified assessment pathways."}
-              </p>
-            </div>
+            </Reveal>
 
             {/* Vision Box */}
-            <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", padding: "40px 32px", borderRadius: 20, backdropFilter: "blur(12px)" }}>
-              <div style={{ width: 48, height: 48, borderRadius: 14, background: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", marginBottom: 22 }}>
-                {ICONS.Globe}
+            <Reveal direction="right">
+              <div className="about-lift-card" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", padding: "40px 32px", borderRadius: 20, backdropFilter: "blur(12px)", height: "100%" }}>
+                <div style={{ width: 48, height: 48, borderRadius: 14, background: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", marginBottom: 22 }}>
+                  {ICONS.Globe}
+                </div>
+                <h3 style={{ fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 14 }}>Our Vision</h3>
+                <p style={{ fontSize: 15, color: "#94a3b8", lineHeight: 1.75, margin: 0 }}>
+                  {settings.vision_statement || ""}
+                </p>
               </div>
-              <h3 style={{ fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 14 }}>Our Vision</h3>
-              <p style={{ fontSize: 15, color: "#94a3b8", lineHeight: 1.75, margin: 0 }}>
-                {settings.vision_statement || "To become the definitive node connecting the dots of Artificial Intelligence education, forming highly robust industry collaborations."}
-              </p>
-            </div>
+            </Reveal>
           </div>
 
           {/* Narrative Split */}
           {(settings.story_title || settings.story_text) && (
-            <div style={{ maxWidth: 860, margin: "70px auto 0", textAlign: "center", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 56 }}>
-              <h2 style={{ fontSize: "clamp(24px, 3vw, 32px)", fontWeight: 850, color: "#fff", marginBottom: 18 }}>{settings.story_title}</h2>
-              <p style={{ fontSize: 16, color: "#94a3b8", lineHeight: 1.85, whiteSpace: "pre-wrap", maxWidth: 800, margin: "0 auto" }}>
-                {settings.story_text}
-              </p>
-            </div>
+            <Reveal>
+              <div style={{ maxWidth: 860, margin: "70px auto 0", textAlign: "center", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 56 }}>
+                <h2 style={{ fontSize: "clamp(24px, 3vw, 32px)", fontWeight: 850, color: "#fff", marginBottom: 18 }}>{settings.story_title}</h2>
+                <p style={{ fontSize: 16, color: "#94a3b8", lineHeight: 1.85, whiteSpace: "pre-wrap", maxWidth: 800, margin: "0 auto" }}>
+                  {settings.story_text}
+                </p>
+              </div>
+            </Reveal>
           )}
         </div>
       </section>
@@ -474,23 +1035,26 @@ export default function AboutIinmPage() {
       {/* ══════════════════════════════════════════════════════
          FOUNDERS' STORY SECTION — Light/white
          ══════════════════════════════════════════════════════ */}
-      <section style={{ padding: "90px 24px", background: "#f8fafc", position: "relative" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+      <section style={{ padding: "90px 32px", background: "#f8fafc", position: "relative" }}>
+        <div style={{ maxWidth: 1400, margin: "0 auto" }}>
           
-          <div style={{ textAlign: "center", marginBottom: 56 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: "#e63946", textTransform: "uppercase", letterSpacing: 2, marginBottom: 10 }}>Pioneers of IINM</div>
-            <h2 style={{ fontSize: "clamp(28px, 4vw, 38px)", fontWeight: 900, color: "#0a1628" }}>Founders' Story</h2>
-            {isAdmin && (
-              <button onClick={() => openEditor("founders")} className="fd-cta-btn-primary" style={{ padding: "8px 18px", fontSize: 13, gap: 6, marginTop: 14 }}>
-                {ICONS.Edit} Edit Founders' Profiles & Videos
-              </button>
-            )}
-          </div>
+          <Reveal>
+            <div style={{ textAlign: "center", marginBottom: 56 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#e63946", textTransform: "uppercase", letterSpacing: 2, marginBottom: 10 }}>Pioneers of IINM</div>
+              <h2 style={{ fontSize: "clamp(28px, 4vw, 38px)", fontWeight: 900, color: "#0a1628" }}>Founders&apos; Story</h2>
+              {isAdmin && (
+                <button onClick={() => openEditor("founders")} className="about-admin-edit-btn" style={{ marginTop: 14 }}>
+                  {ICONS.Edit} Edit Founders&apos; Profiles & Videos
+                </button>
+              )}
+            </div>
+          </Reveal>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: 36 }}>
             
             {/* Founder 1 */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 24, background: "#fff", border: "1px solid rgba(10,22,40,0.06)", borderRadius: 20, padding: "32px", boxShadow: "0 4px 24px rgba(10,22,40,0.05)" }}>
+            <Reveal direction="left">
+            <div className="about-lift-card" style={{ display: "flex", flexDirection: "column", gap: 24, background: "#fff", border: "1px solid rgba(10,22,40,0.06)", borderRadius: 20, padding: "32px", boxShadow: "0 4px 24px rgba(10,22,40,0.05)", height: "100%", boxSizing: "border-box" }}>
               
               {/* Video frame */}
               <div style={{ width: "100%", position: "relative", borderRadius: 14, overflow: "hidden", boxShadow: "0 8px 28px rgba(10,22,40,0.12)" }}>
@@ -514,7 +1078,11 @@ export default function AboutIinmPage() {
                     />
                   ) : (
                     <>
-                      <img src={getAssetUrl(extended?.founder1?.image_url)} alt={extended?.founder1?.name} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+                      {extended?.founder1?.image_url ? (
+                        <Image src={getAssetUrl(extended?.founder1?.image_url)} alt={extended?.founder1?.name} width={400} height={225} unoptimized style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : (
+                        <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", background: "#e2e8f0" }} />
+                      )}
                       <div style={{ position: "absolute", inset: 0, background: "rgba(10,22,40,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <button
                           onClick={() => setVideoPlay(p => ({ ...p, f1: true }))}
@@ -538,14 +1106,16 @@ export default function AboutIinmPage() {
                 
                 {extended?.founder1?.quote && (
                   <div style={{ borderLeft: "3px solid #e63946", paddingLeft: 14, fontSize: 14, color: "#334155", fontStyle: "italic", fontWeight: 500, lineHeight: 1.6 }}>
-                    "{extended?.founder1?.quote}"
+                    &ldquo;{extended?.founder1?.quote}&rdquo;
                   </div>
                 )}
               </div>
             </div>
+            </Reveal>
 
             {/* Founder 2 */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 24, background: "#fff", border: "1px solid rgba(10,22,40,0.06)", borderRadius: 20, padding: "32px", boxShadow: "0 4px 24px rgba(10,22,40,0.05)" }}>
+            <Reveal direction="right">
+            <div className="about-lift-card" style={{ display: "flex", flexDirection: "column", gap: 24, background: "#fff", border: "1px solid rgba(10,22,40,0.06)", borderRadius: 20, padding: "32px", boxShadow: "0 4px 24px rgba(10,22,40,0.05)", height: "100%", boxSizing: "border-box" }}>
               
               {/* Video frame */}
               <div style={{ width: "100%", position: "relative", borderRadius: 14, overflow: "hidden", boxShadow: "0 8px 28px rgba(10,22,40,0.12)" }}>
@@ -569,7 +1139,11 @@ export default function AboutIinmPage() {
                     />
                   ) : (
                     <>
-                      <img src={getAssetUrl(extended?.founder2?.image_url)} alt={extended?.founder2?.name} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+                      {extended?.founder2?.image_url ? (
+                        <Image src={getAssetUrl(extended?.founder2?.image_url)} alt={extended?.founder2?.name} width={400} height={225} unoptimized style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : (
+                        <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", background: "#e2e8f0" }} />
+                      )}
                       <div style={{ position: "absolute", inset: 0, background: "rgba(10,22,40,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <button
                           onClick={() => setVideoPlay(p => ({ ...p, f2: true }))}
@@ -593,11 +1167,12 @@ export default function AboutIinmPage() {
                 
                 {extended?.founder2?.quote && (
                   <div style={{ borderLeft: "3px solid #e63946", paddingLeft: 14, fontSize: 14, color: "#334155", fontStyle: "italic", fontWeight: 500, lineHeight: 1.6 }}>
-                    "{extended?.founder2?.quote}"
+                    &ldquo;{extended?.founder2?.quote}&rdquo;
                   </div>
                 )}
               </div>
             </div>
+            </Reveal>
 
           </div>
         </div>
@@ -606,21 +1181,23 @@ export default function AboutIinmPage() {
       {/* ══════════════════════════════════════════════════════
          FOUNDERS GALLERY SECTION — Dark navy
          ══════════════════════════════════════════════════════ */}
-      <section style={{ padding: "90px 24px", position: "relative", background: "#0a1628", overflow: "hidden" }}>
+      <section style={{ padding: "90px 32px", position: "relative", background: "#0a1628", overflow: "hidden" }}>
         {/* Subtle radial glow */}
         <div style={{ position: "absolute", bottom: "10%", left: "50%", transform: "translateX(-50%)", width: "50%", height: "50%", background: "radial-gradient(circle, rgba(230,57,70,0.05) 0%, transparent 70%)", pointerEvents: "none" }} />
 
-        <div style={{ maxWidth: 1100, margin: "0 auto", position: "relative", zIndex: 2 }}>
+        <div style={{ maxWidth: 1400, margin: "0 auto", position: "relative", zIndex: 2 }}>
           
-          <div style={{ textAlign: "center", marginBottom: 56 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: "#e63946", textTransform: "uppercase", letterSpacing: 2, marginBottom: 10 }}>Life at IINM</div>
-            <h2 style={{ fontSize: "clamp(28px, 4vw, 38px)", fontWeight: 900, color: "#fff" }}>Founders Gallery</h2>
-            {isAdmin && (
-              <button onClick={() => openEditor("gallery")} className="fd-cta-btn-primary" style={{ padding: "8px 18px", fontSize: 13, gap: 6, marginTop: 14 }}>
-                {ICONS.Edit} Manage Gallery Photos
-              </button>
-            )}
-          </div>
+          <Reveal>
+            <div style={{ textAlign: "center", marginBottom: 56 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#e63946", textTransform: "uppercase", letterSpacing: 2, marginBottom: 10 }}>Life at IINM</div>
+              <h2 style={{ fontSize: "clamp(28px, 4vw, 38px)", fontWeight: 900, color: "#fff" }}>Founders Gallery</h2>
+              {isAdmin && (
+                <button onClick={() => openEditor("gallery")} className="about-admin-edit-btn" style={{ marginTop: 14 }}>
+                  {ICONS.Edit} Manage Gallery Photos
+                </button>
+              )}
+            </div>
+          </Reveal>
 
           {extended.gallery.length === 0 ? (
             <div style={{ textAlign: "center", padding: "48px", background: "rgba(255,255,255,0.03)", border: "1px dashed rgba(255,255,255,0.12)", borderRadius: 16 }}>
@@ -628,23 +1205,32 @@ export default function AboutIinmPage() {
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 20 }}>
-              {extended.gallery.map((it: any) => (
-                <div key={it.id} style={{ position: "relative", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 4px 20px rgba(0,0,0,0.2)", cursor: "pointer" }} className="group">
-                  <div style={{ overflow: "hidden", height: 220 }}>
-                    <img
-                      src={getAssetUrl(it.image_url)}
-                      alt={it.caption}
-                      style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.4s ease-out" }}
-                      onMouseEnter={e => e.currentTarget.style.transform = "scale(1.08)"}
-                      onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
-                    />
-                  </div>
-                  {it.caption && (
-                    <div style={{ background: "rgba(10,22,40,0.95)", borderTop: "1px solid rgba(255,255,255,0.06)", padding: "14px 18px" }}>
-                      <p style={{ margin: 0, color: "#fff", fontSize: 13, fontWeight: 600 }}>{it.caption}</p>
+              {extended.gallery.map((it: GalleryItem, gIdx: number) => (
+                <Reveal key={it.id} delay={gIdx * 70} direction="scale">
+                  <div
+                    className="about-gallery-item about-lift-card"
+                    style={{ position: "relative", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 4px 20px rgba(0,0,0,0.2)" }}
+                    onClick={() => setLightbox(getAssetUrl(it.image_url))}
+                  >
+                    <div style={{ overflow: "hidden", height: 220 }}>
+                      <Image
+                        src={getAssetUrl(it.image_url)}
+                        alt={it.caption}
+                        width={400}
+                        height={220}
+                        unoptimized
+                        style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.4s ease-out" }}
+                        onMouseEnter={e => e.currentTarget.style.transform = "scale(1.08)"}
+                        onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+                      />
                     </div>
-                  )}
-                </div>
+                    {it.caption && (
+                      <div style={{ background: "rgba(10,22,40,0.95)", borderTop: "1px solid rgba(255,255,255,0.06)", padding: "14px 18px" }}>
+                        <p style={{ margin: 0, color: "#fff", fontSize: 13, fontWeight: 600 }}>{it.caption}</p>
+                      </div>
+                    )}
+                  </div>
+                </Reveal>
               ))}
             </div>
           )}
@@ -654,18 +1240,20 @@ export default function AboutIinmPage() {
       {/* ══════════════════════════════════════════════════════
          TIMELINE ROADMAP — Light/white
          ══════════════════════════════════════════════════════ */}
-      <section style={{ padding: "90px 24px", background: "#f8fafc", position: "relative" }}>
-        <div style={{ maxWidth: 1000, margin: "0 auto" }}>
+      <section style={{ padding: "90px 32px", background: "#f8fafc", position: "relative" }}>
+        <div style={{ maxWidth: 1400, margin: "0 auto" }}>
           
-          <div style={{ textAlign: "center", marginBottom: 60 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: "#e63946", textTransform: "uppercase", letterSpacing: 2, marginBottom: 10 }}>Chronology of Innovation</div>
-            <h2 style={{ fontSize: "clamp(28px, 4vw, 38px)", fontWeight: 900, color: "#0a1628" }}>Our Journey Timeline</h2>
-            {isAdmin && (
-              <button onClick={() => openEditor("timeline")} className="fd-cta-btn-primary" style={{ padding: "8px 18px", fontSize: 13, gap: 6, marginTop: 14 }}>
-                {ICONS.Edit} Manage Timeline Milestones
-              </button>
-            )}
-          </div>
+          <Reveal>
+            <div style={{ textAlign: "center", marginBottom: 60 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#e63946", textTransform: "uppercase", letterSpacing: 2, marginBottom: 10 }}>Chronology of Innovation</div>
+              <h2 style={{ fontSize: "clamp(28px, 4vw, 38px)", fontWeight: 900, color: "#0a1628" }}>Our Journey Timeline</h2>
+              {isAdmin && (
+                <button onClick={() => openEditor("timeline")} className="about-admin-edit-btn" style={{ marginTop: 14 }}>
+                  {ICONS.Edit} Manage Timeline Milestones
+                </button>
+              )}
+            </div>
+          </Reveal>
 
           {extended.timeline.length === 0 ? (
             <div style={{ textAlign: "center", padding: "48px", background: "#fff", border: "1px dashed rgba(10,22,40,0.12)", borderRadius: 16 }}>
@@ -677,7 +1265,7 @@ export default function AboutIinmPage() {
               <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", width: 2, top: 20, bottom: 20, background: "linear-gradient(to bottom, #e63946 0%, #0a1628 100%)", opacity: 0.15 }} className="hidden md:block" />
 
               <div style={{ display: "flex", flexDirection: "column", gap: 36 }}>
-                {extended.timeline.map((it: any, idx: number) => {
+                {extended.timeline.map((it: TimelineItem, idx: number) => {
                   const isLeft = idx % 2 === 0;
                   const Icon = ICONS[it.icon_name] || ICONS["Target"];
                   
@@ -686,6 +1274,7 @@ export default function AboutIinmPage() {
                       
                       {/* Central dot */}
                       <div
+                        className="hidden md:block about-timeline-dot-active"
                         style={{
                           position: "absolute",
                           left: "50%",
@@ -696,32 +1285,32 @@ export default function AboutIinmPage() {
                           borderRadius: "50%",
                           background: "#fff",
                           border: "3px solid #e63946",
-                          boxShadow: "0 2px 8px rgba(230,57,70,0.2)",
                           zIndex: 5
                         }}
-                        className="hidden md:block"
                       />
 
                       {/* Content Card */}
-                      <div
-                        style={{
-                          width: "100%",
-                          maxWidth: "460px",
-                          background: "#fff",
-                          border: "1px solid rgba(10,22,40,0.06)",
-                          padding: "28px",
-                          borderRadius: 16,
-                          boxShadow: "0 4px 20px rgba(10,22,40,0.06)",
-                          position: "relative"
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
-                          <span style={{ fontSize: 18, fontWeight: 900, color: "#e63946", background: "rgba(230,57,70,0.08)", padding: "4px 14px", borderRadius: "10px" }}>{it.year}</span>
-                          <span style={{ color: "#0a1628" }}>{Icon}</span>
+                      <Reveal direction={isLeft ? "left" : "right"} style={{ width: "100%", maxWidth: "460px" }}>
+                        <div
+                          className="about-lift-card"
+                          style={{
+                            width: "100%",
+                            background: "#fff",
+                            border: "1px solid rgba(10,22,40,0.06)",
+                            padding: "28px",
+                            borderRadius: 16,
+                            boxShadow: "0 4px 20px rgba(10,22,40,0.06)",
+                            position: "relative"
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                            <span style={{ fontSize: 18, fontWeight: 900, color: "#e63946", background: "rgba(230,57,70,0.08)", padding: "4px 14px", borderRadius: "10px" }}>{it.year}</span>
+                            <span style={{ color: "#0a1628" }}>{Icon}</span>
+                          </div>
+                          <h4 style={{ fontSize: 17, fontWeight: 800, color: "#0a1628", marginBottom: 8 }}>{it.title}</h4>
+                          <p style={{ fontSize: 14, color: "#475569", lineHeight: 1.6, margin: 0 }}>{it.description}</p>
                         </div>
-                        <h4 style={{ fontSize: 17, fontWeight: 800, color: "#0a1628", marginBottom: 8 }}>{it.title}</h4>
-                        <p style={{ fontSize: 14, color: "#475569", lineHeight: 1.6, margin: 0 }}>{it.description}</p>
-                      </div>
+                      </Reveal>
 
                     </div>
                   );
@@ -735,17 +1324,19 @@ export default function AboutIinmPage() {
       {/* ══════════════════════════════════════════════════════
          TEAMS/LEADERSHIP GRID SECTION — Dark navy
          ══════════════════════════════════════════════════════ */}
-      <section style={{ padding: "90px 24px", position: "relative", background: "#0a1628", overflow: "hidden" }}>
+      <section id="team" style={{ padding: "90px 32px", position: "relative", background: "#0a1628", overflow: "hidden" }}>
         {/* Subtle radial glow */}
         <div style={{ position: "absolute", top: "10%", right: "10%", width: "40%", height: "40%", background: "radial-gradient(circle, rgba(230,57,70,0.04) 0%, transparent 70%)", pointerEvents: "none" }} />
 
-        <div style={{ maxWidth: 1100, margin: "0 auto", position: "relative", zIndex: 2 }}>
+        <div style={{ maxWidth: 1400, margin: "0 auto", position: "relative", zIndex: 2 }}>
           
-          <div style={{ textAlign: "center", marginBottom: 56 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: "#e63946", textTransform: "uppercase", letterSpacing: 2, marginBottom: 10 }}>Expert Faculty</div>
-            <h2 style={{ fontSize: "clamp(28px, 4vw, 38px)", fontWeight: 900, color: "#fff" }}>Our Elite Team</h2>
-            <p style={{ fontSize: 15, color: "#64748b", marginTop: 10 }}>World-class technical advisors, curriculum engineers, and research directors.</p>
-          </div>
+          <Reveal>
+            <div style={{ textAlign: "center", marginBottom: 56 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#e63946", textTransform: "uppercase", letterSpacing: 2, marginBottom: 10 }}>Expert Faculty</div>
+              <h2 style={{ fontSize: "clamp(28px, 4vw, 38px)", fontWeight: 900, color: "#fff" }}>Our Elite Team</h2>
+              <p style={{ fontSize: 15, color: "#64748b", marginTop: 10 }}>World-class technical advisors, curriculum engineers, and research directors.</p>
+            </div>
+          </Reveal>
 
           {team.length === 0 ? (
             <div style={{ textAlign: "center", padding: "48px", background: "rgba(255,255,255,0.03)", border: "1px dashed rgba(255,255,255,0.12)", borderRadius: 16 }}>
@@ -753,28 +1344,41 @@ export default function AboutIinmPage() {
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 24 }}>
-              {team.map((m: any) => (
-                <div key={m.id} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, overflow: "hidden", display: "flex", flexDirection: "column", transition: "transform 0.25s ease, border-color 0.25s ease", backdropFilter: "blur(8px)" }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-6px)"; e.currentTarget.style.borderColor = "rgba(230, 57, 70, 0.3)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)"; }}>
-                  
-                  {m.image_url && (
-                    <div style={{ height: 260, width: "100%", overflow: "hidden" }}>
-                      <img src={getAssetUrl(m.image_url)} alt={m.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    </div>
-                  )}
+              {team.map((m: TeamMember, mIdx: number) => (
+                <Reveal key={m.id} delay={mIdx * 80} direction="scale">
+                  <div
+                    className="about-tilt-card"
+                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, overflow: "hidden", display: "flex", flexDirection: "column", backdropFilter: "blur(8px)" }}
+                    onMouseMove={handleCardTilt}
+                    onMouseLeave={resetCardTilt}
+                  >
 
-                  <div style={{ padding: "22px", flex: 1, display: "flex", flexDirection: "column" }}>
-                    <h4 style={{ fontSize: 18, fontWeight: 800, color: "#fff", margin: "0 0 4px" }}>{m.name}</h4>
-                    <div style={{ fontSize: 12, color: "#e63946", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>{m.designation}</div>
-                    {m.bio && <p style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.6, margin: 0 }}>{m.bio}</p>}
+                    {m.image_url ? (
+                      <div style={{ height: 260, width: "100%", overflow: "hidden" }}>
+                        <Image src={getAssetUrl(m.image_url)} alt={m.name} width={300} height={260} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      </div>
+                    ) : (
+                      <div style={{ height: 260, width: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, rgba(230,57,70,0.15) 0%, rgba(10,22,40,0.4) 100%)" }}>
+                        <span style={{ fontSize: 40, fontWeight: 900, color: "#e63946" }}>
+                          {(m.name || "?").split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()}
+                        </span>
+                      </div>
+                    )}
+
+                    <div style={{ padding: "22px", flex: 1, display: "flex", flexDirection: "column" }}>
+                      <h4 style={{ fontSize: 18, fontWeight: 800, color: "#fff", margin: "0 0 4px" }}>{m.name}</h4>
+                      <div style={{ fontSize: 12, color: "#e63946", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>{m.designation}</div>
+                      {m.bio && <p style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.6, margin: 0 }}>{m.bio}</p>}
+                    </div>
                   </div>
-                </div>
+                </Reveal>
               ))}
             </div>
           )}
         </div>
       </section>
+
+      </div>
 
       {/* Footer */}
       <PublicFooter />
@@ -790,9 +1394,13 @@ export default function AboutIinmPage() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 24px", borderBottom: "1px solid #e2e8f0" }}>
               <h3 style={{ fontSize: 18, fontWeight: 800, color: "#0f172a" }}>
                 {editorModal === "story" && "Edit General Settings & Narrative"}
+                {editorModal === "hero" && "Edit Meet the Academy Section"}
+                {editorModal === "who" && "Edit Who We Are"}
+                {editorModal === "purpose" && "Edit Why We Exist"}
                 {editorModal === "founders" && "Manage Founders Story Profiles"}
                 {editorModal === "gallery" && "Manage Moments Gallery"}
                 {editorModal === "timeline" && "Manage Journey Milestones"}
+                {editorModal === "alumni" && "Edit Alumni Logos & Content"}
               </h3>
               <button onClick={() => setEditorModal(null)} style={{ border: "none", background: "none", color: "#64748b", cursor: "pointer", display: "flex", padding: 4 }}>
                 {ICONS.Close}
@@ -801,23 +1409,192 @@ export default function AboutIinmPage() {
 
             {/* Modal Body */}
             <div style={{ padding: 24, overflowY: "auto", flex: 1 }}>
+              {editorModal === "hero" && (
+                <div>
+                  <h4 style={{ fontSize: 12, fontWeight: 700, color: "#e63946", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 14 }}>Meet the Academy Content</h4>
+                  <FormInput label="Eyebrow Text" value={editSettings.hero_eyebrow} onChange={(e) => setEditSettings((p) => ({ ...p, hero_eyebrow: e.target.value }))} />
+                  <FormInput label="Hero Title" value={editSettings.hero_title} onChange={(e) => setEditSettings((p) => ({ ...p, hero_title: e.target.value }))} />
+                  <FormInput label="Subtitle / Description" value={editSettings.hero_subtitle} onChange={(e) => setEditSettings((p) => ({ ...p, hero_subtitle: e.target.value }))} isTextArea rows={3} />
+                  <FormInput label="Hero Note" value={editSettings.hero_note} onChange={(e) => setEditSettings((p) => ({ ...p, hero_note: e.target.value }))} />
+
+                  <h4 style={{ fontSize: 12, fontWeight: 700, color: "#e63946", textTransform: "uppercase", letterSpacing: 0.5, margin: "20px 0 14px" }}>Hero Collage Images</h4>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                    {Array.from({ length: 6 }, (_, idx) => {
+                      const slot = idx + 1;
+                      const field = `hero_image_${slot}`;
+                      return (
+                        <div key={field} style={{ background: "#f8fafc", padding: 12, borderRadius: 12, border: "1px solid #e2e8f0" }}>
+                          <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 8 }}>Image Slot {slot}</label>
+                          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                            {editSettings[field] && (
+                              <Image src={getAssetUrl(editSettings[field])} alt={`Slot ${slot}`} width={40} height={40} unoptimized style={{ borderRadius: 8, objectFit: "cover" }} />
+                            )}
+                            <input type="file" accept="image/*" style={{ fontSize: 11 }} onChange={(e: FileChangeEvent) => { const f = e.target.files?.[0]; if (f) handleHeroImageUpload(slot, f); }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {editorModal === "who" && (
+                <div>
+                  <h4 style={{ fontSize: 12, fontWeight: 700, color: "#e63946", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 14 }}>Who We Are Content</h4>
+                  <FormInput label="Section Title" value={editSettings.story_title} onChange={(e) => setEditSettings((p) => ({ ...p, story_title: e.target.value }))} />
+                  <FormInput label="Section Description" value={editSettings.story_text} onChange={(e) => setEditSettings((p) => ({ ...p, story_text: e.target.value }))} isTextArea rows={5} />
+
+                  <h4 style={{ fontSize: 12, fontWeight: 700, color: "#e63946", textTransform: "uppercase", letterSpacing: 0.5, margin: "20px 0 14px" }}>Gallery Images (First 3 shown)</h4>
+
+                  <div style={{ background: "#f8fafc", padding: 18, borderRadius: 16, border: "1px solid #e2e8f0", marginBottom: 16 }}>
+                    <h4 style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", marginBottom: 12 }}>+ Upload New Image</h4>
+                    <div style={{ display: "flex", gap: 16, alignItems: "flex-end" }}>
+                      <div>
+                        <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>Choose Image File</label>
+                        <input type="file" accept="image/*" style={{ fontSize: 12 }} onChange={async (e: FileChangeEvent) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          setUploading(true);
+                          const fd = new FormData();
+                          fd.append("file", f);
+                          try {
+                            const res = await apiFetch(`${API_BASE_URL}/about/upload-about-image`, { method: "POST", body: fd });
+                            if (res.ok) {
+                              const d = await res.json() as { url: string };
+                              setEditExtended((p) => {
+                                const c = JSON.parse(JSON.stringify(p)) as ExtendedData;
+                                c.gallery.push({ id: `g-${Date.now()}`, image_url: d.url, caption: "" });
+                                return c;
+                              });
+                            }
+                          } catch (ex) { console.error(ex); } finally { setUploading(false); }
+                        }} />
+                      </div>
+                      <p style={{ margin: 0, fontSize: 11, color: "#64748b" }}>Uploads to R2 bucket. Max 10MB.</p>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {editExtended.gallery?.slice(0, 3).map((it: GalleryItem, index: number) => (
+                      <div key={it.id} style={{ display: "flex", gap: 12, alignItems: "center", background: "#f8fafc", padding: 12, borderRadius: 12, border: "1px solid #e2e8f0" }}>
+                        <Image src={getAssetUrl(it.image_url)} alt="Thumb" width={48} height={48} unoptimized style={{ borderRadius: 8, objectFit: "cover" }} />
+                        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+                          <FormInput label="Caption" value={it.caption} onChange={(e) => setEditExtended((p) => {
+                            const c = JSON.parse(JSON.stringify(p)) as ExtendedData;
+                            c.gallery[index].caption = e.target.value;
+                            return c;
+                          })} />
+                          <div>
+                            <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>Replace Image</label>
+                            <input type="file" accept="image/*" style={{ fontSize: 11 }} onChange={async (e: FileChangeEvent) => {
+                              const f = e.target.files?.[0];
+                              if (!f) return;
+                              setUploading(true);
+                              const fd = new FormData();
+                              fd.append("file", f);
+                              try {
+                                const res = await apiFetch(`${API_BASE_URL}/about/upload-about-image`, { method: "POST", body: fd });
+                                if (res.ok) {
+                                  const d = await res.json() as { url: string };
+                                  setEditExtended((p) => {
+                                    const c = JSON.parse(JSON.stringify(p)) as ExtendedData;
+                                    c.gallery[index].image_url = d.url;
+                                    return c;
+                                  });
+                                }
+                              } catch (ex) { console.error(ex); } finally { setUploading(false); }
+                            }} />
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setEditExtended((p) => {
+                            const c = JSON.parse(JSON.stringify(p)) as ExtendedData;
+                            c.gallery.splice(index, 1);
+                            return c;
+                          })}
+                          style={{ background: "#fee2e2", border: "none", color: "#ef4444", borderRadius: "8px", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
+                        >
+                          {ICONS.Trash}
+                        </button>
+                      </div>
+                    ))}
+                    {editExtended.gallery?.length === 0 && (
+                      <p style={{ fontSize: 13, color: "#64748b", textAlign: "center", margin: "12px 0" }}>No gallery images yet. Upload one above.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {editorModal === "purpose" && (
+                <div>
+                  <h4 style={{ fontSize: 12, fontWeight: 700, color: "#e63946", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 14 }}>The Difference Content</h4>
+                  <FormInput label="Eyebrow" value={editSettings.difference_eyebrow} onChange={(e) => setEditSettings((p) => ({ ...p, difference_eyebrow: e.target.value }))} />
+                  <FormInput label="Section Title" value={editSettings.difference_title} onChange={(e) => setEditSettings((p) => ({ ...p, difference_title: e.target.value }))} isTextArea rows={2} />
+                  <FormInput label="Video Embed URL" value={editSettings.difference_video_url} onChange={(e) => setEditSettings((p) => ({ ...p, difference_video_url: e.target.value }))} />
+                  <p style={{ color: "#64748b", fontSize: 11, margin: "-4px 0 18px" }}>Use a YouTube embed URL, for example: https://www.youtube.com/embed/VIDEO_ID</p>
+
+                  <h4 style={{ fontSize: 12, fontWeight: 700, color: "#e63946", textTransform: "uppercase", letterSpacing: 0.5, margin: "20px 0 14px" }}>Comparison Table</h4>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <FormInput label="Left Column Heading" value={editSettings.difference_at_iinm_heading} onChange={(e) => setEditSettings((p) => ({ ...p, difference_at_iinm_heading: e.target.value }))} />
+                    <FormInput label="Right Column Heading" value={editSettings.difference_traditional_heading} onChange={(e) => setEditSettings((p) => ({ ...p, difference_traditional_heading: e.target.value }))} />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 10 }}>
+                    {editDifferenceRows.map((row, index) => (
+                      <div key={`difference-row-${index}`} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, alignItems: "end", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: 12 }}>
+                        <FormInput label={`IINM Point ${index + 1}`} value={row.at_iinm} onChange={(e) => setEditDifferenceRows((p) => p.map((item, itemIndex) => itemIndex === index ? { ...item, at_iinm: e.target.value } : item))} />
+                        <FormInput label={`Traditional Point ${index + 1}`} value={row.traditional} onChange={(e) => setEditDifferenceRows((p) => p.map((item, itemIndex) => itemIndex === index ? { ...item, traditional: e.target.value } : item))} />
+                        <button type="button" aria-label={`Remove comparison row ${index + 1}`} onClick={() => setEditDifferenceRows((p) => p.filter((_, itemIndex) => itemIndex !== index))} style={{ background: "#fee2e2", border: "none", color: "#ef4444", borderRadius: 8, width: 38, height: 38, cursor: "pointer" }}>{ICONS.Trash}</button>
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button" onClick={() => setEditDifferenceRows((p) => [...p, { at_iinm: "", traditional: "" }])} style={{ background: "#0a1628", color: "#fff", border: "none", borderRadius: 8, padding: "10px 14px", marginTop: 14, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>{ICONS.Plus} Add Comparison Row</button>
+                </div>
+              )}
+
               {editorModal === "story" && (
                 <div>
                   <h4 style={{ fontSize: 12, fontWeight: 700, color: "#e63946", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 14 }}>Core Mission & Vision</h4>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                    <FormInput label="Mission Statement" value={editSettings.mission_statement} onChange={(e: any) => setEditSettings((p: any) => ({ ...p, mission_statement: e.target.value }))} isTextArea rows={4} />
-                    <FormInput label="Vision Statement" value={editSettings.vision_statement} onChange={(e: any) => setEditSettings((p: any) => ({ ...p, vision_statement: e.target.value }))} isTextArea rows={4} />
+                    <FormInput label="Mission Statement" value={editSettings.mission_statement} onChange={(e) => setEditSettings((p) => ({ ...p, mission_statement: e.target.value }))} isTextArea rows={4} />
+                    <FormInput label="Vision Statement" value={editSettings.vision_statement} onChange={(e) => setEditSettings((p) => ({ ...p, vision_statement: e.target.value }))} isTextArea rows={4} />
                   </div>
 
                   <h4 style={{ fontSize: 12, fontWeight: 700, color: "#e63946", textTransform: "uppercase", letterSpacing: 0.5, margin: "14px 0 14px" }}>Narrative Content</h4>
-                  <FormInput label="Narrative Title" value={editSettings.story_title} onChange={(e: any) => setEditSettings((p: any) => ({ ...p, story_title: e.target.value }))} />
-                  <FormInput label="Narrative Text" value={editSettings.story_text} onChange={(e: any) => setEditSettings((p: any) => ({ ...p, story_text: e.target.value }))} isTextArea rows={5} />
+                  <FormInput label="Narrative Title" value={editSettings.story_title} onChange={(e) => setEditSettings((p) => ({ ...p, story_title: e.target.value }))} />
+                  <FormInput label="Narrative Text" value={editSettings.story_text} onChange={(e) => setEditSettings((p) => ({ ...p, story_text: e.target.value }))} isTextArea rows={5} />
 
                   <h4 style={{ fontSize: 12, fontWeight: 700, color: "#e63946", textTransform: "uppercase", letterSpacing: 0.5, margin: "14px 0 14px" }}>Key Dynamic Stats</h4>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-                    <FormInput label="Years Excellence" value={editSettings.stats_years} onChange={(e: any) => setEditSettings((p: any) => ({ ...p, stats_years: e.target.value }))} />
-                    <FormInput label="Students Certified" value={editSettings.stats_students} onChange={(e: any) => setEditSettings((p: any) => ({ ...p, stats_students: e.target.value }))} />
-                    <FormInput label="Active Courses" value={editSettings.stats_courses} onChange={(e: any) => setEditSettings((p: any) => ({ ...p, stats_courses: e.target.value }))} />
+                    <FormInput label="Years Excellence" value={editSettings.stats_years} onChange={(e) => setEditSettings((p) => ({ ...p, stats_years: e.target.value }))} />
+                    <FormInput label="Students Certified" value={editSettings.stats_students} onChange={(e) => setEditSettings((p) => ({ ...p, stats_students: e.target.value }))} />
+                    <FormInput label="Active Courses" value={editSettings.stats_courses} onChange={(e) => setEditSettings((p) => ({ ...p, stats_courses: e.target.value }))} />
+                  </div>
+
+                  <h4 style={{ fontSize: 12, fontWeight: 700, color: "#e63946", textTransform: "uppercase", letterSpacing: 0.5, margin: "20px 0 14px" }}>Director / Spotlight Section</h4>
+                  <FormInput label="Director Name" value={editSettings.director_name} onChange={(e) => setEditSettings((p) => ({ ...p, director_name: e.target.value }))} />
+                  <FormInput label="Director Title" value={editSettings.director_title} onChange={(e) => setEditSettings((p) => ({ ...p, director_title: e.target.value }))} />
+                  <FormInput label="Director Message" value={editSettings.director_message} onChange={(e) => setEditSettings((p) => ({ ...p, director_message: e.target.value }))} isTextArea rows={3} />
+                  <div style={{ marginTop: 10 }}>
+                    <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>Director Image</label>
+                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                      {editSettings.director_image_url && (
+                        <Image src={getAssetUrl(editSettings.director_image_url)} alt="Director" width={44} height={44} unoptimized style={{ borderRadius: 8, objectFit: "cover", border: "1.5px solid #cbd5e1" }} />
+                      )}
+                      <input type="file" accept="image/*" style={{ fontSize: 11 }} onChange={async (e: FileChangeEvent) => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        setUploading(true);
+                        const fd = new FormData();
+                        fd.append("file", f);
+                        try {
+                          const res = await apiFetch(`${API_BASE_URL}/about/upload-about-image`, { method: "POST", body: fd });
+                          if (res.ok) {
+                            const d = await res.json() as { url: string };
+                            setEditSettings((p) => ({ ...p, director_image_url: d.url }));
+                          }
+                        } catch (ex) { console.error(ex); } finally { setUploading(false); }
+                      }} />
+                    </div>
                   </div>
                 </div>
               )}
@@ -827,21 +1604,35 @@ export default function AboutIinmPage() {
                   {/* Founder 1 */}
                   <div style={{ background: "#f8fafc", padding: 18, borderRadius: 16, border: "1px solid #e2e8f0" }}>
                     <h4 style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", marginBottom: 14 }}>Founder 1 Configuration</h4>
-                    <FormInput label="Name" value={editExtended.founder1?.name} onChange={(e: any) => setEditExtended((p: any) => { const c = { ...p }; c.founder1.name = e.target.value; return c; })} />
-                    <FormInput label="Designation" value={editExtended.founder1?.role} onChange={(e: any) => setEditExtended((p: any) => { const c = { ...p }; c.founder1.role = e.target.value; return c; })} />
-                    <FormInput label="Short Bio" value={editExtended.founder1?.bio} onChange={(e: any) => setEditExtended((p: any) => { const c = { ...p }; c.founder1.bio = e.target.value; return c; })} isTextArea rows={3} />
-                    <FormInput label="Quote" value={editExtended.founder1?.quote} onChange={(e: any) => setEditExtended((p: any) => { const c = { ...p }; c.founder1.quote = e.target.value; return c; })} />
-                    <FormInput label="YouTube Video ID" value={editExtended.founder1?.video_url} onChange={(e: any) => setEditExtended((p: any) => { const c = { ...p }; c.founder1.video_url = e.target.value; return c; })} />
-                    
+                    <FormInput label="Name" value={editExtended.founder1?.name} onChange={(e) => setEditExtended((p) => { const c = { ...p }; c.founder1.name = e.target.value; return c; })} />
+                    <FormInput label="Designation" value={editExtended.founder1?.role} onChange={(e) => setEditExtended((p) => { const c = { ...p }; c.founder1.role = e.target.value; return c; })} />
+                    <FormInput label="Short Bio" value={editExtended.founder1?.bio} onChange={(e) => setEditExtended((p) => { const c = { ...p }; c.founder1.bio = e.target.value; return c; })} isTextArea rows={3} />
+                    <FormInput label="Quote" value={editExtended.founder1?.quote} onChange={(e) => setEditExtended((p) => { const c = { ...p }; c.founder1.quote = e.target.value; return c; })} />
+                    <FormInput label="YouTube Video ID" value={editExtended.founder1?.video_url} onChange={(e) => setEditExtended((p) => { const c = { ...p }; c.founder1.video_url = e.target.value; return c; })} />
+                    <FormInput label="LinkedIn Profile URL" value={editExtended.founder1?.linkedin_url} onChange={(e) => setEditExtended((p) => { const c = { ...p }; c.founder1.linkedin_url = e.target.value; return c; })} />
+
                     <div style={{ marginTop: 10 }}>
                       <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>Profile Picture</label>
                       <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                         {editExtended.founder1?.image_url && (
-                          <img src={getAssetUrl(editExtended.founder1.image_url)} alt="F1" style={{ width: 44, height: 44, borderRadius: "50%", objectFit: "cover", border: "1.5px solid #cbd5e1" }} />
+                          <Image src={getAssetUrl(editExtended.founder1.image_url)} alt="F1" width={44} height={44} unoptimized style={{ borderRadius: "50%", objectFit: "cover", border: "1.5px solid #cbd5e1" }} />
                         )}
-                        <input type="file" accept="image/*" style={{ fontSize: 11 }} onChange={(e: any) => {
+                        <input type="file" accept="image/*" style={{ fontSize: 11 }} onChange={(e: FileChangeEvent) => {
                           const f = e.target.files?.[0];
                           if (f) handleImageUpload(["founder1", "image_url"], f);
+                        }} />
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 10 }}>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>Startup / Business Logo</label>
+                      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                        {editExtended.founder1?.business_logo_url && (
+                          <Image src={getAssetUrl(editExtended.founder1.business_logo_url)} alt="F1 logo" width={44} height={44} unoptimized style={{ borderRadius: 8, objectFit: "contain", border: "1.5px solid #cbd5e1" }} />
+                        )}
+                        <input type="file" accept="image/*" style={{ fontSize: 11 }} onChange={(e: FileChangeEvent) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleImageUpload(["founder1", "business_logo_url"], f);
                         }} />
                       </div>
                     </div>
@@ -850,21 +1641,35 @@ export default function AboutIinmPage() {
                   {/* Founder 2 */}
                   <div style={{ background: "#f8fafc", padding: 18, borderRadius: 16, border: "1px solid #e2e8f0" }}>
                     <h4 style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", marginBottom: 14 }}>Founder 2 Configuration</h4>
-                    <FormInput label="Name" value={editExtended.founder2?.name} onChange={(e: any) => setEditExtended((p: any) => { const c = { ...p }; c.founder2.name = e.target.value; return c; })} />
-                    <FormInput label="Designation" value={editExtended.founder2?.role} onChange={(e: any) => setEditExtended((p: any) => { const c = { ...p }; c.founder2.role = e.target.value; return c; })} />
-                    <FormInput label="Short Bio" value={editExtended.founder2?.bio} onChange={(e: any) => setEditExtended((p: any) => { const c = { ...p }; c.founder2.bio = e.target.value; return c; })} isTextArea rows={3} />
-                    <FormInput label="Quote" value={editExtended.founder2?.quote} onChange={(e: any) => setEditExtended((p: any) => { const c = { ...p }; c.founder2.quote = e.target.value; return c; })} />
-                    <FormInput label="YouTube Video ID" value={editExtended.founder2?.video_url} onChange={(e: any) => setEditExtended((p: any) => { const c = { ...p }; c.founder2.video_url = e.target.value; return c; })} />
-                    
+                    <FormInput label="Name" value={editExtended.founder2?.name} onChange={(e) => setEditExtended((p) => { const c = { ...p }; c.founder2.name = e.target.value; return c; })} />
+                    <FormInput label="Designation" value={editExtended.founder2?.role} onChange={(e) => setEditExtended((p) => { const c = { ...p }; c.founder2.role = e.target.value; return c; })} />
+                    <FormInput label="Short Bio" value={editExtended.founder2?.bio} onChange={(e) => setEditExtended((p) => { const c = { ...p }; c.founder2.bio = e.target.value; return c; })} isTextArea rows={3} />
+                    <FormInput label="Quote" value={editExtended.founder2?.quote} onChange={(e) => setEditExtended((p) => { const c = { ...p }; c.founder2.quote = e.target.value; return c; })} />
+                    <FormInput label="YouTube Video ID" value={editExtended.founder2?.video_url} onChange={(e) => setEditExtended((p) => { const c = { ...p }; c.founder2.video_url = e.target.value; return c; })} />
+                    <FormInput label="LinkedIn Profile URL" value={editExtended.founder2?.linkedin_url} onChange={(e) => setEditExtended((p) => { const c = { ...p }; c.founder2.linkedin_url = e.target.value; return c; })} />
+
                     <div style={{ marginTop: 10 }}>
                       <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>Profile Picture</label>
                       <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                         {editExtended.founder2?.image_url && (
-                          <img src={getAssetUrl(editExtended.founder2.image_url)} alt="F2" style={{ width: 44, height: 44, borderRadius: "50%", objectFit: "cover", border: "1.5px solid #cbd5e1" }} />
+                          <Image src={getAssetUrl(editExtended.founder2.image_url)} alt="F2" width={44} height={44} unoptimized style={{ borderRadius: "50%", objectFit: "cover", border: "1.5px solid #cbd5e1" }} />
                         )}
-                        <input type="file" accept="image/*" style={{ fontSize: 11 }} onChange={(e: any) => {
+                        <input type="file" accept="image/*" style={{ fontSize: 11 }} onChange={(e: FileChangeEvent) => {
                           const f = e.target.files?.[0];
                           if (f) handleImageUpload(["founder2", "image_url"], f);
+                        }} />
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 10 }}>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>Startup / Business Logo</label>
+                      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                        {editExtended.founder2?.business_logo_url && (
+                          <Image src={getAssetUrl(editExtended.founder2.business_logo_url)} alt="F2 logo" width={44} height={44} unoptimized style={{ borderRadius: 8, objectFit: "contain", border: "1.5px solid #cbd5e1" }} />
+                        )}
+                        <input type="file" accept="image/*" style={{ fontSize: 11 }} onChange={(e: FileChangeEvent) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleImageUpload(["founder2", "business_logo_url"], f);
                         }} />
                       </div>
                     </div>
@@ -879,7 +1684,7 @@ export default function AboutIinmPage() {
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "flex-end" }}>
                       <div>
                         <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>Upload Image File</label>
-                        <input type="file" accept="image/*" style={{ fontSize: 12 }} onChange={async (e: any) => {
+                        <input type="file" accept="image/*" style={{ fontSize: 12 }} onChange={async (e: FileChangeEvent) => {
                           const f = e.target.files?.[0];
                           if (!f) return;
                           setUploading(true);
@@ -888,8 +1693,8 @@ export default function AboutIinmPage() {
                           try {
                             const res = await apiFetch(`${API_BASE_URL}/about/upload-about-image`, { method: "POST", body: fd });
                             if (res.ok) {
-                              const d = await res.json();
-                              setEditExtended((p: any) => {
+                              const d = await res.json() as { url: string };
+                              setEditExtended((p) => {
                                 const c = { ...p };
                                 c.gallery.push({ id: `g-${Date.now()}`, image_url: d.url, caption: "" });
                                 return c;
@@ -907,18 +1712,18 @@ export default function AboutIinmPage() {
                     <p style={{ fontSize: 13, color: "#64748b", textAlign: "center", margin: "20px 0" }}>No photos uploaded yet.</p>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                      {editExtended.gallery?.map((it: any, index: number) => (
+                      {editExtended.gallery?.map((it: GalleryItem, index: number) => (
                         <div key={it.id} style={{ display: "flex", gap: 16, alignItems: "center", background: "#f8fafc", padding: 12, borderRadius: 12, border: "1px solid #e2e8f0" }}>
-                          <img src={getAssetUrl(it.image_url)} alt="Thumb" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }} />
+                          <Image src={getAssetUrl(it.image_url)} alt="Thumb" width={48} height={48} unoptimized style={{ borderRadius: 8, objectFit: "cover" }} />
                           <div style={{ flex: 1 }}>
-                            <FormInput label="Photo Caption" value={it.caption} onChange={(e: any) => setEditExtended((p: any) => {
+                            <FormInput label="Photo Caption" value={it.caption} onChange={(e) => setEditExtended((p) => {
                               const c = { ...p };
                               c.gallery[index].caption = e.target.value;
                               return c;
                             })} />
                           </div>
                           <button
-                            onClick={() => setEditExtended((p: any) => {
+                            onClick={() => setEditExtended((p) => {
                               const c = { ...p };
                               c.gallery.splice(index, 1);
                               return c;
@@ -940,7 +1745,7 @@ export default function AboutIinmPage() {
                     <h4 style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", marginBottom: 12 }}>+ Add New Milestone</h4>
                     <button
                       type="button"
-                      onClick={() => setEditExtended((p: any) => {
+                      onClick={() => setEditExtended((p) => {
                         const c = { ...p };
                         c.timeline.push({ id: `t-${Date.now()}`, year: "2026", title: "New Event Title", description: "Milestone description goes here...", icon_name: "Target" });
                         return c;
@@ -956,10 +1761,10 @@ export default function AboutIinmPage() {
                     <p style={{ fontSize: 13, color: "#64748b", textAlign: "center", margin: "20px 0" }}>No milestones defined yet.</p>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                      {editExtended.timeline?.map((it: any, index: number) => (
+                      {editExtended.timeline?.map((it: TimelineItem, index: number) => (
                         <div key={it.id} style={{ background: "#f8fafc", padding: 18, borderRadius: 16, border: "1px solid #e2e8f0", position: "relative" }}>
                           <button
-                            onClick={() => setEditExtended((p: any) => {
+                            onClick={() => setEditExtended((p) => {
                               const c = { ...p };
                               c.timeline.splice(index, 1);
                               return c;
@@ -970,7 +1775,7 @@ export default function AboutIinmPage() {
                           </button>
 
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginRight: 40 }}>
-                            <FormInput label="Year (e.g. 2026)" value={it.year} onChange={(e: any) => setEditExtended((p: any) => {
+                            <FormInput label="Year (e.g. 2026)" value={it.year} onChange={(e) => setEditExtended((p) => {
                               const c = { ...p };
                               c.timeline[index].year = e.target.value;
                               return c;
@@ -978,7 +1783,7 @@ export default function AboutIinmPage() {
                             <FormInput
                               label="Milestone Icon"
                               value={it.icon_name}
-                              onChange={(e: any) => setEditExtended((p: any) => {
+                              onChange={(e) => setEditExtended((p) => {
                                 const c = { ...p };
                                 c.timeline[index].icon_name = e.target.value;
                                 return c;
@@ -994,17 +1799,80 @@ export default function AboutIinmPage() {
                             />
                           </div>
 
-                          <FormInput label="Milestone Title" value={it.title} onChange={(e: any) => setEditExtended((p: any) => {
+                          <FormInput label="Milestone Title" value={it.title} onChange={(e) => setEditExtended((p) => {
                             const c = { ...p };
                             c.timeline[index].title = e.target.value;
                             return c;
                           })} />
                           
-                          <FormInput label="Milestone Description" value={it.description} onChange={(e: any) => setEditExtended((p: any) => {
+                          <FormInput label="Milestone Description" value={it.description} onChange={(e) => setEditExtended((p) => {
                             const c = { ...p };
                             c.timeline[index].description = e.target.value;
                             return c;
                           })} isTextArea rows={2} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {editorModal === "alumni" && (
+                <div>
+                  <h4 style={{ fontSize: 12, fontWeight: 700, color: "#e63946", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 14 }}>Section Content</h4>
+                  <FormInput label="Eyebrow Text" value={editSettings.alumni_eyebrow} onChange={(e) => setEditSettings((p) => ({ ...p, alumni_eyebrow: e.target.value }))} />
+                  <FormInput label="Section Title" value={editSettings.alumni_title} onChange={(e) => setEditSettings((p) => ({ ...p, alumni_title: e.target.value }))} />
+                  <FormInput label="Description" value={editSettings.alumni_description} onChange={(e) => setEditSettings((p) => ({ ...p, alumni_description: e.target.value }))} isTextArea rows={3} />
+
+                  <h4 style={{ fontSize: 12, fontWeight: 700, color: "#e63946", textTransform: "uppercase", letterSpacing: 0.5, margin: "20px 0 14px" }}>+ Upload Logo</h4>
+                  <div style={{ background: "#f8fafc", padding: 18, borderRadius: 16, border: "1px solid #e2e8f0", marginBottom: 20 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "flex-end" }}>
+                      <div>
+                        <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>Upload Logo Image</label>
+                        <input key={alumniUploadKey} type="file" accept="image/*" style={{ fontSize: 12 }} onChange={async (e: FileChangeEvent) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          setUploading(true);
+                          const fd = new FormData();
+                          fd.append("file", f);
+                          try {
+                            const res = await apiFetch(`${API_BASE_URL}/about/upload-about-image`, { method: "POST", body: fd });
+                            if (res.ok) {
+                              const d = await res.json() as { url: string };
+                              setEditExtended((p) => ({
+                                ...p,
+                                alumni_logos: [...p.alumni_logos, { id: `al-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, image_url: d.url }]
+                              }));
+                            } else {
+                              const text = await res.text().catch(() => 'Upload failed');
+                              console.error('Alumni logo upload failed:', res.status, text);
+                            }
+                          } catch (ex) { console.error(ex); } finally { setUploading(false); setAlumniUploadKey((k) => k + 1); }
+                        }} />
+                      </div>
+                      <p style={{ margin: 0, fontSize: 11, color: "#64748b" }}>Upload company/startup logos. Max 10MB.</p>
+                    </div>
+                  </div>
+
+                  <h4 style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", marginBottom: 12 }}>Configure Logos</h4>
+                  {editExtended.alumni_logos?.length === 0 ? (
+                    <p style={{ fontSize: 13, color: "#64748b", textAlign: "center", margin: "20px 0" }}>No logos uploaded yet.</p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      {editExtended.alumni_logos?.map((it: AlumniLogoItem, index: number) => (
+                        <div key={it.id} style={{ display: "flex", gap: 16, alignItems: "center", background: "#f8fafc", padding: 12, borderRadius: 12, border: "1px solid #e2e8f0" }}>
+                          <Image src={getAssetUrl(it.image_url)} alt="Logo" width={48} height={48} unoptimized style={{ borderRadius: 8, objectFit: "contain" }} />
+                          <p style={{ margin: 0, fontSize: 11, color: "#64748b" }}>{it.image_url.split("/").pop()}</p>
+                          <button
+                            onClick={() => setEditExtended((p) => {
+                              const c = { ...p };
+                              c.alumni_logos.splice(index, 1);
+                              return c;
+                            })}
+                            style={{ marginLeft: "auto", background: "#fee2e2", border: "none", color: "#ef4444", borderRadius: "8px", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          >
+                            {ICONS.Trash}
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -1021,7 +1889,10 @@ export default function AboutIinmPage() {
               <button
                 disabled={uploading}
                 onClick={() => {
-                  if (editorModal === "story") saveStory();
+                  if (editorModal === "story" || editorModal === "hero") saveStory();
+                  else if (editorModal === "purpose") savePurpose();
+                  else if (editorModal === "who") saveWho();
+                  else if (editorModal === "alumni") saveAlumni();
                   else saveExtended();
                 }}
                 style={{ background: "#e63946", color: "#fff", border: "none", padding: "10px 24px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: uploading ? "not-allowed" : "pointer", boxShadow: "0 4px 12px rgba(230,57,70,0.15)" }}
@@ -1032,6 +1903,39 @@ export default function AboutIinmPage() {
 
           </div>
         </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════
+         GALLERY LIGHTBOX PREVIEW
+         ══════════════════════════════════════════════════════ */}
+      {lightbox && (
+        <div className="about-lightbox-overlay" onClick={() => setLightbox(null)}>
+          <button className="about-lightbox-close" onClick={() => setLightbox(null)} aria-label="Close preview">
+            {ICONS.Close}
+          </button>
+          <Image
+            src={lightbox}
+            alt="Gallery preview"
+            width={1200}
+            height={800}
+            unoptimized
+            style={{ maxWidth: "90vw", maxHeight: "85vh", objectFit: "contain", borderRadius: 12, boxShadow: "0 25px 60px rgba(0,0,0,0.5)" }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════
+         BACK TO TOP
+         ══════════════════════════════════════════════════════ */}
+      {showBackToTop && (
+        <button
+          className="about-back-to-top"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          aria-label="Back to top"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15" /></svg>
+        </button>
       )}
 
     </div>

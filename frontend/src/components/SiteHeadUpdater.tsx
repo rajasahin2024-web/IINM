@@ -15,7 +15,10 @@ export default function SiteHeadUpdater() {
     }
 
     const updateHead = () => {
-      const cached = localStorage.getItem("iinm_site_settings");
+      let cached: string | null = null;
+      try {
+        cached = localStorage.getItem("iinm_site_settings");
+      } catch {}
       if (cached) {
         try {
           const d = JSON.parse(cached);
@@ -29,7 +32,9 @@ export default function SiteHeadUpdater() {
     fetch(`${BASE_URL}/api/settings/site`)
       .then((r) => r.json())
       .then((d) => {
-        localStorage.setItem("iinm_site_settings", JSON.stringify(d));
+        try {
+          localStorage.setItem("iinm_site_settings", JSON.stringify(d));
+        } catch {}
         applySettings(d);
       })
       .catch(() => {});

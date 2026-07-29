@@ -26,6 +26,8 @@ class InstructorBase(BaseModel):
     experience_years: Optional[str] = None
     designation: Optional[str] = None
     specialization: Optional[str] = None
+    teaching_hours: Optional[str] = None
+    rating: Optional[str] = None
     social_linkedin: Optional[str] = None
     social_twitter: Optional[str] = None
     social_website: Optional[str] = None
@@ -47,6 +49,8 @@ class InstructorUpdate(BaseModel):
     experience_years: Optional[str] = None
     designation: Optional[str] = None
     specialization: Optional[str] = None
+    teaching_hours: Optional[str] = None
+    rating: Optional[str] = None
     social_linkedin: Optional[str] = None
     social_twitter: Optional[str] = None
     social_website: Optional[str] = None
@@ -126,6 +130,7 @@ class EnrollRequest(BaseModel):
 
 class BatchContentDripBase(BaseModel):
     chapter_id: Optional[int] = None
+    live_class_id: Optional[int] = None
     unlock_date: Optional[date] = None
 
 class BatchContentDripResponse(BatchContentDripBase):
@@ -161,9 +166,12 @@ def update_batch_content_drip(batch_id: int, req: UpdateContentDripRequest, devi
     for d in req.drips:
         if not d.unlock_date:
             continue
+        if not d.chapter_id and not d.live_class_id:
+            continue
         drip = models.BatchContentDrip(
             batch_id=batch_id,
             chapter_id=d.chapter_id,
+            live_class_id=d.live_class_id,
             unlock_date=d.unlock_date
         )
         db.add(drip)
@@ -276,10 +284,12 @@ def create_batch(req: BatchCreate, device: str = Depends(require_device), db: Se
     # Add content drip schedules
     if hasattr(req, 'content_drip') and req.content_drip:
         for drip in req.content_drip:
+            if not drip.unlock_date or (not drip.chapter_id and not drip.live_class_id):
+                continue
             db_drip = models.BatchContentDrip(
                 batch_id=db_batch.id,
                 chapter_id=drip.chapter_id,
-                material_id=drip.material_id,
+                live_class_id=drip.live_class_id,
                 unlock_date=drip.unlock_date
             )
             db.add(db_drip)

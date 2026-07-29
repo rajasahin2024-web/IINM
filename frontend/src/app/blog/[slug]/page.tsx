@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import BlogDetailClient from "./BlogDetailClient";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:2007/api";
+import { API_BASE_URL as API } from "@/lib/config";
 
 async function fetchPost(slug: string) {
   try {

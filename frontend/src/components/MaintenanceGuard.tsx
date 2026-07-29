@@ -98,7 +98,10 @@ export default function MaintenanceGuard({ children }: { children: React.ReactNo
       return;
     }
 
-    const token = localStorage.getItem("iinm_device_token");
+    let token: string | null = null;
+    try {
+      token = localStorage.getItem("iinm_device_token");
+    } catch {}
     // Logged-in users bypass maintenance
     if (token) {
       setChecking(false);

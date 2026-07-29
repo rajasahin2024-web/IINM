@@ -171,7 +171,13 @@ function BatchManagerInner() {
   /* ── Drip Content (Curriculum unlock scheduling) ── */
   const [courseChapters, setCourseChapters] = useState<{ subjectName: string; chapters: any[] }[]>([]);
   const [dripDates, setDripDates] = useState<Record<number, string>>({});
+  const [liveDripDates, setLiveDripDates] = useState<Record<number, string>>({});
   const [loadingChapters, setLoadingChapters] = useState(false);
+
+  /* ── Auto-Schedule (drip date generation) ── */
+  const [autoClassesPerWeek, setAutoClassesPerWeek] = useState(3);
+  const [autoStartDate, setAutoStartDate] = useState("");
+  const [confirmOverwrite, setConfirmOverwrite] = useState(false);
 
   /* ── Quick-Add Teacher (inline mini-modal) ── */
   const [showAddTeacher, setShowAddTeacher] = useState(false);
@@ -247,7 +253,16 @@ function BatchManagerInner() {
           const chapRes = await apiFetch(`${API_BASE_URL}/subjects/${sub.id}/chapters`);
           if (chapRes.ok) {
             const chaps = await chapRes.json();
-            if (chaps.length > 0) groups.push({ subjectName: sub.name, chapters: chaps });
+            if (chaps.length > 0) {
+              // Attach live classes to each chapter (fetched in parallel)
+              await Promise.all(chaps.map(async (ch: any) => {
+                try {
+                  const lcRes = await apiFetch(`${API_BASE_URL}/chapters/${ch.id}/live-classes`);
+                  ch.live_classes = lcRes.ok ? await lcRes.json() : [];
+                } catch { ch.live_classes = []; }
+              }));
+              groups.push({ subjectName: sub.name, chapters: chaps });
+            }
           }
         }
         setCourseChapters(groups);
@@ -255,6 +270,73 @@ function BatchManagerInner() {
       finally { setLoadingChapters(false); }
     })();
   }, [formData.course_id]);
+
+  /* ── Sync auto-schedule start date from the batch start date ── */
+  useEffect(() => {
+    setAutoStartDate(formData.start_date || "");
+  }, [formData.start_date]);
+
+  /* Reset overwrite confirm whenever inputs change */
+  useEffect(() => { setConfirmOverwrite(false); }, [autoClassesPerWeek, autoStartDate, formData.course_id]);
+
+  /* ── Auto-Schedule helpers ── */
+  const flatChapters = courseChapters.flatMap(g => g.chapters);
+  const flatLiveClasses = flatChapters.flatMap((ch: any) => ch.live_classes || []);
+
+  /* Schedule sequence: each chapter takes a class slot, then each of its live classes takes its own slot */
+  const dripItems: { kind: "chapter" | "live"; id: number }[] = flatChapters.flatMap((ch: any) => [
+    { kind: "chapter" as const, id: ch.id },
+    ...((ch.live_classes || []).map((lc: any) => ({ kind: "live" as const, id: lc.id }))),
+  ]);
+
+  /* Timezone-safe: parse "YYYY-MM-DD" locally, add offset days, format back manually */
+  const addDaysISO = (iso: string, days: number) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + days);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+  };
+
+  const computeDripSchedule = (): { chapters: Record<number, string>; lives: Record<number, string> } => {
+    const N = Math.min(7, Math.max(1, autoClassesPerWeek));
+    const chapters: Record<number, string> = {};
+    const lives: Record<number, string> = {};
+    dripItems.forEach((item, i) => {
+      const week = Math.floor(i / N);
+      const slotInWeek = i % N;
+      const dayOffset = week * 7 + Math.round(slotInWeek * (7 / N));
+      const iso = addDaysISO(autoStartDate, dayOffset);
+      if (item.kind === "chapter") chapters[item.id] = iso;
+      else lives[item.id] = iso;
+    });
+    return { chapters, lives };
+  };
+
+  const generateDripDates = () => {
+    if (!autoStartDate) { showToast("Set a start date first", "error"); return; }
+    if (dripItems.length === 0) { showToast("No chapters found for this course", "error"); return; }
+    // Overwrite guard: if dates already exist, require a second confirming click
+    if ((Object.keys(dripDates).length > 0 || Object.keys(liveDripDates).length > 0) && !confirmOverwrite) {
+      setConfirmOverwrite(true);
+      return;
+    }
+    const sched = computeDripSchedule();
+    setDripDates(sched.chapters);
+    setLiveDripDates(sched.lives);
+    setConfirmOverwrite(false);
+    showToast(`${flatChapters.length} chapter + ${flatLiveClasses.length} live class dates generated`, "success");
+  };
+
+  const clearDripDates = () => {
+    setDripDates({});
+    setLiveDripDates({});
+    setConfirmOverwrite(false);
+  };
+
+  /* Last generated/assigned unlock date (for summary + end-date warning) */
+  const lastDripDate = [...Object.values(dripDates), ...Object.values(liveDripDates)].reduce((max, d) => (d > max ? d : max), "");
+  const dripOverrunsEndDate = !!(formData.end_date && lastDripDate && lastDripDate > formData.end_date);
 
   /* ── Filter ── */
   const filtered = batches.filter(b => {
@@ -278,7 +360,9 @@ function BatchManagerInner() {
     setEditingId(null);
     setFormData(defaultForm);
     setDripDates({});
+    setLiveDripDates({});
     setCourseChapters([]);
+    setConfirmOverwrite(false);
     setIsModalOpen(true);
   };
 
@@ -299,10 +383,16 @@ function BatchManagerInner() {
       instructor_ids:     batch.instructors?.map((i: any) => i.id) ?? [],
       routines:           batch.routines ?? [],
     });
-    /* Populate existing drip dates */
+    /* Populate existing drip dates (chapter + live class entries) */
     const dripMap: Record<number, string> = {};
-    (batch.content_drip || []).forEach((d: any) => { dripMap[d.chapter_id] = d.unlock_date; });
+    const liveMap: Record<number, string> = {};
+    (batch.content_drip || []).forEach((d: any) => {
+      if (d.live_class_id) liveMap[d.live_class_id] = d.unlock_date;
+      else if (d.chapter_id) dripMap[d.chapter_id] = d.unlock_date;
+    });
     setDripDates(dripMap);
+    setLiveDripDates(liveMap);
+    setConfirmOverwrite(false);
     setIsModalOpen(true);
   };
 
@@ -326,10 +416,11 @@ function BatchManagerInner() {
       const savedBatch = await res.json();
       const batchId = editingId ?? savedBatch.id;
 
-      /* Save drip schedule */
-      const drips = Object.entries(dripDates)
-        .map(([chId, date]) => ({ chapter_id: parseInt(chId), unlock_date: date || null }))
-        .filter(d => d.unlock_date);
+      /* Save drip schedule (chapter unlocks + live class dates) */
+      const drips = [
+        ...Object.entries(dripDates).map(([chId, date]) => ({ chapter_id: parseInt(chId), unlock_date: date || null })),
+        ...Object.entries(liveDripDates).map(([lcId, date]) => ({ live_class_id: parseInt(lcId), unlock_date: date || null })),
+      ].filter(d => d.unlock_date);
       await apiFetch(`${API_BASE_URL}/batches/${batchId}/content-drip`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -625,39 +716,58 @@ function BatchManagerInner() {
 
       {/* ══════════ Add / Edit Modal ══════════ */}
       {isModalOpen && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
-          <div style={{ position: "relative", width: "100%", height: "100%", background: "#f1f5f9", display: "flex", flexDirection: "column", overflow: "hidden", animation: "batchPop 0.2s ease-out" }}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "stretch", justifyContent: "stretch", padding: 0 }}>
+          {/* Window — full screen, Windows 11 style */}
+          <div style={{ position: "relative", width: "100%", height: "100%", background: "#f3f4f6", display: "flex", flexDirection: "column", overflow: "hidden", animation: "batchPop 0.18s ease-out", border: "1px solid #d1d5db" }}>
 
-            {/* Modal Header */}
-            <div style={{ padding: "22px 28px 18px", background: "#fff", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <div style={{ width: 42, height: 42, borderRadius: 12, background: "linear-gradient(135deg,#0ea5e9,#6366f1)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0 }}>
-                  <Icon name="layers" size={18} />
+            {/* Windows-style Title Bar */}
+            <div style={{ height: 48, background: "#fff", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, userSelect: "none", paddingLeft: 16, paddingRight: 0 }}>
+              {/* Left: app icon + title */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 6, background: "linear-gradient(135deg,#0ea5e9,#6366f1)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0 }}>
+                  <Icon name="layers" size={15} />
                 </div>
-                <div>
-                  <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#0f172a" }}>
-                    {editingId ? "Edit Batch" : "Create New Batch"}
-                  </h2>
-                  <p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748b" }}>
-                    {editingId ? "Update schedule, mode, and personnel" : "Configure a new batch for a course"}
-                  </p>
-                </div>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#1f2937", fontFamily: "Inter, system-ui, sans-serif" }}>
+                  {editingId ? "Edit Batch" : "Create New Batch"} — IINM Admin
+                </span>
               </div>
-              <button onClick={() => setIsModalOpen(false)} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", width: 34, height: 34, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b", cursor: "pointer" }}>
-                <Icon name="x" size={15} />
-              </button>
+              {/* Right: Windows-style control buttons */}
+              <div style={{ display: "flex", height: "100%" }}>
+                {/* Minimize */}
+                <button onClick={() => setIsModalOpen(false)} title="Minimize"
+                  style={{ width: 46, height: "100%", border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280", transition: "background 0.12s" }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "#f3f4f6"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /></svg>
+                </button>
+                {/* Maximize (decorative) */}
+                <button title="Maximize"
+                  style={{ width: 46, height: "100%", border: "none", background: "transparent", cursor: "default", display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280" }}>
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="1.5" width="9" height="9" stroke="currentColor" strokeWidth="1.2" rx="1" fill="none" /></svg>
+                </button>
+                {/* Close */}
+                <button onClick={() => setIsModalOpen(false)} title="Close"
+                  style={{ width: 46, height: "100%", border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280", transition: "background 0.12s, color 0.12s" }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "#e81123"; e.currentTarget.style.color = "#fff"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#6b7280"; }}>
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /><line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+                </button>
+              </div>
             </div>
 
-            {/* Modal Body */}
-            <div className="custom-scroll" style={{ padding: "32px 36px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column" }}>
-              <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 24 }}>
+            {/* Modal Body — 2-column: left col-4, right col-8 */}
+            <div className="custom-scroll" style={{ padding: "16px 20px", overflowY: "auto", flex: 1 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,4fr) minmax(0,8fr)", gap: 16, alignItems: "start" }}>
+
+              {/* ═════ LEFT COLUMN (col-4) ═════ */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
               {/* ── Section: Basic Info ── */}
-              <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e2e8f0", padding: "20px 22px" }}>
-                <h3 style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", margin: "0 0 16px", display: "flex", alignItems: "center", gap: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                  <Icon name="info" size={14} /> Basic Information
+              <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", padding: "14px 16px" }}>
+                <h3 style={{ fontSize: 11, fontWeight: 700, color: "#0f172a", margin: "0 0 12px", display: "flex", alignItems: "center", gap: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  <Icon name="info" size={12} /> Basic Information
                 </h3>
-                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 
                   {/* Linked Course */}
                   <div>
@@ -707,13 +817,13 @@ function BatchManagerInner() {
               </div>
 
               {/* ── Section: Timeline & Capacity ── */}
-              <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e2e8f0", padding: "20px 22px" }}>
-                <h3 style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", margin: "0 0 18px", display: "flex", alignItems: "center", gap: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                  <Icon name="calendar" size={14} /> Timeline & Parameters
+              <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", padding: "14px 16px" }}>
+                <h3 style={{ fontSize: 11, fontWeight: 700, color: "#0f172a", margin: "0 0 14px", display: "flex", alignItems: "center", gap: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  <Icon name="calendar" size={12} /> Timeline & Parameters
                 </h3>
 
                 {/* Dates row */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
                   {([
                     { label: "Start Date", key: "start_date" as const },
                     { label: "End Date",   key: "end_date"   as const },
@@ -740,7 +850,7 @@ function BatchManagerInner() {
                 </div>
 
                 {/* Capacity & Discount row */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
                   {([
                     { label: "Max Capacity",       key: "max_capacity"    as const },
                     { label: "Batch Discount (\u20b9)", key: "discount_amount" as const },
@@ -783,32 +893,28 @@ function BatchManagerInner() {
               </div>
 
               {/* ── Section: Instructors ── */}
-              <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e2e8f0", padding: "20px 22px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+              <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", padding: "14px 16px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                   <div>
-                    <h3 style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", margin: 0 }}>Assign Teachers</h3>
-                    <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748b" }}>Select the instructors for this batch.</p>
+                    <h3 style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", margin: 0 }}>Assign Teachers</h3>
+                    <p style={{ margin: "2px 0 0", fontSize: 11, color: "#64748b" }}>Select instructors for this batch.</p>
                   </div>
-                  <button type="button" onClick={() => setShowAddTeacher(true)} style={{ background: "#f0f9ff", color: "#0ea5e9", border: "1.5px solid #bae6fd", padding: "8px 16px", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-                    <Icon name="plus" size={14} /> Add New Teacher
+                  <button type="button" onClick={() => setShowAddTeacher(true)} style={{ background: "#f0f9ff", color: "#0ea5e9", border: "1.5px solid #bae6fd", padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+                    <Icon name="plus" size={12} /> Add Teacher
                   </button>
                 </div>
 
                 {instructors.length === 0 ? (
-                  <div style={{ padding: 40, textAlign: "center", background: "#f8fafc", border: "2px dashed #e2e8f0", borderRadius: 16 }}>
-                    <div style={{ color: "#94a3b8", marginBottom: 12 }}><Icon name="users" size={48} /></div>
-                    <h4 style={{ margin: "0 0 8px 0", fontSize: 16, fontWeight: 700, color: "#0f172a" }}>No Teachers Found</h4>
-                    <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>Click the button above to create your first instructor profile.</p>
+                  <div style={{ padding: 24, textAlign: "center", background: "#f8fafc", border: "2px dashed #e2e8f0", borderRadius: 12 }}>
+                    <div style={{ color: "#94a3b8", marginBottom: 8 }}><Icon name="users" size={32} /></div>
+                    <h4 style={{ margin: "0 0 4px 0", fontSize: 13, fontWeight: 700, color: "#0f172a" }}>No Teachers Found</h4>
+                    <p style={{ margin: 0, fontSize: 11, color: "#64748b" }}>Click above to create one.</p>
                   </div>
                 ) : (
                   <div style={{
-                    display: "flex",
-                    gap: 14,
-                    overflowX: "auto",
-                    overflowY: "hidden",
-                    paddingBottom: 8,
-                    scrollbarWidth: "thin",
-                    scrollbarColor: "#cbd5e1 transparent",
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
+                    gap: 10,
                   }}>
                     {instructors.map(inst => {
                       const isSelected = formData.instructor_ids.includes(inst.id);
@@ -817,17 +923,15 @@ function BatchManagerInner() {
                           key={inst.id}
                           onClick={() => toggleInstructor(inst.id)}
                           style={{
-                            flexShrink: 0,
-                            width: 200,
-                            padding: "16px 14px",
-                            borderRadius: 14,
+                            padding: "12px 10px",
+                            borderRadius: 10,
                             border: `2px solid ${isSelected ? "#0ea5e9" : "#e2e8f0"}`,
                             background: isSelected ? "#f0f9ff" : "#fff",
                             cursor: "pointer",
                             position: "relative",
                             transition: "all 0.2s",
-                            boxShadow: isSelected ? "0 6px 18px rgba(14,165,233,0.15)" : "0 2px 8px rgba(0,0,0,0.04)",
-                            transform: isSelected ? "translateY(-3px)" : "none",
+                            boxShadow: isSelected ? "0 3px 10px rgba(14,165,233,0.1)" : "0 1px 4px rgba(0,0,0,0.04)",
+                            transform: isSelected ? "translateY(-2px)" : "none",
                           }}
                         >
                           {/* Check badge */}
@@ -843,24 +947,24 @@ function BatchManagerInner() {
                           )}
 
                           {/* Avatar */}
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
                             {inst.avatar_url ? (
                               <img
                                 src={inst.avatar_url.startsWith("http") ? inst.avatar_url : `${API_BASE_URL.replace("/api", "")}${inst.avatar_url}`}
                                 alt={inst.name}
                                 style={{
-                                  width: 52, height: 52, borderRadius: "50%",
+                                  width: 44, height: 44, borderRadius: "50%",
                                   objectFit: "cover",
-                                  border: `3px solid ${isSelected ? "#0ea5e9" : "#e2e8f0"}`,
+                                  border: `2.5px solid ${isSelected ? "#0ea5e9" : "#e2e8f0"}`,
                                 }}
                               />
                             ) : (
                               <div style={{
-                                width: 52, height: 52, borderRadius: "50%",
+                                width: 44, height: 44, borderRadius: "50%",
                                 background: isSelected ? "#0ea5e9" : "#f1f5f9",
                                 color: isSelected ? "#fff" : "#94a3b8",
                                 display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: 20, fontWeight: 800,
+                                fontSize: 18, fontWeight: 800,
                                 transition: "all 0.2s",
                               }}>
                                 {inst.name.charAt(0).toUpperCase()}
@@ -899,13 +1003,78 @@ function BatchManagerInner() {
                 )}
               </div>
 
+              </div>{/* end left col-4 */}
+
+              {/* ═════ RIGHT COLUMN (col-8) ═════ */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
               {/* ── Section: Curriculum Drip Content ── */}
               {(courseChapters.length > 0 || loadingChapters) && (
-                <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e2e8f0", padding: "20px 22px" }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", margin: "0 0 4px", display: "flex", alignItems: "center", gap: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                    <Icon name="calendar" size={14} /> Curriculum — Scheduled Unlock (Drip Content)
+                <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", padding: "14px 16px" }}>
+                  <h3 style={{ fontSize: 11, fontWeight: 700, color: "#0f172a", margin: "0 0 4px", display: "flex", alignItems: "center", gap: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    <Icon name="calendar" size={12} /> Curriculum — Scheduled Unlock (Drip Content)
                   </h3>
-                  <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 18px" }}>Set a date when each chapter becomes visible to students. Leave blank to unlock immediately.</p>
+                  <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>Set a date when each chapter becomes visible to students. Leave blank to unlock immediately.</p>
+
+                  {/* ── Auto-Schedule bar ── */}
+                  {!loadingChapters && flatChapters.length > 0 && (
+                    <div style={{ background: "#f0fdfa", border: "1px solid #ccfbf1", borderRadius: 8, padding: "10px 12px", marginBottom: 14 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                        <span style={{ color: "#0d9488", display: "flex" }}><Icon name="zap" size={14} /></span>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: "#115e59", textTransform: "uppercase", letterSpacing: "0.5px" }}>Auto-Schedule</span>
+                        <span style={{ fontSize: 11, color: "#0f766e" }}>— set classes per week & dates will be generated automatically</span>
+                      </div>
+                      <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+                        <div className="bi-sel-wrap" style={{ width: 120 }}>
+                          <span className="bi-sel-label" style={{ color: "#0f766e" }}>Classes / Week</span>
+                          <input
+                            type="number" min={1} max={7}
+                            value={autoClassesPerWeek}
+                            onChange={e => setAutoClassesPerWeek(Math.min(7, Math.max(1, Number(e.target.value) || 1)))}
+                            style={{ width: "100%", padding: "9px 12px", borderRadius: 10, border: "1.5px solid #99f6e4", background: "#fff", fontSize: 14, fontWeight: 700, color: "#115e59", outline: "none", boxSizing: "border-box", fontFamily: "Inter, system-ui, sans-serif" }}
+                          />
+                        </div>
+                        <div className="bi-sel-wrap" style={{ width: 170 }}>
+                          <span className="bi-sel-label" style={{ color: "#0f766e" }}>Schedule Start Date</span>
+                          <input
+                            type="date"
+                            value={autoStartDate}
+                            onChange={e => setAutoStartDate(e.target.value)}
+                            style={{ width: "100%", padding: "9px 12px", borderRadius: 10, border: "1.5px solid #99f6e4", background: "#fff", fontSize: 13, fontWeight: 600, color: "#115e59", outline: "none", boxSizing: "border-box", fontFamily: "Inter, system-ui, sans-serif", cursor: "pointer" }}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={generateDripDates}
+                          style={{ background: confirmOverwrite ? "#f59e0b" : "#0d9488", color: "#fff", border: "none", padding: "10px 18px", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, transition: "background 0.15s" }}
+                        >
+                          <Icon name={confirmOverwrite ? "alert-circle" : "calendar"} size={13} />
+                          {confirmOverwrite ? "Overwrite existing dates?" : "Generate Dates"}
+                        </button>
+                        {Object.keys(dripDates).length > 0 && (
+                          <button
+                            type="button"
+                            onClick={clearDripDates}
+                            style={{ background: "#fff", color: "#64748b", border: "1.5px solid #e2e8f0", padding: "10px 16px", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+                          >
+                            Clear All
+                          </button>
+                        )}
+                      </div>
+                      {confirmOverwrite && (
+                        <div style={{ fontSize: 11.5, color: "#b45309", fontWeight: 600, marginTop: 8 }}>
+                          This will replace {Object.keys(dripDates).length + Object.keys(liveDripDates).length} existing date{(Object.keys(dripDates).length + Object.keys(liveDripDates).length) !== 1 ? "s" : ""}. Click again to confirm.
+                        </div>
+                      )}
+                      {lastDripDate && (
+                        <div style={{ fontSize: 11.5, color: dripOverrunsEndDate ? "#b45309" : "#0f766e", fontWeight: 600, marginTop: 8, display: "flex", alignItems: "center", gap: 5 }}>
+                          <Icon name={dripOverrunsEndDate ? "alert-circle" : "info"} size={12} />
+                          {Object.keys(dripDates).length} of {flatChapters.length} chapters{flatLiveClasses.length > 0 && ` + ${Object.keys(liveDripDates).length} of ${flatLiveClasses.length} live classes`} scheduled → last date {new Date(lastDripDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                          {dripOverrunsEndDate && " — schedule ends after the batch end date"}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {loadingChapters ? (
                     <div style={{ padding: "24px 0", textAlign: "center", color: "#94a3b8", fontSize: 13 }}>Loading curriculum…</div>
@@ -923,7 +1092,8 @@ function BatchManagerInner() {
                               const date = dripDates[ch.id] || "";
                               const isLocked = !!date;
                               return (
-                                <div key={ch.id} style={{
+                                <React.Fragment key={ch.id}>
+                                <div style={{
                                   display: "flex", alignItems: "center", gap: 14,
                                   background: isLocked ? "#f0fdfa" : "#f8fafc",
                                   border: `1px solid ${isLocked ? "#99f6e4" : "#e2e8f0"}`,
@@ -934,7 +1104,15 @@ function BatchManagerInner() {
                                     <Icon name={isLocked ? "lock" : "unlock"} size={14} />
                                   </div>
                                   <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ch.title}</div>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "flex", alignItems: "center", gap: 8 }}>
+                                      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{ch.title}</span>
+                                      {(ch.live_classes?.length || 0) > 0 && (
+                                        <span title={ch.live_classes.map((lc: any) => lc.title).join("\n")}
+                                          style={{ background: "#ede9fe", color: "#6d28d9", fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 10, flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                          <Icon name="video" size={10} /> {ch.live_classes.length} LIVE
+                                        </span>
+                                      )}
+                                    </div>
                                     {isLocked && (
                                       <div style={{ fontSize: 11, color: "#0f766e", marginTop: 2, fontWeight: 600 }}>
                                         Unlocks: {new Date(date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
@@ -960,6 +1138,52 @@ function BatchManagerInner() {
                                     }}
                                   />
                                 </div>
+                                {/* Live classes under this chapter — each gets its own date */}
+                                {(ch.live_classes || []).map((lc: any) => {
+                                  const lcDate = liveDripDates[lc.id] || "";
+                                  const lcSet = !!lcDate;
+                                  return (
+                                    <div key={`lc-${lc.id}`} style={{
+                                      display: "flex", alignItems: "center", gap: 12,
+                                      marginLeft: 30,
+                                      background: lcSet ? "#f5f3ff" : "#fafafa",
+                                      border: `1px solid ${lcSet ? "#ddd6fe" : "#f1f5f9"}`,
+                                      borderRadius: 8, padding: "7px 12px",
+                                      transition: "all 0.2s",
+                                    }}>
+                                      <div style={{ width: 26, height: 26, borderRadius: 6, background: lcSet ? "#ede9fe" : "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: lcSet ? "#6d28d9" : "#94a3b8" }}>
+                                        <Icon name="video" size={12} />
+                                      </div>
+                                      <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lc.title}</div>
+                                        {lcSet && (
+                                          <div style={{ fontSize: 10.5, color: "#7c3aed", marginTop: 1, fontWeight: 600 }}>
+                                            Class date: {new Date(lcDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <input
+                                        type="date"
+                                        value={lcDate}
+                                        onChange={e => setLiveDripDates(prev => {
+                                          const next = { ...prev };
+                                          if (e.target.value) next[lc.id] = e.target.value;
+                                          else delete next[lc.id];
+                                          return next;
+                                        })}
+                                        style={{
+                                          padding: "5px 9px", borderRadius: 7,
+                                          border: `1px solid ${lcSet ? "#c4b5fd" : "#e2e8f0"}`,
+                                          outline: "none", fontFamily: "inherit",
+                                          background: "#fff", color: lcSet ? "#6d28d9" : "#475569",
+                                          fontWeight: 600, fontSize: 12, cursor: "pointer",
+                                          flexShrink: 0,
+                                        }}
+                                      />
+                                    </div>
+                                  );
+                                })}
+                                </React.Fragment>
                               );
                             })}
                           </div>
@@ -971,14 +1195,14 @@ function BatchManagerInner() {
               )}
 
               {/* ── Section: Class Routine ── */}
-              <div style={{ background: "#f0fdf4", borderRadius: 14, border: "1px solid #bbf7d0", padding: "20px 22px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 700, color: "#166534", margin: 0, display: "flex", alignItems: "center", gap: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                    <Icon name="clock" size={14} /> Class Routine
+              <div style={{ background: "#f0fdf4", borderRadius: 10, border: "1px solid #bbf7d0", padding: "14px 16px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <h3 style={{ fontSize: 11, fontWeight: 700, color: "#166534", margin: 0, display: "flex", alignItems: "center", gap: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    <Icon name="clock" size={12} /> Class Routine
                   </h3>
                   <button onClick={addRoutine} type="button"
-                    style={{ background: "#22c55e", color: "#fff", border: "none", padding: "5px 12px", borderRadius: 7, cursor: "pointer", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>
-                    <Icon name="plus" size={12} /> Add Slot
+                    style={{ background: "#22c55e", color: "#fff", border: "none", padding: "5px 10px", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+                    <Icon name="plus" size={11} /> Add Slot
                   </button>
                 </div>
                 {formData.routines.length === 0 ? (
@@ -1009,18 +1233,29 @@ function BatchManagerInner() {
                   </div>
                 )}
               </div>
-             </div>
+
+              </div>{/* end right col-8 */}
+              </div>{/* end 2-col grid */}
             </div>
 
-            {/* Modal Footer */}
-            <div style={{ padding: "16px 28px 22px", background: "#fff", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end", gap: 10 }}>
-              <button onClick={() => setIsModalOpen(false)} style={{ padding: "10px 22px", borderRadius: 9, border: "1.5px solid #e2e8f0", background: "#fff", color: "#475569", fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
-                Cancel
-              </button>
-              <button onClick={saveBatch} disabled={saving}
-                style={{ padding: "10px 30px", borderRadius: 9, border: "none", background: saving ? "#7dd3fc" : "linear-gradient(135deg,#0ea5e9,#6366f1)", color: "#fff", fontWeight: 700, fontSize: 14, cursor: saving ? "not-allowed" : "pointer", boxShadow: saving ? "none" : "0 4px 14px rgba(14,165,233,0.3)", transition: "all 0.2s" }}>
-                {saving ? "Saving…" : editingId ? "Update Batch" : "Deploy Batch"}
-              </button>
+            {/* Windows-style Status / Footer Bar */}
+            <div style={{ height: 44, background: "#fff", borderTop: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", flexShrink: 0 }}>
+              <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>
+                {editingId ? "Edit mode" : "New batch"} · IINM Batch Manager
+              </span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setIsModalOpen(false)} style={{ padding: "6px 18px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", color: "#4b5563", fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "background 0.12s" }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "#f3f4f6"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "#fff"; }}>
+                  Cancel
+                </button>
+                <button onClick={saveBatch} disabled={saving}
+                  style={{ padding: "6px 24px", borderRadius: 6, border: "none", background: saving ? "#7dd3fc" : "#0ea5e9", color: "#fff", fontWeight: 700, fontSize: 13, cursor: saving ? "not-allowed" : "pointer", transition: "background 0.15s" }}
+                  onMouseEnter={e => { if (!saving) e.currentTarget.style.background = "#0284c7"; }}
+                  onMouseLeave={e => { if (!saving) e.currentTarget.style.background = "#0ea5e9"; }}>
+                  {saving ? "Saving…" : editingId ? "Update Batch" : "Deploy Batch"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1130,8 +1365,8 @@ function BatchManagerInner() {
 
       <style>{`
         @keyframes batchPop {
-          from { transform: scale(0.96); opacity: 0; }
-          to   { transform: scale(1);    opacity: 1; }
+          from { opacity: 0; }
+          to   { opacity: 1; }
         }
       `}</style>
     </div>

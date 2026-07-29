@@ -424,7 +424,7 @@ function CourseCardContent({ card }: { card: CourseCardData }) {
   const displayPrice = hasDisc ? disc : base;
   const cardRating = card.rating ?? (3.8 + (card.id % 12) / 10);
   const instName = card.instructor_name || "IINM";
-  const bUrl = typeof window !== "undefined" ? process.env.NEXT_PUBLIC_BASE_URL || `http://${window.location.hostname}:2007` : "";
+  const bUrl = BASE_URL;
   const imgUrl = card.thumbnail_url ? (card.thumbnail_url.startsWith("http") ? card.thumbnail_url : `${bUrl}${card.thumbnail_url}`) : null;
 
   return (

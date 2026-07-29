@@ -292,7 +292,7 @@ function RegisterModal({onClose,onSuccess}:{onClose:()=>void;onSuccess:(s:any)=>
 }
 
 /* ─── Purchase Detail Modal (Installments & Payment) ─── */
-export function PurchaseDetailModal({purchaseId,onClose,onSuccess}:{purchaseId:number;onClose:()=>void;onSuccess:()=>void}){
+function PurchaseDetailModal({purchaseId,onClose,onSuccess}:{purchaseId:number;onClose:()=>void;onSuccess:()=>void}){
   const {showToast}=useToast();
   const [data,setData]=useState<any>(null);
   const [loading,setLoading]=useState(true);
@@ -429,7 +429,7 @@ export function PurchaseDetailModal({purchaseId,onClose,onSuccess}:{purchaseId:n
 }
 
 /* ─── Purchase General Detail Modal (For Non-Installment) ─── */
-export function PurchaseGeneralModal({purchaseId,onClose,onSuccess}:{purchaseId:number;onClose:()=>void;onSuccess:()=>void}){
+function PurchaseGeneralModal({purchaseId,onClose,onSuccess}:{purchaseId:number;onClose:()=>void;onSuccess:()=>void}){
   const {showToast}=useToast();
   const [data,setData]=useState<any>(null);
   const [loading,setLoading]=useState(true);

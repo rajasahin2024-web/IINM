@@ -25,6 +25,8 @@ interface Teacher {
   experience_years?: string | null;
   designation?: string | null;
   specialization?: string | null;
+  teaching_hours?: string | null;
+  rating?: string | null;
   social_linkedin?: string | null;
   social_twitter?: string | null;
   social_website?: string | null;
@@ -33,7 +35,7 @@ interface Teacher {
   created_at: string;
 }
 
-const defaultForm = { name: "", email: "", phone: "", gender: "", bio: "", avatar_url: "", is_active: true, qualification: "", experience_years: "", designation: "", specialization: "", social_linkedin: "", social_twitter: "", social_website: "", intro_video_url: "", achievements: "" };
+const defaultForm = { name: "", email: "", phone: "", gender: "", bio: "", avatar_url: "", is_active: true, qualification: "", experience_years: "", designation: "", specialization: "", teaching_hours: "", rating: "", social_linkedin: "", social_twitter: "", social_website: "", intro_video_url: "", achievements: "" };
 
 // Resolve avatar URL: handle relative /uploads/... paths
 function resolveAvatar(url?: string | null): string | null {
@@ -303,6 +305,7 @@ function TeachersManagerInner() {
     setFormData({ 
       name: t.name ?? "", email: t.email ?? "", phone: t.phone ?? "", gender: t.gender ?? "", bio: t.bio ?? "", avatar_url: t.avatar_url ?? "", is_active: t.is_active !== false,
       qualification: t.qualification ?? "", experience_years: t.experience_years ?? "", designation: t.designation ?? "", specialization: t.specialization ?? "",
+      teaching_hours: t.teaching_hours ?? "", rating: t.rating ?? "",
       social_linkedin: t.social_linkedin ?? "", social_twitter: t.social_twitter ?? "", social_website: t.social_website ?? "", intro_video_url: t.intro_video_url ?? "", achievements: t.achievements ?? ""
     });
     setIsModalOpen(true);
@@ -700,6 +703,11 @@ function TeachersManagerInner() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
                   <FloatingInput label="Qualifications (e.g. Ph.D.)" value={formData.qualification} onChange={v => setFormData({ ...formData, qualification: v })} placeholder="e.g. M.Sc. in Physics" />
                   <FloatingInput label="Specializations (e.g. Math, Python)" value={formData.specialization} onChange={v => setFormData({ ...formData, specialization: v })} placeholder="e.g. Algebra, Calculus" />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+                  <FloatingInput label="Teaching Hours (e.g. 1200+)" value={formData.teaching_hours} onChange={v => setFormData({ ...formData, teaching_hours: v })} placeholder="e.g. 1200+" />
+                  <FloatingInput label="Rating (e.g. 4.9)" value={formData.rating} onChange={v => setFormData({ ...formData, rating: v })} placeholder="e.g. 4.9" />
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>

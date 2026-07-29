@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/apiFetch";
+import { BASE_URL } from "@/lib/config";
 import {
   ClaudeIcon,
   ChatGPTIcon,
@@ -175,10 +176,7 @@ export default function FounderDeskSection() {
     }
   };
 
-  const bUrl =
-    typeof window !== "undefined"
-      ? process.env.NEXT_PUBLIC_BASE_URL || `http://${window.location.hostname}:2007`
-      : "";
+  const bUrl = BASE_URL;
   const founderImg = data.founder_image_url
     ? data.founder_image_url.startsWith("http")
       ? data.founder_image_url

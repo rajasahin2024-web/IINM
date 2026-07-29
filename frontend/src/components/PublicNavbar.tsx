@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import React, { useEffect, useState, useRef } from "react";
 import NotificationBar from "./NotificationBar";
 import "../app/home.css";
@@ -45,6 +46,20 @@ export default function PublicNavbar() {
   const [navbarItems, setNavbarItems] = useState<NavbarItem[]>([]);
   const [navbarLoading, setNavbarLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+
+  const pathname = usePathname();
+
+  const isActiveLink = (link: string | null) => {
+    if (!link) return false;
+    const current = pathname.replace(/\/$/, "") || "/";
+    const target = link.replace(/\/$/, "") || "/";
+    return current === target;
+  };
+
+  const isItemActive = (item: NavbarItem): boolean => {
+    if (isActiveLink(item.link)) return true;
+    return item.sub_items?.some(sub => isActiveLink(sub.link) || sub.sub_items?.some(s => isActiveLink(s.link))) ?? false;
+  };
 
   // AI Chat & Search Modal states
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
@@ -413,11 +428,26 @@ export default function PublicNavbar() {
                     border-radius: 30px; /* High-end Gen-Z pill outline */
                     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
                     display: inline-flex;
+                    position: relative;
                     align-items: center;
                     gap: 4px;
                     cursor: pointer;
                     background: transparent;
                     border: 1px solid transparent;
+                  }
+                  .hp-main-menu-item.active {
+                    color: #e63946 !important;
+                  }
+                  .hp-main-menu-item.active::after {
+                    content: '';
+                    position: absolute;
+                    bottom: -4px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    width: 24px;
+                    height: 4px;
+                    background: #e63946;
+                    border-radius: 2px;
                   }
                   .hp-main-menu-item:hover,
                   .nav-link-dropdown:hover .hp-main-menu-item {
@@ -457,7 +487,7 @@ export default function PublicNavbar() {
                         <Link 
                           key={item.id} 
                           href={item.link || "/"} 
-                          className="hp-main-menu-item"
+                          className={`hp-main-menu-item ${isItemActive(item) ? 'active' : ''}`}
                         >
                           {item.title}
                         </Link>
@@ -481,7 +511,7 @@ export default function PublicNavbar() {
                         }}
                         onMouseLeave={() => setActiveSidebarId(null)}
                       >
-                        <span className="hp-main-menu-item">
+                        <span className={`hp-main-menu-item ${isItemActive(item) ? 'active' : ''}`}>
                           <span>{item.title}</span>
                           <span className="hp-caret">▼</span>
                         </span>
@@ -907,7 +937,7 @@ export default function PublicNavbar() {
                     key={item.id}
                     href={item.link || "/"}
                     onClick={() => setIsSidebarOpen(false)}
-                    style={{ fontSize: "13.5px", fontWeight: 700, color: "#ffffff", textDecoration: "none", padding: "10px 14px", borderRadius: "6px", background: "rgba(255, 255, 255, 0.04)", display: "block" }}
+                    style={{ fontSize: "13.5px", fontWeight: 700, textDecoration: "none", padding: "10px 14px", borderRadius: "6px", display: "block", ...(isItemActive(item) ? { color: "#e63946", background: "rgba(230, 57, 70, 0.12)", borderLeft: "3px solid #e63946" } : { color: "#ffffff", background: "rgba(255, 255, 255, 0.04)" }) }}
                   >
                     {item.title}
                   </Link>
@@ -951,7 +981,7 @@ export default function PublicNavbar() {
                                     key={sub.id} 
                                     href={sub.link || "/"} 
                                     onClick={() => setIsSidebarOpen(false)} 
-                                    style={{ fontSize: "12.5px", fontWeight: 500, color: "#94a3b8", textDecoration: "none", padding: "6px 10px", borderRadius: "4px" }}
+                                    style={{ fontSize: "12.5px", fontWeight: 500, textDecoration: "none", padding: "6px 10px", borderRadius: "4px", ...(isActiveLink(sub.link) ? { color: "#e63946", background: "rgba(230, 57, 70, 0.1)", borderLeft: "2px solid #e63946" } : { color: "#94a3b8" }) }}
                                   >
                                     {sub.title}
                                   </Link>

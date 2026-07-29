@@ -431,14 +431,25 @@ export default function R2BucketSettingsForm() {
         </div>
       )}
 
-      {/* ── File Manager Tab ── */}
+      {/* ── File Manager Tab (Fullscreen) ── */}
       {activeTab === "files" && (
         <div style={{
-          background: "#fff", borderRadius: 14, border: "1px solid #f1f5f9",
-          overflow: "hidden", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
-          minHeight: 650, display: "flex", flexDirection: "column",
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "#fff", display: "flex", flexDirection: "column",
         }}>
-          <R2FileManager />
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
+            <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
+              <Icon name="database" size={18} /> R2 File Manager
+            </h2>
+            <button onClick={() => setActiveTab("settings")}
+              style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 12px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#fff", fontSize: 12, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              Close
+            </button>
+          </div>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <R2FileManager />
+          </div>
         </div>
       )}
     </div>

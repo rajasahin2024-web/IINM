@@ -186,6 +186,7 @@ class Course(Base):
     subjects         = relationship("Subject", secondary=course_subjects, back_populates="courses")
     chapters         = relationship("Chapter", secondary=course_chapters, back_populates="courses")
     instructors      = relationship("Instructor", secondary=course_instructors, back_populates="courses")
+    extended_content = relationship("CourseExtendedContent", back_populates="course", uselist=False, cascade="all, delete-orphan")
 
 class Chapter(Base):
     __tablename__ = "chapters"
@@ -462,6 +463,8 @@ class Instructor(Base):
     experience_years = Column(String(50), nullable=True)
     designation = Column(String(255), nullable=True)
     specialization = Column(String(255), nullable=True)
+    teaching_hours = Column(String(50), nullable=True)
+    rating = Column(String(50), nullable=True)
     social_linkedin = Column(String(500), nullable=True)
     social_twitter = Column(String(500), nullable=True)
     social_website = Column(String(500), nullable=True)
@@ -519,11 +522,13 @@ class BatchContentDrip(Base):
     __tablename__ = "batch_content_drips"
     id            = Column(Integer, primary_key=True, index=True)
     batch_id      = Column(Integer, ForeignKey("batches.id", ondelete="CASCADE"))
-    chapter_id    = Column(Integer, ForeignKey("chapters.id", ondelete="CASCADE"))
+    chapter_id    = Column(Integer, ForeignKey("chapters.id", ondelete="CASCADE"), nullable=True)
+    live_class_id = Column(Integer, ForeignKey("chapter_live_classes.id", ondelete="CASCADE"), nullable=True)
     unlock_date   = Column(Date, nullable=False)
     
-    batch   = relationship("Batch", back_populates="content_drip")
-    chapter = relationship("Chapter")
+    batch      = relationship("Batch", back_populates="content_drip")
+    chapter    = relationship("Chapter")
+    live_class = relationship("ChapterLiveClass")
 
 
 # ==========================================
@@ -1014,6 +1019,24 @@ class ContactSettings(Base):
     linkedin_url    = Column(String(500), nullable=True)
     youtube_url     = Column(String(500), nullable=True)
     twitter_url     = Column(String(500), nullable=True)
+    # Page content
+    page_title       = Column(String(255), nullable=True)
+    page_subtitle    = Column(String(500), nullable=True)
+    get_in_touch_heading     = Column(String(255), nullable=True)
+    get_in_touch_description = Column(Text, nullable=True)
+    contact_email_label      = Column(String(100), nullable=True)
+    contact_phone_label      = Column(String(100), nullable=True)
+    registered_office_label  = Column(String(255), nullable=True)
+    registered_office_city   = Column(String(100), nullable=True)
+    registered_office_address = Column(Text, nullable=True)
+    form_title       = Column(String(255), nullable=True)
+    form_subtitle    = Column(String(500), nullable=True)
+    state_options    = Column(Text, nullable=True)
+    qualification_options = Column(Text, nullable=True)
+    terms_text       = Column(Text, nullable=True)
+    terms_url        = Column(String(500), nullable=True)
+    success_message  = Column(Text, nullable=True)
+    review_badges    = Column(Text, nullable=True)
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
     updated_at      = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -1034,10 +1057,12 @@ class ContactInquiry(Base):
     name       = Column(String(255), nullable=False)
     email      = Column(String(255), nullable=False)
     phone      = Column(String(50), nullable=True)
-    interest   = Column(String(100), nullable=True)
-    message    = Column(Text, nullable=True)
-    is_read    = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    interest      = Column(String(100), nullable=True)
+    state         = Column(String(100), nullable=True)
+    qualification = Column(String(100), nullable=True)
+    message       = Column(Text, nullable=True)
+    is_read       = Column(Boolean, default=False)
+    created_at    = Column(DateTime(timezone=True), server_default=func.now())
 
 
 # ══════════════════════════════════════════════════════
@@ -1058,6 +1083,25 @@ class AboutSettings(Base):
     director_title     = Column(String(255), nullable=True)
     director_message   = Column(Text, nullable=True)
     director_image_url = Column(Text, nullable=True)
+    hero_eyebrow       = Column(String(255), nullable=True)
+    hero_title         = Column(String(500), nullable=True)
+    hero_subtitle      = Column(Text, nullable=True)
+    hero_note          = Column(String(255), nullable=True)
+    hero_image_1       = Column(Text, nullable=True)
+    hero_image_2       = Column(Text, nullable=True)
+    hero_image_3       = Column(Text, nullable=True)
+    hero_image_4       = Column(Text, nullable=True)
+    hero_image_5       = Column(Text, nullable=True)
+    hero_image_6       = Column(Text, nullable=True)
+    difference_eyebrow = Column(String(255), nullable=True)
+    difference_title   = Column(String(500), nullable=True)
+    difference_video_url = Column(Text, nullable=True)
+    difference_at_iinm_heading = Column(String(255), nullable=True)
+    difference_traditional_heading = Column(String(255), nullable=True)
+    difference_rows_json = Column(Text, nullable=True)
+    alumni_eyebrow     = Column(String(255), nullable=True)
+    alumni_title       = Column(String(500), nullable=True)
+    alumni_description = Column(Text, nullable=True)
     created_at         = Column(DateTime(timezone=True), server_default=func.now())
     updated_at         = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -1080,6 +1124,57 @@ class AboutCoreValue(Base):
     icon_name   = Column(String(50), nullable=True)
     order_index = Column(Integer, default=0)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AboutFounder(Base):
+    __tablename__ = "about_founder"
+    id          = Column(Integer, primary_key=True, index=True)
+    slot_key    = Column(String(50), nullable=False, unique=True, index=True)
+    name        = Column(String(255), nullable=False)
+    role        = Column(String(255), nullable=False)
+    bio         = Column(Text, nullable=False)
+    quote       = Column(Text, nullable=True)
+    image_url         = Column(Text, nullable=True)
+    video_url         = Column(String(512), nullable=True)
+    linkedin_url      = Column(Text, nullable=True)
+    business_logo_url = Column(Text, nullable=True)
+    order_index       = Column(Integer, default=0, nullable=False)
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class AboutGalleryItem(Base):
+    __tablename__ = "about_gallery_item"
+    id          = Column(Integer, primary_key=True, index=True)
+    public_id   = Column(String(100), nullable=False, unique=True, index=True)
+    image_url   = Column(Text, nullable=False)
+    caption     = Column(String(500), nullable=True)
+    order_index = Column(Integer, default=0, nullable=False)
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class AboutTimelineItem(Base):
+    __tablename__ = "about_timeline_item"
+    id          = Column(Integer, primary_key=True, index=True)
+    public_id   = Column(String(100), nullable=False, unique=True, index=True)
+    year        = Column(String(50), nullable=False)
+    title       = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+    icon_name   = Column(String(50), nullable=True)
+    order_index = Column(Integer, default=0, nullable=False)
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class AboutAlumniLogo(Base):
+    __tablename__ = "about_alumni_logo"
+    id          = Column(Integer, primary_key=True, index=True)
+    public_id   = Column(String(100), nullable=False, unique=True, index=True)
+    image_url   = Column(Text, nullable=False)
+    order_index = Column(Integer, default=0, nullable=False)
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 # ══════════════════════════════════════════════════════
@@ -1357,5 +1452,26 @@ class HomeAIEcosystemCard(Base):
     is_active      = Column(Boolean, default=True, server_default=text('true'))
     created_at     = Column(DateTime(timezone=True), server_default=func.now())
     updated_at     = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class CourseExtendedContent(Base):
+    __tablename__ = "course_extended_contents"
+    id                  = Column(Integer, primary_key=True, index=True)
+    course_id           = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), unique=True, index=True, nullable=False)
+    hero_badges_json    = Column(Text, nullable=True) # JSON: badge list, video preview, market stats pill
+    hiring_companies_json = Column(Text, nullable=True) # JSON: hiring partner logos & names
+    market_impact_json  = Column(Text, nullable=True) # JSON: market demand cards, quote, growth stats
+    who_is_for_json     = Column(Text, nullable=True) # JSON: target persona cards
+    career_outcomes_json = Column(Text, nullable=True) # JSON: salary hike stats & alumni placement cards
+    projects_json       = Column(Text, nullable=True) # JSON: capstone projects (#projects_sec)
+    comparison_matrix_json = Column(Text, nullable=True) # JSON: feature comparison rows (IINM vs Others)
+    video_testimonials_json = Column(Text, nullable=True) # JSON: video review cards
+    certificates_json   = Column(Text, nullable=True) # JSON: industry-recognized certificate images/titles
+    faqs_json           = Column(Text, nullable=True) # JSON: course specific FAQs
+    created_at          = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at          = Column(DateTime(timezone=True), onupdate=func.now())
+
+    course              = relationship("Course", back_populates="extended_content")
+
 
 

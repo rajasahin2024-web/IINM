@@ -3,8 +3,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import PublicNavbar from "@/components/PublicNavbar";
 import PublicFooter from "@/components/PublicFooter";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:2007/api";
+import { API_BASE_URL as API } from "@/lib/config";
 
 interface C { id:number; name:string; content:string; parent_id:number|null; created_at:string; replies:C[]; }
 

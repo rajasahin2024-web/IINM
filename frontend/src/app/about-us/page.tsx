@@ -4,8 +4,7 @@ import Link from "next/link";
 import PublicNavbar from "@/components/PublicNavbar";
 import PublicFooter from "@/components/PublicFooter";
 import "../home.css";
-
-const API = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== "undefined" ? `http://${window.location.hostname}:2007` : "http://localhost:2007");
+import { BASE_URL as API } from "@/lib/config";
 
 /* ── Icons ── */
 const ICONS: Record<string, React.ReactNode> = {

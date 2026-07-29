@@ -1,0 +1,1165 @@
+.about-legacy-layout {
+  display: none;
+}
+
+.about-institutional-page {
+  --about-navy: #0a1628;
+  --about-blue: #e63946;
+  --about-blue-soft: #fff5f5;
+  --about-ink: #101d36;
+  --about-muted: #60708a;
+  --about-line: #f8e0e3;
+  background: #ffffff;
+  color: var(--about-ink);
+  font-family: "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, system-ui, sans-serif;
+  overflow: hidden;
+}
+
+.about-institutional-page *,
+.about-institutional-page *::before,
+.about-institutional-page *::after {
+  box-sizing: border-box;
+}
+
+.about-institutional-container {
+  width: min(100% - 64px, 1400px);
+  margin: 0 auto;
+}
+
+.about-institutional-narrow {
+  width: min(100% - 3rem, 54rem);
+}
+
+.about-institutional-page h1,
+.about-institutional-page h2,
+.about-institutional-page h3,
+.about-institutional-page p {
+  margin-top: 0;
+}
+
+.about-institutional-page h1,
+.about-institutional-page h2,
+.about-institutional-page h3 {
+  letter-spacing: -0.04em;
+}
+
+.about-institutional-eyebrow {
+  color: var(--about-blue);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  margin-bottom: 0.9rem;
+  text-transform: uppercase;
+}
+
+.about-institutional-hero {
+  background:
+    linear-gradient(rgba(10, 22, 40, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(10, 22, 40, 0.035) 1px, transparent 1px),
+    #ffffff;
+  background-size: 2.25rem 2.25rem;
+  padding: 4.5rem 1.5rem 4rem;
+  text-align: center;
+}
+
+.about-institutional-hero h1 {
+  color: var(--about-ink);
+  font-size: clamp(2rem, 4.8vw, 4.1rem);
+  font-weight: 800;
+  line-height: 1.08;
+  margin-bottom: 1rem;
+}
+
+.about-institutional-hero h1 span {
+  color: var(--about-blue);
+  display: block;
+}
+
+.about-institutional-hero-copy {
+  color: var(--about-muted);
+  font-size: clamp(0.88rem, 1.5vw, 1.05rem);
+  line-height: 1.7;
+  margin: 0 auto 2.25rem;
+  max-width: 38rem;
+}
+
+.about-institutional-collage {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 1.15fr 0.85fr 0.9fr 1.1fr;
+  grid-template-rows: 9rem 7rem;
+  margin: 0 auto;
+  max-width: 58rem;
+}
+
+.about-institutional-collage-image {
+  background: #dbe6f4;
+  border: 0.2rem solid #ffffff;
+  border-radius: 0.35rem;
+  box-shadow: 0 0.7rem 1.5rem rgba(20, 62, 111, 0.12);
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.about-institutional-collage-image-1 { grid-row: 1 / 3; }
+.about-institutional-collage-image-2 { grid-column: 2 / 4; }
+.about-institutional-collage-image-3 { grid-column: 4; grid-row: 1 / 3; }
+.about-institutional-collage-image-4 { grid-column: 2; }
+.about-institutional-collage-image-5 { grid-column: 3; }
+.about-institutional-collage-image-6 { display: none; }
+
+.about-institutional-hero-note {
+  align-items: center;
+  color: var(--about-navy);
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 800;
+  gap: 0.45rem;
+  letter-spacing: 0.1em;
+  margin-top: 1.5rem;
+  text-transform: uppercase;
+}
+
+.about-institutional-hero-note span {
+  background: var(--about-blue);
+  border-radius: 50%;
+  height: 0.45rem;
+  width: 0.45rem;
+}
+
+.about-institutional-who {
+  background: #ffffff;
+  padding: 4.5rem 0 4rem;
+}
+
+.about-institutional-who-layout {
+  align-items: center;
+  background: #eef4ff;
+  display: grid;
+  gap: 2.5rem;
+  grid-template-columns: minmax(18rem, 1fr) minmax(32rem, 1.25fr);
+  padding: 1.65rem 1.8rem;
+}
+
+.about-institutional-who-copy {
+  text-align: left;
+}
+
+.about-institutional-who-copy h2 {
+  font-size: clamp(1.35rem, 2.2vw, 2rem);
+  font-weight: 750;
+  line-height: 1.2;
+  margin: 0 0 0.6rem;
+}
+
+.about-institutional-who-description {
+  color: var(--about-muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 28rem;
+}
+
+.about-institutional-who-gallery {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.about-institutional-who-gallery-card {
+  aspect-ratio: 0.9;
+  background: #dbe7f8;
+  border-radius: 0.3rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.about-institutional-who-gallery-card img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.about-institutional-who-gallery-overlay {
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.78));
+  bottom: 0;
+  color: #ffffff;
+  left: 0;
+  padding: 1.8rem 0.55rem 0.55rem;
+  position: absolute;
+  right: 0;
+}
+
+.about-institutional-who-gallery-overlay strong {
+  display: block;
+  font-size: 0.62rem;
+  line-height: 1.2;
+}
+
+.about-institutional-who h2,
+.about-institutional-pathways h2,
+.about-institutional-journey h2,
+.about-institutional-founders h2,
+.about-institutional-alumni h2 {
+  color: var(--about-ink);
+  font-size: clamp(1.8rem, 3.2vw, 3rem);
+  font-weight: 850;
+  line-height: 1.08;
+  margin-bottom: 1.8rem;
+}
+
+.about-institutional-who-card {
+  background: linear-gradient(135deg, #c1202f 0%, #e63946 100%);
+  border-radius: 0.7rem;
+  box-shadow: 0 1.2rem 2.5rem rgba(230, 57, 70, 0.2);
+  color: #ffffff;
+  margin: 0 auto;
+  max-width: 46rem;
+  padding: 2rem 2.5rem;
+  position: relative;
+  text-align: left;
+}
+
+.about-institutional-who-card p {
+  font-size: clamp(0.92rem, 1.5vw, 1.08rem);
+  line-height: 1.75;
+  margin-bottom: 1.35rem;
+}
+
+.about-institutional-who-rule {
+  background: rgba(255, 255, 255, 0.35);
+  height: 1px;
+  margin-bottom: 1rem;
+  width: 100%;
+}
+
+.about-institutional-who-card strong {
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.about-institutional-edit {
+  background: #ffffff;
+  border: 1px solid rgba(13, 99, 206, 0.32);
+  border-radius: 0.45rem;
+  color: var(--about-blue);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+  margin-top: 1.2rem;
+  min-height: 2.75rem;
+  padding: 0.65rem 1rem;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.about-institutional-edit:hover {
+  background: var(--about-blue);
+  color: #ffffff;
+  transform: translateY(-0.1rem);
+}
+
+.about-institutional-dark {
+  background: var(--about-navy);
+  color: #ffffff;
+  padding: 5rem 0;
+}
+
+.about-institutional-dark-grid {
+  align-items: stretch;
+  display: grid;
+  gap: 3rem;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.85fr);
+}
+
+.about-institutional-dark .about-institutional-eyebrow {
+  color: #76b3ff;
+}
+
+.about-institutional-dark-copy h2 {
+  color: #ffffff;
+  font-size: clamp(2rem, 3.8vw, 3.4rem);
+  margin-bottom: 2.25rem;
+}
+
+.about-institutional-purpose-block {
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 2.3rem 1fr;
+  padding: 1.35rem 0;
+}
+
+.about-institutional-purpose-block > span {
+  color: #76b3ff;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.about-institutional-purpose-block h3 {
+  color: #ffffff;
+  font-size: 1.15rem;
+  margin-bottom: 0.45rem;
+}
+
+.about-institutional-purpose-block p {
+  color: #afbdd0;
+  font-size: 0.9rem;
+  line-height: 1.7;
+  margin-bottom: 0;
+}
+
+.about-institutional-edit-dark {
+  background: transparent;
+  border-color: rgba(118, 179, 255, 0.45);
+  color: #a9d0ff;
+}
+
+.about-institutional-edit-dark:hover {
+  background: #ffffff;
+  color: var(--about-navy);
+}
+
+.about-institutional-dark-image {
+  min-height: 24rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.about-institutional-dark-image::after {
+  background: linear-gradient(0deg, rgba(10, 22, 40, 0.85), transparent 55%);
+  content: "";
+  inset: 0;
+  position: absolute;
+}
+
+.about-institutional-dark-image img {
+  height: 100%;
+  object-fit: cover;
+  position: absolute;
+  width: 100%;
+}
+
+.about-institutional-dark-image-caption {
+  bottom: 1.4rem;
+  color: #ffffff;
+  font-size: 0.85rem;
+  left: 1.4rem;
+  line-height: 1.5;
+  max-width: 15rem;
+  position: absolute;
+  z-index: 1;
+}
+
+.about-institutional-pathways {
+  background: linear-gradient(180deg, #fff8f8 0%, #fff 100%);
+  overflow: hidden;
+  padding: 5.5rem 0 6rem;
+  position: relative;
+  text-align: center;
+}
+
+.about-institutional-pathways::before {
+  background: radial-gradient(circle, rgba(230, 57, 70, 0.1) 0, rgba(230, 57, 70, 0) 68%);
+  content: "";
+  height: 24rem;
+  left: -10rem;
+  pointer-events: none;
+  position: absolute;
+  top: -12rem;
+  width: 24rem;
+}
+
+.about-institutional-pathways-intro {
+  color: var(--about-muted);
+  font-size: clamp(0.9rem, 1.6vw, 1.05rem);
+  line-height: 1.7;
+  margin: 0.8rem auto 0;
+  max-width: 34rem;
+}
+
+.about-institutional-orbit {
+  align-items: center;
+  background: #ffffff;
+  border: 0.45rem solid #ffe0e3;
+  border-radius: 50%;
+  box-shadow: 0 0 0 0.75rem rgba(230, 57, 70, 0.05), 0 0.8rem 1.8rem rgba(230, 57, 70, 0.12);
+  color: var(--about-blue);
+  display: flex;
+  flex-direction: column;
+  font-size: 0.8rem;
+  font-weight: 900;
+  height: 7rem;
+  justify-content: center;
+  letter-spacing: 0.08em;
+  margin: 0 auto 1.5rem;
+  text-transform: uppercase;
+  width: 7rem;
+}
+
+.about-institutional-orbit span {
+  font-size: 0.48rem;
+  letter-spacing: 0.17em;
+  margin-top: 0.3rem;
+}
+
+.about-institutional-pathways h2 {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 38rem;
+}
+
+.about-institutional-pathway-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 3.25rem auto 0;
+  max-width: 70rem;
+  position: relative;
+}
+
+.about-institutional-pathway-grid::before {
+  border-top: 1px dashed #f4b0b7;
+  content: "";
+  left: 16%;
+  position: absolute;
+  right: 16%;
+  top: 1.6rem;
+}
+
+.about-institutional-pathway-card {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #ffe0e3;
+  border-radius: 1rem;
+  box-shadow: 0 0.8rem 1.8rem rgba(60, 25, 30, 0.07);
+  min-height: 12rem;
+  padding: 2.2rem 1.5rem 1.5rem;
+  position: relative;
+  text-align: left;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+}
+
+.about-institutional-pathway-card:hover {
+  border-color: rgba(230, 57, 70, 0.38);
+  box-shadow: 0 1.2rem 2.4rem rgba(60, 25, 30, 0.12);
+  transform: translateY(-0.35rem);
+}
+
+.about-institutional-pathway-card-top {
+  align-items: center;
+  display: flex;
+  gap: 0.65rem;
+  margin-bottom: 1.2rem;
+}
+
+.about-institutional-pathway-number {
+  align-items: center;
+  background: var(--about-blue);
+  border: 0.25rem solid #fff8f8;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(13, 99, 206, 0.15);
+  color: #ffffff;
+  display: flex;
+  flex: 0 0 auto;
+  font-size: 0.65rem;
+  font-weight: 800;
+  height: 2rem;
+  justify-content: center;
+  width: 2rem;
+}
+
+.about-institutional-pathway-step {
+  color: var(--about-blue);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.about-institutional-pathway-card h3 {
+  color: var(--about-ink);
+  font-size: clamp(1rem, 1.5vw, 1.15rem);
+  line-height: 1.3;
+  margin-bottom: 0.65rem;
+}
+
+.about-institutional-pathway-card p {
+  color: var(--about-muted);
+  font-size: 0.86rem;
+  line-height: 1.7;
+  margin-bottom: 0;
+  padding-right: 1rem;
+}
+
+.about-institutional-pathway-arrow {
+  bottom: 1.2rem;
+  color: var(--about-red);
+  font-size: 1.2rem;
+  font-weight: 800;
+  position: absolute;
+  right: 1.4rem;
+}
+
+.about-institutional-compare {
+  background: #ffffff;
+  padding: 5.5rem 0;
+}
+
+.about-institutional-compare-grid {
+  align-items: center;
+  display: grid;
+  gap: 4rem;
+  grid-template-columns: 0.75fr 1.25fr;
+}
+
+.about-institutional-compare h2 {
+  color: var(--about-ink);
+  font-size: clamp(1.45rem, 2.1vw, 2.15rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.18;
+  margin-bottom: 1.5rem;
+  max-width: 46rem;
+  text-wrap: balance;
+}
+
+.about-institutional-difference-video-wrap {
+  aspect-ratio: 16 / 10;
+  background: var(--about-navy);
+  border: 0.45rem solid #eef4fb;
+  border-radius: 1rem;
+  box-shadow: 0 1.2rem 2.4rem rgba(10, 22, 40, 0.14);
+  min-height: 16rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.about-institutional-difference-video-wrap::after {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 0.7rem;
+  content: "";
+  inset: 0.65rem;
+  pointer-events: none;
+  position: absolute;
+}
+
+.about-institutional-difference-video,
+.about-institutional-difference-video-empty {
+  border: 0;
+  height: 100%;
+  width: 100%;
+}
+
+.about-institutional-difference-video-empty {
+  align-items: center;
+  color: #b8c7dc;
+  display: flex;
+  font-size: 0.85rem;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+}
+
+.about-institutional-compare-copy {
+  min-width: 0;
+}
+
+.about-institutional-table-wrap {
+  background: #ffffff;
+  border: 1px solid #dbe7f4;
+  border-radius: 0.9rem;
+  box-shadow: 0 0.4rem 1.2rem rgba(10, 22, 40, 0.05);
+  overflow: hidden;
+}
+
+.about-institutional-table {
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  width: 100%;
+}
+
+.about-institutional-table th,
+.about-institutional-table td {
+  border-bottom: 1px solid #eef3f9;
+  padding: 1rem 1.1rem;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.about-institutional-table th {
+  background: linear-gradient(135deg, var(--about-navy) 0%, #1e3a5f 100%);
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.about-institutional-table tbody tr {
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.about-institutional-table tbody tr:nth-child(odd) {
+  background: #fbfcfe;
+}
+
+.about-institutional-table tbody tr:hover {
+  background: #f0f6ff;
+}
+
+.about-institutional-table td:first-child {
+  border-left: 3px solid var(--about-blue);
+  color: var(--about-blue);
+  font-weight: 700;
+  padding-left: 1.05rem;
+}
+
+.about-institutional-table td:last-child {
+  color: #576d88;
+  font-weight: 500;
+}
+
+.about-institutional-table tr:last-child td { border-bottom: 0; }
+
+.about-institutional-journey {
+  background: #fff8f8;
+  padding: 5.5rem 0;
+  text-align: center;
+}
+
+.about-institutional-journey-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(4, 1fr);
+  margin-top: 2.8rem;
+  text-align: left;
+}
+
+.about-institutional-journey-card {
+  background: #ffffff;
+  border-radius: 0.65rem;
+  border-top: 0.25rem solid var(--about-blue);
+  box-shadow: 0 0.6rem 1.4rem rgba(60, 25, 30, 0.06);
+  padding: 1.4rem;
+}
+
+.about-institutional-journey-card > span {
+  color: var(--about-blue);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.about-institutional-journey-card h3 {
+  font-size: 1rem;
+  margin: 0.75rem 0 0.45rem;
+}
+
+.about-institutional-journey-card p {
+  color: var(--about-muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  margin-bottom: 0;
+}
+
+.about-institutional-founders {
+  background: #ffffff;
+  padding: 5.5rem 0;
+  text-align: center;
+}
+
+.about-institutional-founder-grid {
+  display: grid;
+  gap: 1.4rem;
+  grid-template-columns: repeat(2, 1fr);
+  margin-top: 2.8rem;
+  text-align: left;
+}
+
+.about-institutional-founder-card {
+  background: #fff8f8;
+  border: 1px solid #ffe0e3;
+  border-radius: 0.7rem;
+  display: grid;
+  grid-template-columns: 9rem 1fr;
+  min-height: 12rem;
+  overflow: hidden;
+}
+
+.about-institutional-founder-photo {
+  background: #dbe6f4;
+  min-height: 12rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.about-institutional-founder-photo img,
+.about-institutional-founder-photo iframe {
+  border: 0;
+  height: 100%;
+  object-fit: cover;
+  position: absolute;
+  width: 100%;
+}
+
+.about-institutional-founder-photo iframe { background: var(--about-navy); }
+
+.about-institutional-founder-copy {
+  padding: 1.25rem;
+}
+
+.about-institutional-founder-role {
+  color: var(--about-blue);
+  font-size: 0.63rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  margin-bottom: 0.55rem;
+  text-transform: uppercase;
+}
+
+.about-institutional-founder-copy h3 {
+  font-size: 1.1rem;
+  margin-bottom: 0.55rem;
+}
+
+.about-institutional-founder-copy > p:not(.about-institutional-founder-role) {
+  color: var(--about-muted);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  margin-bottom: 0.7rem;
+}
+
+.about-institutional-founder-copy blockquote {
+  border-left: 2px solid var(--about-blue);
+  color: var(--about-ink);
+  font-size: 0.75rem;
+  font-style: italic;
+  line-height: 1.5;
+  margin: 0 0 0.7rem;
+  padding-left: 0.7rem;
+}
+
+.about-institutional-founder-linkedin {
+  align-items: center;
+  color: var(--about-blue);
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 700;
+  gap: 0.3rem;
+  margin-bottom: 0.7rem;
+  text-decoration: none;
+}
+
+.about-institutional-founder-linkedin:hover {
+  text-decoration: underline;
+}
+
+.about-institutional-founder-logo-wrap {
+  align-items: center;
+  display: flex;
+  gap: 0.65rem;
+  margin-top: 0.3rem;
+}
+
+.about-institutional-founder-logo-wrap span {
+  color: var(--about-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.about-institutional-founder-logo {
+  height: auto;
+  max-height: 2.2rem;
+  max-width: 6rem;
+  object-fit: contain;
+}
+
+.about-institutional-play {
+  align-items: center;
+  background: var(--about-blue);
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  bottom: 0.8rem;
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  height: 2.6rem;
+  justify-content: center;
+  left: 0.8rem;
+  padding: 0;
+  position: absolute;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+  width: 2.6rem;
+  z-index: 1;
+}
+
+.about-institutional-play:hover { background: var(--about-navy); transform: scale(1.07); }
+.about-institutional-play span { font-size: 0.75rem; margin-left: 0.15rem; }
+
+.about-institutional-empty {
+  color: var(--about-muted);
+  font-size: 0.9rem;
+}
+
+.about-institutional-alumni {
+  background: #f5f5f5;
+  padding: 5.5rem 0;
+  text-align: center;
+}
+
+.about-institutional-alumni h2 { margin-bottom: 0.9rem; }
+
+.about-institutional-alumni > .about-institutional-container > p:not(.about-institutional-eyebrow) {
+  color: var(--about-muted);
+  font-size: 0.92rem;
+  line-height: 1.7;
+  margin: 0 auto 2rem;
+  max-width: 35rem;
+}
+
+.about-institutional-logo-strips {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  overflow: hidden;
+  width: 100%;
+}
+
+.about-institutional-logo-row {
+  mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+  overflow: hidden;
+  width: 100%;
+}
+
+.about-institutional-logo-track {
+  align-items: center;
+  animation: scroll-left 35s linear infinite;
+  display: flex;
+  gap: 2.5rem;
+  width: max-content;
+}
+
+.about-institutional-logo-track-reverse {
+  animation: scroll-right 35s linear infinite;
+}
+
+.about-institutional-logo-track:hover,
+.about-institutional-logo-track-reverse:hover {
+  animation-play-state: paused;
+}
+
+.about-institutional-logo-cell {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  height: 4rem;
+  justify-content: center;
+  padding: 0.6rem 1.25rem;
+  width: 9rem;
+}
+
+.about-institutional-logo-cell img {
+  max-height: 2.2rem;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+@keyframes scroll-left {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes scroll-right {
+  0% { transform: translateX(-50%); }
+  100% { transform: translateX(0); }
+}
+
+.about-institutional-spotlight {
+  background: #ffffff;
+  padding: 4.5rem 0;
+}
+
+.about-institutional-spotlight-heading {
+  margin-bottom: 2.5rem;
+  text-align: center;
+}
+
+.about-institutional-spotlight-heading h2 {
+  font-size: clamp(1.6rem, 3vw, 2.5rem);
+  line-height: 1.12;
+  margin: 1.1rem auto 0;
+  max-width: 34rem;
+}
+
+.about-institutional-spotlight-marquee {
+  overflow: hidden;
+  width: 100%;
+}
+
+.about-institutional-spotlight-track {
+  animation: spotlight-scroll 35s linear infinite;
+  display: flex;
+  gap: 1.25rem;
+  width: max-content;
+}
+
+.about-institutional-spotlight-track:hover {
+  animation-play-state: paused;
+}
+
+.about-institutional-spotlight-cutout {
+  border-radius: 0.7rem;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+  flex: 0 0 auto;
+  height: 15rem;
+  object-fit: cover;
+  width: auto;
+}
+
+@keyframes spotlight-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.about-institutional-spotlight-card {
+  align-items: stretch;
+  background: linear-gradient(135deg, #fff0f0 0%, #fffafa 100%);
+  border: 1px solid #ffe0e3;
+  border-radius: 0.7rem;
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: 0.55fr 1.45fr;
+  margin: 0 auto;
+  max-width: 60rem;
+  overflow: hidden;
+}
+
+.about-institutional-spotlight-card img {
+  height: 100%;
+  min-height: 18rem;
+  object-fit: cover;
+  width: 100%;
+}
+
+.about-institutional-spotlight-card > div {
+  padding: 3rem 3rem 3rem 0;
+}
+
+.about-institutional-spotlight-card h2 {
+  font-size: clamp(1.6rem, 3vw, 2.5rem);
+  line-height: 1.12;
+  margin-bottom: 0.9rem;
+}
+
+.about-institutional-spotlight-card p:not(.about-institutional-eyebrow) {
+  color: var(--about-muted);
+  font-size: 0.9rem;
+  line-height: 1.75;
+}
+
+.about-institutional-link,
+.about-institutional-cta-link {
+  align-items: center;
+  color: var(--about-blue);
+  display: inline-flex;
+  font-size: 0.8rem;
+  font-weight: 800;
+  gap: 0.4rem;
+  text-decoration: none;
+}
+
+.about-institutional-link:hover,
+.about-institutional-cta-link:hover { text-decoration: underline; }
+
+.about-institutional-cta {
+  background: var(--about-navy);
+  color: #ffffff;
+  padding: 1.1rem 0;
+}
+
+.about-institutional-cta .about-institutional-container {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.about-institutional-cta p {
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin-bottom: 0;
+}
+
+.about-institutional-cta-link { color: #9ecbff; }
+
+@media (max-width: 56rem) {
+  .about-institutional-who-layout { grid-template-columns: 1fr; }
+  .about-institutional-who-description { max-width: none; }
+  .about-institutional-dark-grid,
+  .about-institutional-compare-grid { grid-template-columns: 1fr; }
+  .about-institutional-difference-video-wrap { margin: 0 auto; max-width: 42rem; width: 100%; }
+  .about-institutional-network { height: 14rem; margin: 0 auto; max-width: 30rem; width: 100%; }
+  .about-institutional-journey-grid { grid-template-columns: repeat(2, 1fr); }
+  .about-institutional-spotlight-card > div { padding: 2rem; }
+}
+
+@media (max-width: 42rem) {
+  .about-institutional-container,
+  .about-institutional-narrow { width: min(100% - 32px, 1400px); }
+  .about-institutional-hero { padding: 3rem 0 2.5rem; }
+  .about-institutional-collage { gap: 0.4rem; grid-template-rows: 7rem 5rem; }
+  .about-institutional-collage-image { border-width: 0.12rem; border-radius: 0.25rem; }
+  .about-institutional-who,
+  .about-institutional-dark,
+  .about-institutional-pathways,
+  .about-institutional-compare,
+  .about-institutional-journey,
+  .about-institutional-founders,
+  .about-institutional-alumni { padding: 3.5rem 0; }
+  .about-institutional-who-layout { gap: 1.5rem; grid-template-columns: 1fr; padding: 1.25rem; }
+  .about-institutional-who-gallery { gap: 0.35rem; }
+  .about-institutional-who-gallery-overlay { padding: 1.25rem 0.35rem 0.35rem; }
+  .about-institutional-who-gallery-overlay strong { font-size: 0.5rem; }
+  .about-institutional-pathways { padding: 4rem 0 4.5rem; }
+  .about-institutional-difference-video-wrap { border-width: 0.3rem; border-radius: 0.8rem; min-height: 12rem; }
+  .about-institutional-compare-copy h2 { margin-bottom: 1.25rem; }
+  .about-institutional-table { font-size: 0.8rem; }
+  .about-institutional-table th,
+  .about-institutional-table td { padding: 0.8rem 0.75rem; }
+  .about-institutional-table td:first-child { padding-left: 0.72rem; }
+  .about-institutional-pathways-intro { max-width: 28rem; }
+  .about-institutional-pathway-grid,
+  .about-institutional-founder-grid { grid-template-columns: 1fr; }
+  .about-institutional-pathway-grid { gap: 1.25rem; margin-top: 2.5rem; }
+  .about-institutional-pathway-grid::before { display: none; }
+  .about-institutional-pathway-card { min-height: 0; padding: 1.5rem 1.25rem 1.35rem; }
+  .about-institutional-pathway-card-top { margin-bottom: 1rem; }
+  .about-institutional-pathway-card p { max-width: 32rem; padding-right: 2rem; }
+  .about-institutional-founder-card { grid-template-columns: 7.5rem 1fr; }
+  .about-institutional-founder-photo { min-height: 13rem; }
+  .about-institutional-company-grid { grid-template-columns: repeat(3, 1fr); }
+  .about-institutional-company-grid span:nth-child(4n) { border-right: 1px solid #eeeeee; }
+  .about-institutional-company-grid span:nth-child(3n) { border-right: 0; }
+  .about-institutional-company-grid span:nth-last-child(-n + 4) { border-bottom: 1px solid #eeeeee; }
+  .about-institutional-company-grid span:nth-last-child(-n + 3) { border-bottom: 0; }
+  .about-institutional-spotlight-card { grid-template-columns: 1fr; gap: 0; }
+  .about-institutional-spotlight-card img { height: 14rem; min-height: 0; }
+  .about-institutional-spotlight-card > div { padding: 1.5rem; }
+  .about-institutional-cta .about-institutional-container { align-items: flex-start; flex-direction: column; gap: 0.75rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .about-institutional-edit,
+  .about-institutional-play { transition: none; }
+}
+
+/* ═══ Skeleton Loading ═══ */
+.about-skeleton {
+  background: #f8fafc;
+  min-height: 100vh;
+  overflow: hidden;
+}
+.about-skeleton-bar {
+  background: #fff;
+  height: 64px;
+  box-shadow: 0 1px 3px rgba(10,22,40,0.05);
+}
+.about-skeleton-hero {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 100px 32px 90px;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 56px;
+  align-items: center;
+}
+.about-skeleton-hero-text { display: flex; flex-direction: column; gap: 20px; }
+.about-skeleton-line {
+  height: 14px;
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  border-radius: 7px;
+  animation: about-shimmer 1.5s ease-in-out infinite;
+}
+.about-skeleton-line.w-sm { width: 40%; }
+.about-skeleton-line.w-md { width: 65%; }
+.about-skeleton-line.w-lg { width: 85%; }
+.about-skeleton-line.w-full { width: 100%; }
+.about-skeleton-line.h-sm { height: 10px; }
+.about-skeleton-line.h-lg { height: 20px; }
+.about-skeleton-line.h-xl { height: 28px; }
+.about-skeleton-img {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  border-radius: 16px;
+  animation: about-shimmer 1.5s ease-in-out infinite;
+}
+.about-skeleton-img.hero { width: 100%; height: 360px; }
+.about-skeleton-img.sm { width: 48px; height: 48px; border-radius: 50%; }
+.about-skeleton-img.md { width: 100%; height: 200px; }
+.about-skeleton-stats {
+  display: flex;
+  gap: 0;
+  max-width: 440px;
+  background: #fff;
+  border: 1px solid rgba(10,22,40,0.06);
+  border-radius: 16px;
+  padding: 22px 12px;
+}
+.about-skeleton-stat { flex: 1; text-align: center; }
+.about-skeleton-stat + .about-skeleton-stat {
+  border-left: 1px solid rgba(10,22,40,0.06);
+}
+.about-skeleton-section {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 90px 32px;
+}
+.about-skeleton-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 28px;
+}
+.about-skeleton-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+}
+.about-skeleton-card {
+  background: #fff;
+  border: 1px solid rgba(10,22,40,0.06);
+  border-radius: 20px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.about-skeleton-card-dark {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 20px;
+  padding: 40px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.about-skeleton-float-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+@keyframes about-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@media (max-width: 900px) {
+  .about-skeleton-hero { grid-template-columns: 1fr; gap: 32px; padding: 60px 20px; }
+}

@@ -6,7 +6,7 @@ import { apiFetch } from "@/lib/apiFetch";
 import { API_BASE_URL } from "@/lib/config";
 import { AdminProvider } from "../../components/ProtectedAdmin";
 import { CSS } from "../../academic/purchase/components";
-import { PurchaseDetailModal } from "../../academic/purchase/page";
+import { PurchaseDetailModal } from "../../academic/purchase/PurchaseDetailModal";
 import "../../admin.css";
 
 const COLS = "1.8fr 1.5fr 1.2fr 1fr 1fr 100px";

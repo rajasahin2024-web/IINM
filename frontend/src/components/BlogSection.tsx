@@ -2,8 +2,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:2007/api";
+import { API_BASE_URL } from "@/lib/config";
 
 interface BlogPost {
   id: number;
@@ -29,7 +28,7 @@ export default function BlogSection() {
   const mouseRef = useRef({ x: -9999, y: -9999 });
 
   useEffect(() => {
-    fetch(`${API_BASE}/blogs?status=published&limit=4`)
+    fetch(`${API_BASE_URL}/blogs?status=published&limit=4`)
       .then((r) => r.json())
       .then((data) => {
         setPosts(data.items || []);

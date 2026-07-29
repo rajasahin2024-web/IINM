@@ -302,6 +302,7 @@ function CurriculumSection({ batch, course, onRefresh }: { batch: any, course: a
   const [activeTab, setActiveTab] = useState<"materials" | "exams" | "live">("materials");
   const [materials, setMaterials] = useState<any[]>([]);
   const [exams, setExams] = useState<any[]>([]);
+  const [liveClasses, setLiveClasses] = useState<any[]>([]);
   const [allExams, setAllExams] = useState<any[]>([]); // For assignment dropdown
 
   // Upload Material Modal
@@ -342,6 +343,13 @@ function CurriculumSection({ batch, course, onRefresh }: { batch: any, course: a
         const res = await apiFetch(`${API_BASE_URL}/subjects/${subjectId}/chapters`);
         if (res.ok) {
            const data = await res.json();
+           // Attach live class list to each chapter for badges
+           await Promise.all(data.map(async (ch: any) => {
+             try {
+               const lcRes = await apiFetch(`${API_BASE_URL}/chapters/${ch.id}/live-classes`);
+               ch.live_classes = lcRes.ok ? await lcRes.json() : [];
+             } catch { ch.live_classes = []; }
+           }));
            setChaptersCache(prev => ({ ...prev, [subjectId]: data }));
         }
       } catch (e) {
@@ -360,6 +368,10 @@ function CurriculumSection({ batch, course, onRefresh }: { batch: any, course: a
     try {
        const matRes = await apiFetch(`${API_BASE_URL}/chapters/${chId}/materials`);
        if(matRes.ok) setMaterials(await matRes.json());
+
+       // Fetch live classes attached to this chapter
+       const liveRes = await apiFetch(`${API_BASE_URL}/chapters/${chId}/live-classes`);
+       if(liveRes.ok) setLiveClasses(await liveRes.json());
 
        // Fetch exams assigned to this batch
        const examRes = await apiFetch(`${API_BASE_URL}/exams/assignments/batch/${batch.id}`);
@@ -487,43 +499,79 @@ function CurriculumSection({ batch, course, onRefresh }: { batch: any, course: a
     }
   };
 
+  /* Per-batch live class dates (stored in content_drip with live_class_id) */
+  const liveDripFor = (lcId: number) => batch?.content_drip?.find((d: any) => d.live_class_id === lcId)?.unlock_date || "";
+
+  const updateLiveDripDate = async (lcId: number, newDate: string) => {
+    let newDrips = [...(batch?.content_drip || [])];
+    const idx = newDrips.findIndex(d => d.live_class_id === lcId);
+    if (newDate) {
+      if (idx >= 0) newDrips[idx].unlock_date = newDate;
+      else newDrips.push({ live_class_id: lcId, unlock_date: newDate });
+    } else {
+      if (idx >= 0) newDrips.splice(idx, 1);
+    }
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/batches/${batch.id}/content-drip`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ drips: newDrips })
+      });
+      if (res.ok) {
+        showToast("Live class date updated!", "success");
+        onRefresh();
+      } else {
+        showToast("Failed to update date", "error");
+      }
+    } catch(e) {
+      showToast("Network error", "error");
+    }
+  };
+
   if (selectedChapter) {
      return (
-       <div style={{ background: "#fff", borderRadius: 20, padding: 24, boxShadow: "0 4px 20px rgba(0,0,0,0.03)", border: "1px solid #e2e8f0" }}>
-          <button onClick={() => setSelectedChapter(null)} style={{ background: "none", border: "none", color: "#64748b", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, marginBottom: 16 }}>
-             <Icon name="arrow-left" size={14} /> Back to Curriculum
+       <div style={{ background: "#fff", borderRadius: 12, padding: 18, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", border: "1px solid #e2e8f0" }}>
+          <button onClick={() => setSelectedChapter(null)} style={{ background: "none", border: "none", color: "#64748b", fontWeight: 700, fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, marginBottom: 12, padding: 0 }}>
+             <Icon name="arrow-left" size={13} /> Back to Curriculum
           </button>
           
-          <h3 style={{ margin: "0 0 16px 0", fontSize: 20, fontWeight: 800 }}>{selectedChapter.title}</h3>
+          <h3 style={{ margin: "0 0 12px 0", fontSize: 16, fontWeight: 800 }}>{selectedChapter.title}</h3>
           
           {/* DRIP SCHEDULING */}
-          <div style={{ marginBottom: 20, display: "flex", alignItems: "center", gap: 12, background: "#f0fdfa", padding: "12px 16px", borderRadius: 10, border: "1px solid #ccfbf1" }}>
-             <Icon name="calendar" size={18} color="#0d9488" />
+          <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 10, background: "#f0fdfa", padding: "10px 12px", borderRadius: 8, border: "1px solid #ccfbf1" }}>
+             <Icon name="calendar" size={15} color="#0d9488" />
              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#115e59" }}>Scheduled Unlock (Drip Content)</div>
-                <div style={{ fontSize: 11, color: "#0f766e", marginTop: 2 }}>Set a date when this chapter becomes visible to students in this batch. Leave blank to unlock immediately.</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#115e59" }}>Scheduled Unlock (Drip Content)</div>
+                <div style={{ fontSize: 11, color: "#0f766e", marginTop: 1 }}>Set a date when this chapter becomes visible to students in this batch. Leave blank to unlock immediately.</div>
              </div>
              <input 
                type="date" 
                value={dripDate} 
                onChange={(e) => updateDripDate(e.target.value)} 
-               style={{ marginLeft: "auto", padding: "8px 12px", borderRadius: 8, border: "1px solid #99f6e4", outline: "none", fontFamily: "inherit", background: "#fff", color: "#115e59", fontWeight: 600, fontSize: 13 }}
+               style={{ marginLeft: "auto", padding: "6px 10px", borderRadius: 6, border: "1px solid #99f6e4", outline: "none", fontFamily: "inherit", background: "#fff", color: "#115e59", fontWeight: 600, fontSize: 12, flexShrink: 0 }}
              />
           </div>
           
-          <div style={{ display: "flex", gap: 8, borderBottom: "1px solid #f1f5f9", marginBottom: 20 }}>
-             {["materials", "exams", "live"].map(tab => (
+          <div style={{ display: "flex", gap: 6, borderBottom: "1px solid #f1f5f9", marginBottom: 16 }}>
+             {(["materials", "exams", "live"] as const).map(tab => {
+                const count = tab === "materials" ? materials.length : tab === "exams" ? exams.length : liveClasses.length;
+                return (
                 <button
                   key={tab}
-                  onClick={() => setActiveTab(tab as any)}
+                  onClick={() => setActiveTab(tab)}
                   style={{
-                     padding: "10px 16px", background: "none", border: "none", borderBottom: activeTab === tab ? "2px solid #0ea5e9" : "2px solid transparent",
-                     color: activeTab === tab ? "#0ea5e9" : "#64748b", fontWeight: 700, textTransform: "capitalize", cursor: "pointer"
+                     padding: "8px 12px", background: "none", border: "none", borderBottom: activeTab === tab ? "2px solid #0ea5e9" : "2px solid transparent",
+                     color: activeTab === tab ? "#0ea5e9" : "#64748b", fontWeight: 700, fontSize: 13, textTransform: "capitalize", cursor: "pointer",
+                     display: "flex", alignItems: "center", gap: 6,
                   }}
                 >
-                  {tab}
+                  {tab === "live" ? "Live Classes" : tab}
+                  {count > 0 && (
+                    <span style={{ background: activeTab === tab ? "#e0f2fe" : "#f1f5f9", color: activeTab === tab ? "#0284c7" : "#64748b", fontSize: 10, fontWeight: 800, padding: "1px 7px", borderRadius: 10 }}>{count}</span>
+                  )}
                 </button>
-             ))}
+                );
+             })}
           </div>
 
           {activeTab === "materials" && (
@@ -630,6 +678,68 @@ function CurriculumSection({ batch, course, onRefresh }: { batch: any, course: a
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                )}
+             </div>
+          )}
+
+          {activeTab === "live" && (
+             <div>
+                <h4 style={{ margin: "0 0 14px" }}>Live Classes</h4>
+                {liveClasses.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "36px 0", color: "#94a3b8" }}>
+                    <div style={{ fontSize: 32, marginBottom: 10 }}>🎥</div>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>No live classes in this chapter.</div>
+                    <div style={{ fontSize: 12, marginTop: 4 }}>Add live classes from Masters → Curriculum.</div>
+                  </div>
+                ) : (
+                  <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, overflow: "hidden" }}>
+                    {liveClasses.map((lc: any, idx: number) => {
+                      const isPast = lc.scheduled_at ? new Date(lc.scheduled_at) < new Date() : false;
+                      const batchDate = liveDripFor(lc.id);
+                      return (
+                        <div key={lc.id} style={{ padding: "12px 14px", background: "#fff", borderBottom: idx < liveClasses.length - 1 ? "1px solid #f1f5f9" : "none", display: "flex", alignItems: "center", gap: 12 }}>
+                          <div style={{ width: 34, height: 34, borderRadius: 8, background: "#ede9fe", color: "#6d28d9", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <Icon name="video" size={16} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 700, fontSize: 13, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lc.title}</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3 }}>
+                              {lc.scheduled_at ? (
+                                <span style={{ fontSize: 11, fontWeight: 700, color: isPast ? "#94a3b8" : "#6d28d9", background: isPast ? "#f1f5f9" : "#f5f3ff", padding: "1px 8px", borderRadius: 4 }}>
+                                  {isPast ? "✓ " : "🗓 "}{new Date(lc.scheduled_at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: 11, color: "#94a3b8" }}>Not scheduled</span>
+                              )}
+                              {batchDate && (
+                                <span style={{ fontSize: 11, fontWeight: 700, color: "#0f766e", background: "#f0fdfa", padding: "1px 8px", borderRadius: 4 }}>
+                                  Batch: {new Date(batchDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <input
+                            type="date"
+                            value={batchDate}
+                            title="Class date for this batch"
+                            onChange={(e) => updateLiveDripDate(lc.id, e.target.value)}
+                            style={{ padding: "6px 9px", borderRadius: 7, border: `1px solid ${batchDate ? "#c4b5fd" : "#e2e8f0"}`, outline: "none", fontFamily: "inherit", background: "#fff", color: batchDate ? "#6d28d9" : "#475569", fontWeight: 600, fontSize: 12, cursor: "pointer", flexShrink: 0 }}
+                          />
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(lc.meeting_url); showToast("Meeting link copied!", "success"); }}
+                            title="Copy meeting link"
+                            style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 8, padding: "7px 10px", cursor: "pointer", display: "flex", alignItems: "center", flexShrink: 0 }}
+                          >
+                            <Icon name="copy" size={13} />
+                          </button>
+                          <a href={lc.meeting_url} target="_blank" rel="noreferrer"
+                            style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, background: "linear-gradient(135deg, #8b5cf6, #6d28d9)", color: "#fff", fontWeight: 700, fontSize: 12, textDecoration: "none", flexShrink: 0 }}>
+                            <Icon name="external-link" size={13} /> Join
+                          </a>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
              </div>
@@ -797,36 +907,43 @@ function CurriculumSection({ batch, course, onRefresh }: { batch: any, course: a
   }
 
   return (
-    <div style={{ background: "#fff", borderRadius: 20, padding: 24, boxShadow: "0 4px 20px rgba(0,0,0,0.03)", border: "1px solid #e2e8f0" }}>
-       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
+    <div style={{ background: "#fff", borderRadius: 12, padding: 18, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", border: "1px solid #e2e8f0" }}>
+       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 }}>
           <div>
-             <h3 style={{ fontSize: 16, fontWeight: 800, color: "#0f172a", margin: "0 0 8px 0", display: "flex", alignItems: "center", gap: 8 }}><Icon name="book" size={18} color="#f59e0b"/> Curriculum Manager</h3>
-             <span style={{ fontSize: 13, color: "#64748b" }}>Browse and manage materials & exams for this course.</span>
+             <h3 style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", margin: "0 0 4px 0", display: "flex", alignItems: "center", gap: 7 }}><Icon name="book" size={15} color="#f59e0b"/> Curriculum Manager</h3>
+             <span style={{ fontSize: 12, color: "#64748b" }}>Browse and manage materials, live classes & exams for this course.</span>
           </div>
        </div>
 
-       {subjects.length === 0 ? <p style={{ color: "#94a3b8" }}>No subjects found in this course.</p> : (
-         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+       {subjects.length === 0 ? <p style={{ color: "#94a3b8", fontSize: 13 }}>No subjects found in this course.</p> : (
+         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {subjects.map((sub) => (
-               <div key={sub.id} style={{ border: "1px solid #e2e8f0", borderRadius: 12, overflow: "hidden" }}>
+               <div key={sub.id} style={{ border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden" }}>
                   <button
                     onClick={() => toggleSubject(sub.id)}
-                    style={{ width: "100%", padding: "16px 20px", background: expandedSubjectId === sub.id ? "#f8fafc" : "#fff", border: "none", textAlign: "left", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                    style={{ width: "100%", padding: "10px 14px", background: expandedSubjectId === sub.id ? "#f8fafc" : "#fff", border: "none", textAlign: "left", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
                   >
-                     <span style={{ fontWeight: 800, fontSize: 14, color: "#0f172a" }}>{sub.name}</span>
-                     <Icon name={expandedSubjectId === sub.id ? "chevron-up" : "chevron-down"} size={16} />
+                     <span style={{ fontWeight: 700, fontSize: 13, color: "#0f172a" }}>{sub.name}</span>
+                     <Icon name={expandedSubjectId === sub.id ? "chevron-up" : "chevron-down"} size={14} />
                   </button>
                   
                   {expandedSubjectId === sub.id && (
-                     <div style={{ padding: "12px 20px", background: "#fff", borderTop: "1px solid #f1f5f9" }}>
+                     <div style={{ padding: "10px 14px", background: "#fff", borderTop: "1px solid #f1f5f9" }}>
                         {(chaptersCache[sub.id] || []).length === 0 ? (
                            <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>No chapters found.</p>
                         ) : (
-                           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                               {chaptersCache[sub.id].map(ch => (
-                                 <button key={ch.id} onClick={() => openChapter(ch)} style={{ width: "100%", padding: "12px 16px", background: "#f8fafc", border: "1px solid #f1f5f9", borderRadius: 8, textAlign: "left", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                    <span style={{ fontSize: 13, fontWeight: 700, color: "#334155" }}>{ch.title}</span>
-                                    <Icon name="arrow-right" size={14} />
+                                 <button key={ch.id} onClick={() => openChapter(ch)} style={{ width: "100%", padding: "8px 12px", background: "#f8fafc", border: "1px solid #f1f5f9", borderRadius: 6, textAlign: "left", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ch.title}</span>
+                                    <span style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                                      {(ch.live_classes?.length || 0) > 0 && (
+                                        <span style={{ background: "#ede9fe", color: "#6d28d9", fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 10, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                          <Icon name="video" size={10} /> {ch.live_classes.length} LIVE
+                                        </span>
+                                      )}
+                                      <Icon name="arrow-right" size={13} />
+                                    </span>
                                  </button>
                               ))}
                            </div>
@@ -989,20 +1106,20 @@ function BatchDetailsDashboard() {
   if (loading) return <div style={{ padding: 40, textAlign: "center", color: "#64748b" }}>Loading Dashboard...</div>;
 
   return (
-    <div style={{ padding: "40px", width: "100%", margin: "0 auto", fontFamily: "Inter, sans-serif", background: "#f8fafc", minHeight: "100vh" }}>
+    <div style={{ padding: "20px 24px", width: "100%", margin: "0 auto", fontFamily: "Inter, sans-serif", background: "#f8fafc", minHeight: "100vh" }}>
       
       {/* HEADER */}
 
       {/* ── Breadcrumb / Back bar ── */}
-      <div style={{ marginBottom: 20 }}>
+      <div style={{ marginBottom: 14 }}>
         <button
           onClick={() => router.push("/admin/batch")}
           style={{
-            display: "inline-flex", alignItems: "center", gap: 8,
-            background: "#fff", border: "1.5px solid #cbd5e1",
-            padding: "9px 18px", borderRadius: 10, cursor: "pointer",
-            fontSize: 13, fontWeight: 700, color: "#334155",
-            boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+            display: "inline-flex", alignItems: "center", gap: 6,
+            background: "#fff", border: "1px solid #cbd5e1",
+            padding: "6px 12px", borderRadius: 8, cursor: "pointer",
+            fontSize: 12, fontWeight: 700, color: "#334155",
+            boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
             transition: "all 0.18s",
           }}
           onMouseEnter={e => {
@@ -1024,23 +1141,23 @@ function BatchDetailsDashboard() {
       </div>
 
       {/* ── Title row ── */}
-      <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 28, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 18, flexWrap: "wrap" }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#0ea5e9", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-            <Icon name="layers" size={12} />
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#0ea5e9", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
+            <Icon name="layers" size={11} />
             {course?.title || "Unknown Course"} &nbsp;›&nbsp; Batch Dashboard
           </div>
-          <h1 style={{ fontSize: 26, fontWeight: 800, color: "#0f172a", margin: 0, letterSpacing: "-0.5px" }}>{batch?.name}</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", margin: 0, letterSpacing: "-0.4px" }}>{batch?.name}</h1>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <div style={{
             background: batch?.status === "Ongoing" ? "#dcfce7" : batch?.status === "Upcoming" ? "#dbeafe" : "#f1f5f9",
             color: batch?.status === "Ongoing" ? "#15803d" : batch?.status === "Upcoming" ? "#1d4ed8" : "#475569",
-            padding: "8px 18px", borderRadius: 20, fontSize: 13, fontWeight: 700,
-            display: "flex", alignItems: "center", gap: 8,
+            padding: "5px 14px", borderRadius: 16, fontSize: 12, fontWeight: 700,
+            display: "flex", alignItems: "center", gap: 7,
           }}>
             <div style={{
-              width: 7, height: 7, borderRadius: "50%",
+              width: 6, height: 6, borderRadius: "50%",
               background: batch?.status === "Ongoing" ? "#22c55e" : batch?.status === "Upcoming" ? "#3b82f6" : "#94a3b8",
             }} />
             {batch?.status?.toUpperCase() || "UNKNOWN"}
@@ -1048,31 +1165,31 @@ function BatchDetailsDashboard() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "350px 1fr", gap: 24, alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 16, alignItems: "start" }}>
         
         {/* LEFT COLUMN (Sidebar Widgets) */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           
           {/* DIV 2: BATCH & CLASS DETAILS */}
-          <div style={{ background: "#fff", borderRadius: 20, padding: 24, boxShadow: "0 4px 20px rgba(0,0,0,0.03)", border: "1px solid #e2e8f0" }}>
-             <h3 style={{ fontSize: 16, fontWeight: 800, color: "#0f172a", margin: "0 0 20px 0", display: "flex", alignItems: "center", gap: 8 }}><Icon name="info" size={18} color="#0ea5e9"/> Batch Logistics</h3>
+          <div style={{ background: "#fff", borderRadius: 12, padding: 18, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", border: "1px solid #e2e8f0" }}>
+             <h3 style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", margin: "0 0 14px 0", display: "flex", alignItems: "center", gap: 7 }}><Icon name="info" size={15} color="#0ea5e9"/> Batch Logistics</h3>
              
-             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 16, borderBottom: "1px solid #f1f5f9" }}>
-                   <span style={{ fontSize: 13, color: "#64748b", fontWeight: 600 }}>Mode</span>
-                   <span style={{ fontSize: 13, color: "#0f172a", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}><Icon name={batch?.mode === "Online" ? "globe" : "users"} size={14} /> {batch?.mode}</span>
+             <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 11, borderBottom: "1px solid #f1f5f9" }}>
+                   <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600 }}>Mode</span>
+                   <span style={{ fontSize: 12, color: "#0f172a", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}><Icon name={batch?.mode === "Online" ? "globe" : "users"} size={13} /> {batch?.mode}</span>
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 16, borderBottom: "1px solid #f1f5f9" }}>
-                   <span style={{ fontSize: 13, color: "#64748b", fontWeight: 600 }}>Start Date</span>
-                   <span style={{ fontSize: 13, color: "#0f172a", fontWeight: 700 }}>{batch?.start_date ? new Date(batch.start_date).toLocaleDateString() : "TBD"}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 11, borderBottom: "1px solid #f1f5f9" }}>
+                   <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600 }}>Start Date</span>
+                   <span style={{ fontSize: 12, color: "#0f172a", fontWeight: 700 }}>{batch?.start_date ? new Date(batch.start_date).toLocaleDateString() : "TBD"}</span>
                 </div>
                 
                 {batch?.routines?.length > 0 && (
-                  <div style={{ paddingBottom: 16, borderBottom: "1px solid #f1f5f9" }}>
-                     <span style={{ fontSize: 13, color: "#64748b", fontWeight: 600, display: "block", marginBottom: 12 }}>Schedule</span>
-                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ paddingBottom: 11, borderBottom: "1px solid #f1f5f9" }}>
+                     <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600, display: "block", marginBottom: 8 }}>Schedule</span>
+                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                        {batch.routines.map((r:any, i:number) => (
-                         <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, background: "#f8fafc", padding: "8px 12px", borderRadius: 8 }}>
+                         <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, background: "#f8fafc", padding: "6px 10px", borderRadius: 6 }}>
                             <strong style={{ color: "#0f172a" }}>{r.day_of_week}</strong>
                             <span style={{ color: "#475569", fontWeight: 600 }}>{r.start_time} - {r.end_time}</span>
                          </div>
@@ -1083,10 +1200,10 @@ function BatchDetailsDashboard() {
                 
                 {batch?.meeting_url && (
                   <div>
-                    <span style={{ fontSize: 13, color: "#64748b", fontWeight: 600, display: "block", marginBottom: 8 }}>Meeting Link</span>
-                    <div style={{ display: "flex", gap: 8 }}>
-                       <input type="text" readOnly value={batch.meeting_url} style={{ flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", fontSize: 13, color: "#475569", outline: "none" }} />
-                       <button onClick={() => { navigator.clipboard.writeText(batch.meeting_url); showToast("Copied!", "success"); }} style={{ background: "#e0f2fe", color: "#0284c7", border: "none", borderRadius: 8, padding: "0 12px", cursor: "pointer", fontWeight: 700 }}>Copy</button>
+                    <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600, display: "block", marginBottom: 6 }}>Meeting Link</span>
+                    <div style={{ display: "flex", gap: 6 }}>
+                       <input type="text" readOnly value={batch.meeting_url} style={{ flex: 1, minWidth: 0, padding: "8px 10px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#f8fafc", fontSize: 12, color: "#475569", outline: "none" }} />
+                       <button onClick={() => { navigator.clipboard.writeText(batch.meeting_url); showToast("Copied!", "success"); }} style={{ background: "#e0f2fe", color: "#0284c7", border: "none", borderRadius: 6, padding: "0 10px", cursor: "pointer", fontWeight: 700, fontSize: 12 }}>Copy</button>
                     </div>
                   </div>
                 )}
@@ -1094,28 +1211,28 @@ function BatchDetailsDashboard() {
           </div>
 
           {/* DIV 1: ENROLLMENT (ADD STUDENT) */}
-          <div style={{ background: "#fff", borderRadius: 20, padding: 24, boxShadow: "0 4px 20px rgba(0,0,0,0.03)", border: "1px solid #e2e8f0" }}>
-             <h3 style={{ fontSize: 16, fontWeight: 800, color: "#0f172a", margin: "0 0 20px 0", display: "flex", alignItems: "center", gap: 8 }}><Icon name="user-plus" size={18} color="#8b5cf6"/> Add Student</h3>
+          <div style={{ background: "#fff", borderRadius: 12, padding: 18, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", border: "1px solid #e2e8f0" }}>
+             <h3 style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", margin: "0 0 14px 0", display: "flex", alignItems: "center", gap: 7 }}><Icon name="user-plus" size={15} color="#8b5cf6"/> Add Student</h3>
              
              {/* Capacity Tracker */}
-             <div style={{ marginBottom: 20 }}>
-               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
+             <div style={{ marginBottom: 14 }}>
+               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 700, marginBottom: 6 }}>
                  <span style={{ color: "#64748b" }}>Capacity filled</span>
                  <span style={{ color: "#0f172a" }}>{batch?.enrollments?.length || 0} / {batch?.max_capacity || 50}</span>
                </div>
-               <div style={{ width: "100%", height: 8, background: "#f1f5f9", borderRadius: 4, overflow: "hidden" }}>
-                  <div style={{ height: "100%", background: "#8b5cf6", width: `${((batch?.enrollments?.length || 0) / (batch?.max_capacity || 50)) * 100}%`, borderRadius: 4, transition: "width 0.5s ease" }}></div>
+               <div style={{ width: "100%", height: 6, background: "#f1f5f9", borderRadius: 3, overflow: "hidden" }}>
+                  <div style={{ height: "100%", background: "#8b5cf6", width: `${((batch?.enrollments?.length || 0) / (batch?.max_capacity || 50)) * 100}%`, borderRadius: 3, transition: "width 0.5s ease" }}></div>
                </div>
              </div>
 
-             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div>
-                   <label style={{ fontSize: 12, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6 }}>Direct add</label>
-                   <div style={{ display: "flex", gap: 8 }}>
-                     <input type="email" placeholder="student@email.com" value={addEmail} onChange={e => setAddEmail(e.target.value)} onKeyDown={(e) => { if(e.key === "Enter") handleAddStudent(); }} style={{ flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13, outline: "none", transition: "border 0.2s" }} onFocus={e => e.currentTarget.style.borderColor="#8b5cf6"} onBlur={e => e.currentTarget.style.borderColor="#cbd5e1"} />
-                     <button onClick={handleAddStudent} disabled={isAdding} style={{ background: isAdding ? "#c4b5fd" : "#8b5cf6", color: "#fff", border: "none", borderRadius: 8, padding: "0 16px", fontWeight: 700, cursor: isAdding ? "wait" : "pointer", display: "flex", alignItems: "center" }}><Icon name="plus" size={16} /></button>
+                   <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 5 }}>Direct add</label>
+                   <div style={{ display: "flex", gap: 6 }}>
+                     <input type="email" placeholder="student@email.com" value={addEmail} onChange={e => setAddEmail(e.target.value)} onKeyDown={(e) => { if(e.key === "Enter") handleAddStudent(); }} style={{ flex: 1, minWidth: 0, padding: "8px 10px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12, outline: "none", transition: "border 0.2s" }} onFocus={e => e.currentTarget.style.borderColor="#8b5cf6"} onBlur={e => e.currentTarget.style.borderColor="#cbd5e1"} />
+                     <button onClick={handleAddStudent} disabled={isAdding} style={{ background: isAdding ? "#c4b5fd" : "#8b5cf6", color: "#fff", border: "none", borderRadius: 6, padding: "0 12px", fontWeight: 700, cursor: isAdding ? "wait" : "pointer", display: "flex", alignItems: "center" }}><Icon name="plus" size={14} /></button>
                    </div>
-                   <div style={{ marginTop: 8, fontSize: 11, color: "#64748b", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                   <div style={{ marginTop: 7, fontSize: 11, color: "#64748b", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                        <span>Only registered emails allowed.</span>
                        <button
                          type="button"
@@ -1126,11 +1243,11 @@ function BatchDetailsDashboard() {
                        </button>
                     </div>
                 </div>
-                <div style={{ textAlign: "center", padding: "16px 0", borderBottom: "1px dashed #e2e8f0" }}>
-                   <span style={{ fontSize: 12, fontWeight: 600, color: "#94a3b8" }}>OR</span>
+                <div style={{ textAlign: "center", padding: "10px 0", borderBottom: "1px dashed #e2e8f0" }}>
+                   <span style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8" }}>OR</span>
                 </div>
-                <button style={{ width: "100%", background: "#f8fafc", color: "#475569", border: "1px solid #cbd5e1", padding: "12px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center", gap: 8 }}>
-                  <Icon name="search" size={14} /> Browse Existing Users
+                <button style={{ width: "100%", background: "#f8fafc", color: "#475569", border: "1px solid #cbd5e1", padding: "9px", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center", gap: 8 }}>
+                  <Icon name="search" size={13} /> Browse Existing Users
                 </button>
              </div>
           </div>
@@ -1140,62 +1257,62 @@ function BatchDetailsDashboard() {
         </div>
 
         {/* RIGHT COLUMN (Main Data) */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           
           <CurriculumSection batch={batch} course={course} onRefresh={fetchBatch} />
 
           {/* OPTION A: ENROLLED STUDENTS ROSTER table */}
-          <div style={{ background: "#fff", borderRadius: 20, boxShadow: "0 4px 20px rgba(0,0,0,0.03)", border: "1px solid #e2e8f0", overflow: "hidden", flex: 1, display: "flex", flexDirection: "column" }}>
-             <div style={{ padding: "24px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <h3 style={{ fontSize: 16, fontWeight: 800, color: "#0f172a", margin: 0, display: "flex", alignItems: "center", gap: 8 }}><Icon name="users" size={18} color="#10b981"/> Enrolled Students</h3>
-                <span style={{ background: "#d1fae5", color: "#065f46", fontSize: 12, fontWeight: 800, padding: "4px 12px", borderRadius: 12 }}>{batch?.enrollments?.length || 0} TOTAL</span>
+          <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", border: "1px solid #e2e8f0", overflow: "hidden", flex: 1, display: "flex", flexDirection: "column" }}>
+             <div style={{ padding: "14px 18px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h3 style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", margin: 0, display: "flex", alignItems: "center", gap: 7 }}><Icon name="users" size={15} color="#10b981"/> Enrolled Students</h3>
+                <span style={{ background: "#d1fae5", color: "#065f46", fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 10 }}>{batch?.enrollments?.length || 0} TOTAL</span>
              </div>
 
              <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
                    <thead>
-                      <tr style={{ background: "#f8fafc", color: "#64748b", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                         <th style={{ padding: "16px 24px", borderBottom: "1px solid #e2e8f0" }}>Student Name</th>
-                         <th style={{ padding: "16px 24px", borderBottom: "1px solid #e2e8f0" }}>Join Date</th>
-                         <th style={{ padding: "16px 24px", borderBottom: "1px solid #e2e8f0" }}>Attendance</th>
-                         <th style={{ padding: "16px 24px", borderBottom: "1px solid #e2e8f0", textAlign: "right" }}>Actions</th>
+                      <tr style={{ background: "#f8fafc", color: "#64748b", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                         <th style={{ padding: "10px 18px", borderBottom: "1px solid #e2e8f0" }}>Student Name</th>
+                         <th style={{ padding: "10px 18px", borderBottom: "1px solid #e2e8f0" }}>Join Date</th>
+                         <th style={{ padding: "10px 18px", borderBottom: "1px solid #e2e8f0" }}>Attendance</th>
+                         <th style={{ padding: "10px 18px", borderBottom: "1px solid #e2e8f0", textAlign: "right" }}>Actions</th>
                       </tr>
                    </thead>
                    <tbody>
                       {(batch?.enrollments || []).length === 0 ? (
                         <tr>
-                          <td colSpan={4} style={{ padding: 40, textAlign: "center", color: "#94a3b8", fontSize: 14 }}>
+                          <td colSpan={4} style={{ padding: 32, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>
                             No students enrolled in this batch yet.
                           </td>
                         </tr>
                       ) : (
                         (batch?.enrollments || []).map((enr: any) => (
                            <tr key={enr.id} style={{ borderBottom: "1px solid #f1f5f9", transition: "background 0.2s" }} onMouseOver={e => e.currentTarget.style.background="#f8fafc"} onMouseOut={e => e.currentTarget.style.background="transparent"}>
-                              <td style={{ padding: "16px 24px" }}>
-                                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                    <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#0ea5e9", color: "#fff", display: "flex", alignItems: "center", justifyItems: "center", fontWeight: 800, fontSize: 12, lineHeight: "32px", textAlign: "center", justifyContent: "center" }}>
+                              <td style={{ padding: "10px 18px" }}>
+                                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#0ea5e9", color: "#fff", display: "flex", alignItems: "center", justifyItems: "center", fontWeight: 800, fontSize: 11, lineHeight: "28px", textAlign: "center", justifyContent: "center" }}>
                                        {(enr.student?.first_name?.[0] || "?").toUpperCase()}
                                     </div>
                                     <div>
-                                       <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{enr.student?.first_name} {enr.student?.last_name || ""}</div>
-                                       <div style={{ fontSize: 12, color: "#64748b" }}>{enr.student?.email}</div>
+                                       <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{enr.student?.first_name} {enr.student?.last_name || ""}</div>
+                                       <div style={{ fontSize: 11, color: "#64748b" }}>{enr.student?.email}</div>
                                     </div>
                                  </div>
                               </td>
-                              <td style={{ padding: "16px 24px", fontSize: 13, color: "#475569", fontWeight: 500 }}>
+                              <td style={{ padding: "10px 18px", fontSize: 12, color: "#475569", fontWeight: 500 }}>
                                 {new Date(enr.join_date).toLocaleDateString()}
                               </td>
-                              <td style={{ padding: "16px 24px" }}>
+                              <td style={{ padding: "10px 18px" }}>
                                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                   <div style={{ width: 60, height: 6, background: "#f1f5f9", borderRadius: 3, overflow: "hidden" }}>
+                                   <div style={{ width: 50, height: 5, background: "#f1f5f9", borderRadius: 3, overflow: "hidden" }}>
                                       <div style={{ height: "100%", background: "#10b981", width: `100%`, borderRadius: 3 }}></div>
                                    </div>
-                                   <span style={{ fontSize: 12, fontWeight: 700, color: "#475569" }}>100%</span>
+                                   <span style={{ fontSize: 11, fontWeight: 700, color: "#475569" }}>100%</span>
                                  </div>
                               </td>
-                              <td style={{ padding: "16px 24px", textAlign: "right" }}>
-                                 <button onClick={() => handleKickStudent(enr.student.id)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", padding: 8, borderRadius: 8, transition: "background 0.2s" }} title="Remove Student" onMouseOver={e => e.currentTarget.style.background="#fee2e2"} onMouseOut={e => e.currentTarget.style.background="none"}>
-                                    <Icon name="user-x" size={16} />
+                              <td style={{ padding: "10px 18px", textAlign: "right" }}>
+                                 <button onClick={() => handleKickStudent(enr.student.id)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", padding: 6, borderRadius: 6, transition: "background 0.2s" }} title="Remove Student" onMouseOver={e => e.currentTarget.style.background="#fee2e2"} onMouseOut={e => e.currentTarget.style.background="none"}>
+                                    <Icon name="user-x" size={15} />
                                  </button>
                               </td>
                            </tr>

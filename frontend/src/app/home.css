@@ -1296,3 +1296,137 @@
 @media (max-width: 480px) {
   .blog-section article { min-width: 240px !important; flex: 0 0 240px !important; }
 }
+
+/* ══════════════════════════════════════════════════════
+   ABOUT IINM PAGE — Reveal, Counter, Tilt, Lightbox
+   ══════════════════════════════════════════════════════ */
+@keyframes aboutFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes aboutGradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+@keyframes aboutFloatY {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-12px); }
+}
+@keyframes aboutPulseRing {
+  0%   { box-shadow: 0 0 0 0 rgba(230,57,70,0.45); }
+  70%  { box-shadow: 0 0 0 10px rgba(230,57,70,0); }
+  100% { box-shadow: 0 0 0 0 rgba(230,57,70,0); }
+}
+@keyframes aboutBounce {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(6px); }
+}
+
+.about-gradient-text {
+  background: linear-gradient(90deg, #e63946 0%, #ff6b6b 30%, #a21824 60%, #e63946 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: aboutGradientShift 6s ease-in-out infinite;
+  display: inline-block;
+}
+
+.about-float-badge { animation: aboutFloatY 4.5s ease-in-out infinite; }
+.about-scroll-cue { animation: aboutBounce 1.8s ease-in-out infinite; }
+.about-timeline-dot-active { animation: aboutPulseRing 2s infinite; }
+
+.about-admin-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #e63946 0%, #c1202f 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: 0 4px 14px rgba(230,57,70,0.25);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.about-admin-edit-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(230,57,70,0.35);
+}
+
+.about-lift-card {
+  transition: transform 0.35s cubic-bezier(0.16,1,0.3,1), box-shadow 0.35s ease, border-color 0.35s ease;
+}
+.about-lift-card:hover {
+  transform: translateY(-8px);
+}
+
+.about-tilt-card {
+  transition: transform 0.15s ease-out, border-color 0.25s ease, box-shadow 0.25s ease;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.about-gallery-item { cursor: zoom-in; }
+
+.about-lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5,10,20,0.92);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999998;
+  padding: 32px;
+  animation: aboutFadeIn 0.2s ease;
+}
+.about-lightbox-close {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.about-lightbox-close:hover { background: rgba(230,57,70,0.4); }
+
+.about-back-to-top {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: #e63946;
+  color: #fff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(230,57,70,0.35);
+  z-index: 9998;
+  transition: opacity 0.3s ease, transform 0.3s ease, background 0.2s ease;
+}
+.about-back-to-top:hover { background: #c1121f; transform: translateY(-3px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .about-gradient-text,
+  .about-float-badge,
+  .about-scroll-cue,
+  .about-timeline-dot-active {
+    animation: none !important;
+  }
+}

@@ -64,6 +64,14 @@ type S = {
   pin_code: string; country: string; weekday_hours: string; weekend_hours: string;
   map_embed_url: string;
   facebook_url: string; instagram_url: string; linkedin_url: string; youtube_url: string; twitter_url: string;
+  page_title: string; page_subtitle: string;
+  get_in_touch_heading: string; get_in_touch_description: string;
+  contact_email_label: string; contact_phone_label: string;
+  registered_office_label: string; registered_office_city: string; registered_office_address: string;
+  form_title: string; form_subtitle: string;
+  state_options: string; qualification_options: string;
+  terms_text: string; terms_url: string;
+  success_message: string; review_badges: string;
 };
 
 const empty: S = {
@@ -71,6 +79,14 @@ const empty: S = {
   address_line1: "", address_line2: "", city: "", state: "", pin_code: "", country: "",
   weekday_hours: "", weekend_hours: "", map_embed_url: "",
   facebook_url: "", instagram_url: "", linkedin_url: "", youtube_url: "", twitter_url: "",
+  page_title: "", page_subtitle: "",
+  get_in_touch_heading: "", get_in_touch_description: "",
+  contact_email_label: "", contact_phone_label: "",
+  registered_office_label: "", registered_office_city: "", registered_office_address: "",
+  form_title: "", form_subtitle: "",
+  state_options: "", qualification_options: "",
+  terms_text: "", terms_url: "",
+  success_message: "", review_badges: "",
 };
 
 /* ── Page wrapper — AdminProvider must be outermost ── */
@@ -278,6 +294,28 @@ function ContactUsSettingsInner() {
                 ].map(({ k, label }) => (
                   <FInput key={k} label={label} value={(settings as any)[k]} onChange={set(k as keyof S)} />
                 ))}
+              </div>
+              <SectionHeader num="6" title="Public Page Content" />
+              <div style={grid2}>
+                <FInput label="Page Title" value={settings.page_title} onChange={set("page_title")} />
+                <FInput label="Page Subtitle" value={settings.page_subtitle} onChange={set("page_subtitle")} />
+                <FInput label="Get In Touch Heading" value={settings.get_in_touch_heading} onChange={set("get_in_touch_heading")} />
+                <FInput label="Contact Email Label" value={settings.contact_email_label} onChange={set("contact_email_label")} />
+                <FInput label="Contact Phone Label" value={settings.contact_phone_label} onChange={set("contact_phone_label")} />
+                <FInput label="Registered Office Heading" value={settings.registered_office_label} onChange={set("registered_office_label")} />
+                <FInput label="Registered Office City" value={settings.registered_office_city} onChange={set("registered_office_city")} />
+                <FInput label="Form Title" value={settings.form_title} onChange={set("form_title")} />
+                <FInput label="Form Subtitle" value={settings.form_subtitle} onChange={set("form_subtitle")} />
+                <FInput label="Terms URL" value={settings.terms_url} onChange={set("terms_url")} />
+              </div>
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ marginBottom: 8 }}><FInput label="Get In Touch Description" value={settings.get_in_touch_description} onChange={set("get_in_touch_description")} isTextArea /></div>
+                <div style={{ marginBottom: 8 }}><FInput label="Registered Office Address" value={settings.registered_office_address} onChange={set("registered_office_address")} isTextArea /></div>
+                <div style={{ marginBottom: 8 }}><FInput label="Success Message" value={settings.success_message} onChange={set("success_message")} isTextArea /></div>
+                <div style={{ marginBottom: 8 }}><FInput label="Terms Text (HTML allowed)" value={settings.terms_text} onChange={set("terms_text")} isTextArea /></div>
+                <div style={{ marginBottom: 8 }}><FInput label="State Options (JSON array)" value={settings.state_options} onChange={set("state_options")} isTextArea /></div>
+                <FInput label="Qualification Options (JSON array)" value={settings.qualification_options} onChange={set("qualification_options")} isTextArea />
+                <FInput label="Review Badges (JSON array: [{name, rating, accent}])" value={settings.review_badges} onChange={set("review_badges")} isTextArea />
               </div>
             </div>
             <div style={{ padding: "16px 32px", background: "#f8fafc", display: "flex", justifyContent: "flex-end" }}>

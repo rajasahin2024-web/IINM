@@ -15,7 +15,11 @@ import { BASE_URL } from "./config";
 
 export function getDeviceToken(): string {
   if (typeof window === "undefined") return "";
-  return localStorage.getItem("iinm_device_token") ?? "";
+  try {
+    return localStorage.getItem("iinm_device_token") ?? "";
+  } catch {
+    return "";
+  }
 }
 
 export async function apiFetch(

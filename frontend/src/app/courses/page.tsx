@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import "./courses.css";
 import "../home.css";
 import PublicFooter from "@/components/PublicFooter";
+import { BASE_URL } from "@/lib/config";
 
 // ─── Interfaces ───────────────────────────────────────────
 interface Course {
@@ -134,7 +135,7 @@ export default function CoursesPage() {
   useScrollReveal();
 
   useEffect(() => {
-    const bUrl = process.env.NEXT_PUBLIC_BASE_URL || `http://${window.location.hostname}:2007`;
+    const bUrl = BASE_URL;
     setBaseUrl(bUrl);
     fetch(`${bUrl}/api/settings/site`).then(r => r.json()).then(d => {
       setSupportEmail(d.support_email || "");

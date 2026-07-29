@@ -4,6 +4,7 @@ from sqlalchemy import text
 from typing import List, Optional
 from datetime import datetime
 import re
+import json
 from pydantic import BaseModel
 
 from database import get_db
@@ -455,6 +456,25 @@ def delete_subject(sub_id: int, device: str = Depends(require_device), db: Sessi
     return {"message": "Deleted"}
 
 
+@router.delete("/subjects/{sub_id}/force")
+def force_delete_subject(sub_id: int, device: str = Depends(require_device), db: Session = Depends(get_db)):
+    """Force-delete a subject and all its chapters, materials, and live classes."""
+    db_subject = db.query(models.Subject).filter(models.Subject.id == sub_id).first()
+    if not db_subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    chapters = db.query(models.Chapter).filter(models.Chapter.subject_id == sub_id).all()
+    for ch in chapters:
+        db.execute(text("DELETE FROM topic_materials WHERE topic_id = :cid"), {"cid": ch.id})
+        db.query(models.ChapterLiveClass).filter(models.ChapterLiveClass.chapter_id == ch.id).delete()
+        db.execute(text("DELETE FROM course_chapters WHERE chapter_id = :cid"), {"cid": ch.id})
+    db.query(models.Chapter).filter(models.Chapter.subject_id == sub_id).delete()
+    db.execute(text("DELETE FROM course_subjects WHERE subject_id = :sid"), {"sid": sub_id})
+    db.delete(db_subject)
+    db.commit()
+    return {"message": "Subject and all related chapters, materials, and live classes deleted"}
+
+
 @router.get("/public/instructors")
 def get_public_instructors(db: Session = Depends(get_db)):
     """Returns all active instructors publicly without auth."""
@@ -516,12 +536,25 @@ def get_public_course_details(slug: str, db: Session = Depends(get_db)):
                 "file_type": mat.file_type
                 # Explicitly EXCLUDING file_url, youtube_url, etc.
             })
+        live_classes_data = [
+            {
+                "id": lc.id,
+                "title": lc.title
+            }
+            for lc in getattr(ch, "live_classes", [])
+        ]
         chapters_data.append({
             "id": ch.id,
             "title": ch.title,
             "subject": {"id": ch.subject.id, "name": ch.subject.name} if ch.subject else None,
-            "materials": materials_data
+            "materials": materials_data,
+            "live_classes": live_classes_data
         })
+
+    # Fetch all active instructors (prioritizing assigned course instructors)
+    active_instructors = db.query(models.Instructor).filter(models.Instructor.is_active == True).order_by(models.Instructor.id.asc()).all()
+    assigned_ids = {inst.id for inst in c.instructors if inst.is_active}
+    combined_instructors = [inst for inst in c.instructors if inst.is_active] + [inst for inst in active_instructors if inst.id not in assigned_ids]
 
     instructors_data = [
         {
@@ -534,13 +567,15 @@ def get_public_course_details(slug: str, db: Session = Depends(get_db)):
             "experience_years": inst.experience_years,
             "designation": inst.designation,
             "specialization": inst.specialization,
+            "teaching_hours": inst.teaching_hours,
+            "rating": inst.rating,
             "social_linkedin": inst.social_linkedin,
             "social_twitter": inst.social_twitter,
             "social_website": inst.social_website,
             "intro_video_url": rewrite_url(inst.intro_video_url),
             "achievements": inst.achievements,
         }
-        for inst in c.instructors
+        for inst in combined_instructors
     ]
 
     return {
@@ -571,6 +606,298 @@ def get_public_course_details(slug: str, db: Session = Depends(get_db)):
         "show_instructor_publicly": c.show_instructor_publicly if c.show_instructor_publicly is not None else True,
         "chapters": chapters_data,
         "instructors": instructors_data,
+    }
+
+
+# ── COURSE EXTENDED CONTENT SCHEMAS & DEFAULTS ─────────────────
+
+class BrochureLeadCreate(BaseModel):
+    course_id: Optional[int] = None
+    name: str
+    email: str
+    phone: Optional[str] = None
+    source: Optional[str] = "brochure_download"
+
+class CourseExtendedUpdate(BaseModel):
+    hero_badges_json: Optional[str] = None
+    hiring_companies_json: Optional[str] = None
+    market_impact_json: Optional[str] = None
+    who_is_for_json: Optional[str] = None
+    career_outcomes_json: Optional[str] = None
+    projects_json: Optional[str] = None
+    comparison_matrix_json: Optional[str] = None
+    certificates_json: Optional[str] = None
+    video_testimonials_json: Optional[str] = None
+    faqs_json: Optional[str] = None
+
+
+def get_default_course_extended_data(course_title: str):
+    return {
+        "hero_badges": [
+            "Live Cohorts & 1:1 Mentorship",
+            "76% Enterprise AI Adoption",
+            "Agentic AI & Capstone Projects",
+            "Industry Certificate Included"
+        ],
+        "hiring_companies": [
+            {"name": "Google", "logo": "/company-google.svg"},
+            {"name": "Microsoft", "logo": "/company-microsoft.svg"},
+            {"name": "Amazon", "logo": "/company-amazon.svg"},
+            {"name": "Meta", "logo": "/company-meta.svg"},
+            {"name": "Nvidia", "logo": "/company-nvidia.svg"},
+            {"name": "OpenAI", "logo": "/company-openai.svg"}
+        ],
+        "market_impact": {
+            "quote": "Generative AI is expected to transform 38 million organized-sector jobs in India by 2030 , primarily by redesigning tasks and boosting productivity.",
+            "quote_author": "KEN RESEARCH",
+            "stat_main": "76%",
+            "stat_label": "76% of business leaders are willing to pay higher compensation for professionals with AI skills.",
+            "cards": [
+                {"title": "Professionals Demand", "value": "Data & AI", "desc": "The demand for professionals who can work at the intersection of data, engineering, and AI is growing faster than ever."},
+                {"title": "NASSCOM Forecast", "value": "1.5 Million+", "desc": "According to NASSCOM, India alone is expected to have over 1.5 million data and AI job openings by 2026."}
+            ]
+        },
+        "who_is_for": [
+            {
+                "title": "Software & Full-Stack Engineers",
+                "experience": "1+ Years Exp",
+                "desc": "Looking to master LLMs, RAG, CrewAI, AutoGen, and build production-grade autonomous agentic applications.",
+                "icon": "Code"
+            },
+            {
+                "title": "Tech Leads & Solution Architects",
+                "experience": "3+ Years Exp",
+                "desc": "Designed to lead enterprise AI transformations, design multi-agent workflows, and deploy scalable AI pipelines.",
+                "icon": "Layers"
+            },
+            {
+                "title": "Freshers & AI Enthusiasts",
+                "experience": "Foundational Coding",
+                "desc": "Eager to fast-track career growth with high-demand AI skills, real-world portfolio capstones, and top placement support.",
+                "icon": "GraduationCap"
+            }
+        ],
+        "career_outcomes": {
+            "avg_salary": "21.5 LPA",
+            "avg_hike": "118%",
+            "top_package": "52 LPA",
+            "placements": [
+                {
+                    "name": "Abhishek Sharma",
+                    "role_from": "SDE-1 at Local Firm",
+                    "role_to": "GenAI Engineer at Top Tech",
+                    "hike": "135% Hike",
+                    "photo": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
+                    "linkedin": "https://linkedin.com"
+                },
+                {
+                    "name": "Priya Verma",
+                    "role_from": "Backend Dev at Enterprise",
+                    "role_to": "AI Agent Architect",
+                    "hike": "112% Hike",
+                    "photo": "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=300&q=80",
+                    "linkedin": "https://linkedin.com"
+                },
+                {
+                    "name": "Rohan Mehta",
+                    "role_from": "Data Analyst",
+                    "role_to": "LLM Solutions Engineer",
+                    "hike": "140% Hike",
+                    "photo": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80",
+                    "linkedin": "https://linkedin.com"
+                }
+            ]
+        },
+        "projects": [
+            {
+                "id": "p1",
+                "title": "Autonomous Multi-Agent Software Developer",
+                "category": "Agentic AI Framework",
+                "description": "Build an end-to-end multi-agent coding assistant using CrewAI and AutoGen that parses user requirements, writes frontend/backend code, runs test suites, and fixes bugs autonomously.",
+                "tags": ["CrewAI", "AutoGen", "OpenAI GPT-4o", "LangChain", "Python"],
+                "image_url": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80",
+                "highlights": [
+                    "Multi-agent task decomposition & planning",
+                    "Automated code execution in sandboxed Docker",
+                    "Self-correcting feedback loops"
+                ]
+            },
+            {
+                "id": "p2",
+                "title": "Enterprise RAG Search & Knowledge Engine",
+                "category": "GenAI & Vector DB",
+                "description": "Engineered a production-ready Retrieval-Augmented Generation platform capable of indexing millions of PDF documents with hybrid search, re-ranking, and low-latency response generation.",
+                "tags": ["LlamaIndex", "Pinecone", "FastAPI", "vLLM", "Embeddings"],
+                "image_url": "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?auto=format&fit=crop&w=800&q=80",
+                "highlights": [
+                    "Hybrid BM25 + Vector Semantic Search",
+                    "Cohere Re-ranker integration",
+                    "Sub-second response SLA with streaming"
+                ]
+            },
+            {
+                "id": "p3",
+                "title": "Real-Time AI Voice & Multimodal Customer Agent",
+                "category": "Multimodal & Voice AI",
+                "description": "Constructed an ultra-low latency voice conversational agent using WebRTC, OpenAI Whisper speech-to-text, Claude 3.5 Sonnet tool-use, and ElevenLabs voice synthesis.",
+                "tags": ["Whisper", "ElevenLabs", "Claude 3.5 Sonnet", "WebRTC", "Function Calling"],
+                "image_url": "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80",
+                "highlights": [
+                    "Sub-500ms voice latency pipeline",
+                    "Dynamic CRM tool function calling",
+                    "Multilingual speech support"
+                ]
+            }
+        ],
+        "comparison_matrix": [
+            {"feature": "Live Class", "iinm": True, "others": False, "others_note": "(Mostly recorded)"},
+            {"feature": "24×7 WhatsApp Doubt Clearing Portal", "iinm": True, "others": False},
+            {"feature": "AI Doubt Clearing Mentor", "iinm": True, "others": False},
+            {"feature": "IINM Cloud [Free Domain + Hosting] 6 Months", "iinm": True, "others": False},
+            {"feature": "Certifications", "iinm": True, "others": "limited", "others_note": "Limited"},
+            {"feature": "Freelancing Opportunities", "iinm": True, "others": False},
+            {"feature": "Lifetime Course Access", "iinm": True, "others": False, "others_note": "(Limited access)"},
+            {"feature": "New Tool Learning & Upgrades", "iinm": True, "others": False}
+        ],
+        "certificates": {
+            "eyebrow": "— Certifications —",
+            "title": "Industry-Recognized GenAI",
+            "title_blue": "Certifications",
+            "items": [
+                {"image_url": "/certificate-appreciation.png", "alt": "Certificate of Appreciation - GenAI Specialization"},
+                {"image_url": "/certificate-partnership.png", "alt": "Certificate of Partnership - Nasscom FutureSkills"}
+            ]
+        },
+        "video_testimonials": [
+            {
+                "id": "vt1",
+                "name": "Aman Srivastava",
+                "role": "Lead AI Engineer",
+                "video_url": "https://www.youtube.com/embed/dQw4w9WgXcQ",
+                "thumbnail": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80",
+                "quote": "The hands-on multi-agent capstones helped me transition into a high-paying GenAI role within 3 months!"
+            },
+            {
+                "id": "vt2",
+                "name": "Sneha Roy",
+                "role": "Senior Software Engineer",
+                "video_url": "https://www.youtube.com/embed/dQw4w9WgXcQ",
+                "thumbnail": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80",
+                "quote": "Deep diving into RAG, vector databases, and CrewAI gave me the confidence to crack senior AI interviews."
+            }
+        ],
+        "faqs": [
+            {
+                "question": "What are the prerequisites for this course?",
+                "answer": "Basic proficiency in programming (Python, JavaScript, or any language) and basic understanding of data structures is recommended. No prior ML/AI background is required as we cover foundations to advanced topics."
+            },
+            {
+                "question": "How are the live classes conducted?",
+                "answer": "Classes are held live interactively on weekends with recorded sessions available immediately after each lecture on your dashboard."
+            },
+            {
+                "question": "Will I get 1:1 mentorship and placement assistance?",
+                "answer": "Yes! You get assigned a dedicated mentor for code reviews, project guidance, resume building, and 1:1 mock interviews with placement referrals."
+            },
+            {
+                "question": "How do I download the full course curriculum brochure?",
+                "answer": "Click the 'Download Brochure' button on the hero section or top banner, enter your details, and the full PDF syllabus will open directly for download."
+            }
+        ]
+    }
+
+
+@router.get("/public/courses/{slug}/extended")
+def get_public_course_extended_details(slug: str, db: Session = Depends(get_db)):
+    c = db.query(models.Course).filter(models.Course.slug == slug, models.Course.status == "PUBLISHED").first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    base_data = get_public_course_details(slug, db)
+    defaults = get_default_course_extended_data(c.title)
+
+    ext = c.extended_content
+
+    def safe_parse(json_str, fallback):
+        if not json_str:
+            return fallback
+        try:
+            return json.loads(json_str)
+        except Exception:
+            return fallback
+
+    extended_data = {
+        "hero_badges": safe_parse(ext.hero_badges_json if ext else None, defaults["hero_badges"]),
+        "hiring_companies": safe_parse(ext.hiring_companies_json if ext else None, defaults["hiring_companies"]),
+        "market_impact": safe_parse(ext.market_impact_json if ext else None, defaults["market_impact"]),
+        "who_is_for": safe_parse(ext.who_is_for_json if ext else None, defaults["who_is_for"]),
+        "career_outcomes": safe_parse(ext.career_outcomes_json if ext else None, defaults["career_outcomes"]),
+        "projects": safe_parse(ext.projects_json if ext else None, defaults["projects"]),
+        "comparison_matrix": safe_parse(ext.comparison_matrix_json if ext else None, defaults["comparison_matrix"]),
+        "certificates": safe_parse(ext.certificates_json if ext else None, defaults["certificates"]),
+        "video_testimonials": safe_parse(ext.video_testimonials_json if ext else None, defaults["video_testimonials"]),
+        "faqs": safe_parse(ext.faqs_json if ext else None, defaults["faqs"]),
+    }
+
+    base_data["extended"] = extended_data
+    return base_data
+
+
+@router.put("/courses/{course_id}/extended")
+def update_course_extended_details(
+    course_id: int,
+    payload: CourseExtendedUpdate,
+    device: str = Depends(require_device),
+    db: Session = Depends(get_db)
+):
+    c = db.query(models.Course).filter(models.Course.id == course_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    ext = db.query(models.CourseExtendedContent).filter(models.CourseExtendedContent.course_id == course_id).first()
+    if not ext:
+        ext = models.CourseExtendedContent(course_id=course_id)
+        db.add(ext)
+
+    if payload.hero_badges_json is not None:
+        ext.hero_badges_json = payload.hero_badges_json
+    if payload.hiring_companies_json is not None:
+        ext.hiring_companies_json = payload.hiring_companies_json
+    if payload.market_impact_json is not None:
+        ext.market_impact_json = payload.market_impact_json
+    if payload.who_is_for_json is not None:
+        ext.who_is_for_json = payload.who_is_for_json
+    if payload.career_outcomes_json is not None:
+        ext.career_outcomes_json = payload.career_outcomes_json
+    if payload.projects_json is not None:
+        ext.projects_json = payload.projects_json
+    if payload.comparison_matrix_json is not None:
+        ext.comparison_matrix_json = payload.comparison_matrix_json
+    if payload.certificates_json is not None:
+        ext.certificates_json = payload.certificates_json
+    if payload.video_testimonials_json is not None:
+        ext.video_testimonials_json = payload.video_testimonials_json
+    if payload.faqs_json is not None:
+        ext.faqs_json = payload.faqs_json
+
+    db.commit()
+    db.refresh(ext)
+    return {"status": "success", "message": "Course extended content updated successfully"}
+
+
+@router.post("/public/courses/brochure-lead")
+def submit_brochure_lead(payload: BrochureLeadCreate, db: Session = Depends(get_db)):
+    # Log lead / brochure request
+    syllabus_url = None
+    if payload.course_id:
+        c = db.query(models.Course).filter(models.Course.id == payload.course_id).first()
+        if c and c.upload_syllabus:
+            syllabus_url = rewrite_url(c.upload_syllabus)
+
+    return {
+        "status": "success",
+        "message": "Brochure request submitted successfully",
+        "syllabus_url": syllabus_url
     }
 
 @router.get("/courses", response_model=List[CourseResponse])
@@ -761,6 +1088,20 @@ def delete_chapter(chapter_id: int, device: str = Depends(require_device), db: S
     return {"message": "Deleted"}
 
 
+@router.delete("/chapters/{chapter_id}/force")
+def force_delete_chapter(chapter_id: int, device: str = Depends(require_device), db: Session = Depends(get_db)):
+    """Force-delete a chapter and all its materials and live classes."""
+    db_chap = db.query(models.Chapter).filter(models.Chapter.id == chapter_id).first()
+    if not db_chap:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+    db.execute(text("DELETE FROM topic_materials WHERE topic_id = :cid"), {"cid": chapter_id})
+    db.query(models.ChapterLiveClass).filter(models.ChapterLiveClass.chapter_id == chapter_id).delete()
+    db.execute(text("DELETE FROM course_chapters WHERE chapter_id = :cid"), {"cid": chapter_id})
+    db.delete(db_chap)
+    db.commit()
+    return {"message": "Chapter and all related materials and live classes deleted"}
+
+
 # Reorder chapters within a subject
 class ChapterOrderItem(BaseModel):
     id: int
@@ -916,7 +1257,114 @@ def reorder_chapter_materials(
         raise HTTPException(status_code=500, detail=f"Reorder failed: {e}")
 
 
-# ─── 8. Chapter Live Classes ───────────────────────────────────────────────
+# ─── 8a. JSON Material Creation (for AI Agent) ──────────────────────────────
+
+class JsonMaterialCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    youtube_url: Optional[str] = None
+    file_type: str = "text"
+    tags: Optional[str] = None
+
+@router.post("/chapters/{chapter_id}/create-material")
+def create_and_link_material(
+    chapter_id: int,
+    data: JsonMaterialCreate,
+    device: str = Depends(require_device),
+    db: Session = Depends(get_db),
+):
+    """Create a material via JSON (no file upload) and link it to a chapter.
+    Used by the AI Course Agent for text/youtube-based materials."""
+    chapter = db.query(models.Chapter).filter(models.Chapter.id == chapter_id).first()
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+
+    file_type = data.file_type or "text"
+    if data.youtube_url and data.youtube_url.strip():
+        file_type = "youtube"
+
+    max_position = db.query(models.CourseMaterial).count()
+    material = models.CourseMaterial(
+        title=data.title.strip(),
+        description=data.description,
+        tags=data.tags,
+        file_type=file_type,
+        file_url=None,
+        youtube_url=data.youtube_url.strip() if data.youtube_url else None,
+        order_position=max_position + 1,
+    )
+    db.add(material)
+    db.commit()
+    db.refresh(material)
+
+    # Link material to chapter
+    existing = db.execute(
+        text("SELECT 1 FROM topic_materials WHERE topic_id = :cid AND material_id = :mid"),
+        {"cid": chapter_id, "mid": material.id}
+    ).fetchone()
+    if not existing:
+        result = db.execute(
+            text("SELECT COALESCE(MAX(order_position), -1) FROM topic_materials WHERE topic_id = :cid"),
+            {"cid": chapter_id}
+        )
+        next_pos = (result.scalar() or -1) + 1
+        db.execute(
+            text("INSERT INTO topic_materials (topic_id, material_id, order_position) VALUES (:cid, :mid, :pos)"),
+            {"cid": chapter_id, "mid": material.id, "pos": next_pos}
+        )
+        db.commit()
+
+    return {"id": material.id, "title": material.title, "file_type": material.file_type, "status": "linked"}
+
+
+class JsonMaterialUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    youtube_url: Optional[str] = None
+    tags: Optional[str] = None
+
+@router.put("/materials/{material_id}/json")
+def update_material_json(
+    material_id: int,
+    data: JsonMaterialUpdate,
+    device: str = Depends(require_device),
+    db: Session = Depends(get_db),
+):
+    """Update a material via JSON (no file upload). Used by admin curriculum panel."""
+    mat = db.query(models.CourseMaterial).filter(models.CourseMaterial.id == material_id).first()
+    if not mat:
+        raise HTTPException(status_code=404, detail="Material not found")
+    if data.title is not None:
+        mat.title = data.title.strip()
+    if data.description is not None:
+        mat.description = data.description
+    if data.youtube_url is not None:
+        mat.youtube_url = data.youtube_url.strip() if data.youtube_url.strip() else None
+        mat.file_type = "youtube" if mat.youtube_url else mat.file_type
+    if data.tags is not None:
+        mat.tags = data.tags
+    db.commit()
+    db.refresh(mat)
+    return {"id": mat.id, "title": mat.title, "file_type": mat.file_type, "status": "updated"}
+
+
+@router.delete("/chapters/{chapter_id}/materials/{material_id}")
+def unlink_material_from_chapter(
+    chapter_id: int,
+    material_id: int,
+    device: str = Depends(require_device),
+    db: Session = Depends(get_db),
+):
+    """Remove a material from a chapter (unlink only, does not delete the material)."""
+    db.execute(
+        text("DELETE FROM topic_materials WHERE topic_id = :cid AND material_id = :mid"),
+        {"cid": chapter_id, "mid": material_id}
+    )
+    db.commit()
+    return {"status": "unlinked"}
+
+
+# ─── 8b. Chapter Live Classes ───────────────────────────────────────────────
 
 class LiveClassCreate(BaseModel):
     title: str
@@ -984,6 +1432,35 @@ def delete_live_class(
     db.delete(lc)
     db.commit()
     return {"status": "deleted"}
+
+
+class LiveClassUpdate(BaseModel):
+    title: Optional[str] = None
+    meeting_url: Optional[str] = None
+    scheduled_at: Optional[str] = None
+
+@router.put("/live-classes/{live_class_id}", response_model=LiveClassResponse)
+def update_live_class(
+    live_class_id: int,
+    data: LiveClassUpdate,
+    device: str = Depends(require_device),
+    db: Session = Depends(get_db),
+):
+    lc = db.query(models.ChapterLiveClass).filter(models.ChapterLiveClass.id == live_class_id).first()
+    if not lc:
+        raise HTTPException(status_code=404, detail="Live class not found")
+    if data.title is not None:
+        lc.title = data.title.strip()
+    if data.meeting_url is not None:
+        lc.meeting_url = data.meeting_url.strip()
+    if data.scheduled_at is not None:
+        try:
+            lc.scheduled_at = datetime.fromisoformat(data.scheduled_at.replace("Z", "+00:00")) if data.scheduled_at else None
+        except Exception:
+            pass
+    db.commit()
+    db.refresh(lc)
+    return lc
 
 
 # ─── 9. Course Instructor Assignment ─────────────────────────────────────────

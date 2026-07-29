@@ -312,16 +312,44 @@ async def update_notification_bar(req: NotificationBarUpdate, device: str = Depe
     }
 
 @router.post("/site/upload")
-async def upload_site_image(file: UploadFile = File(...), device: str = Depends(require_device)):
-    """Upload an image file and return its URL."""
+async def upload_site_image(file: UploadFile = File(...), device: str = Depends(require_device), db: Session = Depends(get_db)):
+    """Upload a file (image or document) to R2 bucket (with local fallback). Returns the URL."""
     allowed_ext = ALLOWED_IMAGE_EXTENSIONS | ALLOWED_DOC_EXTENSIONS
     ext = validate_upload(file, allowed_ext, max_size=MAX_IMAGE_SIZE_BYTES)
-    os.makedirs("uploads", exist_ok=True)
-    filename = f"{uuid.uuid4().hex}.{ext}"
-    filepath = os.path.join("uploads", filename)
+    content = await file.read()
+
+    # Determine a logical folder based on file type
+    if ext in ALLOWED_IMAGE_EXTENSIONS:
+        folder = "images"
+    else:
+        folder = "documents"
+    unique_name = f"{folder}/{uuid.uuid4().hex}.{ext}"
+
+    # Try R2 first
+    try:
+        from models import R2Settings
+        import boto3
+        r2 = db.query(R2Settings).first()
+        if r2 and r2.is_active and r2.account_id and r2.secret_access_key and r2.bucket_name:
+            account = (r2.account_id or "").strip()
+            if "r2.cloudflarestorage.com" in account:
+                endpoint = account if account.startswith("http") else f"https://{account}"
+            else:
+                endpoint = f"https://{account}.r2.cloudflarestorage.com"
+            s3 = boto3.client(service_name="s3", endpoint_url=endpoint, aws_access_key_id=r2.access_key_id, aws_secret_access_key=r2.secret_access_key, region_name="auto")
+            s3.put_object(Bucket=r2.bucket_name, Key=unique_name, Body=content, ContentType=file.content_type or "application/octet-stream")
+            pub = (r2.public_url or "").rstrip("/")
+            return {"url": f"{pub}/{unique_name}" if pub else unique_name}
+    except Exception as e:
+        logging.warning(f"R2 upload failed for site upload, falling back to local: {e}")
+
+    # Local fallback
+    os.makedirs(f"uploads/{folder}", exist_ok=True)
+    filename = unique_name.split("/")[-1]
+    filepath = os.path.join("uploads", folder, filename)
     with open(filepath, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    return {"url": f"/uploads/{filename}"}
+        buffer.write(content)
+    return {"url": f"/uploads/{folder}/{filename}"}
 
 @router.post("/site/ticker-icon-upload")
 async def upload_ticker_icon(file: UploadFile = File(...), device: str = Depends(require_device), db: Session = Depends(get_db)):
@@ -1315,6 +1343,311 @@ Return ONLY valid JSON in this exact format (no markdown, no explanation):
             raise HTTPException(status_code=500, detail="AI returned no chapters. Try a different model or adjust your prompt.")
 
         return {"status": "success", "chapters": chapters, "model_used": model}
+    except HTTPException:
+        raise
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=400, detail=f"Network error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected server error: {str(e)}")
+
+
+# ══════════════════════════════════════════════════════
+#  AI COURSE AGENT (Plan / Act mode)
+# ══════════════════════════════════════════════════════
+
+class CourseAgentChatRequest(BaseModel):
+    message: str
+    mode: str = "plan"  # "plan" | "act"
+    model: Optional[str] = None
+    course_context: Optional[dict] = None
+    chat_history: Optional[List[dict]] = None
+    attachments: Optional[List[dict]] = None  # [{name, mime_type, data_base64}]
+    audio_transcript: Optional[str] = None
+    web_search_context: Optional[str] = None  # Pre-fetched web research snippets
+
+
+class WebSearchRequest(BaseModel):
+    query: str
+    num_results: int = 5
+
+
+class WebSearchResult(BaseModel):
+    title: str
+    snippet: str
+    url: str
+
+
+def _parse_duckduckgo_results(data: dict, limit: int) -> List[WebSearchResult]:
+    results: List[WebSearchResult] = []
+    abstract = (data.get("AbstractText") or "").strip()
+    source = (data.get("AbstractURL") or "").strip() or "https://duckduckgo.com"
+    heading = (data.get("Heading") or "").strip()
+    if abstract:
+        results.append(WebSearchResult(title=heading or "DuckDuckGo summary", snippet=abstract, url=source))
+
+    def walk_topics(topics):
+        for topic in topics:
+            if not isinstance(topic, dict):
+                continue
+            text = (topic.get("Text") or "").strip()
+            url = (topic.get("FirstURL") or "").strip()
+            if text and url:
+                results.append(WebSearchResult(title=text.split(" - ")[0] if " - " in text else text[:60], snippet=text, url=url))
+            if len(results) >= limit:
+                return
+            if "Topics" in topic and isinstance(topic["Topics"], list):
+                walk_topics(topic["Topics"])
+
+    related = data.get("RelatedTopics", [])
+    if isinstance(related, list):
+        walk_topics(related)
+    return results[:limit]
+
+
+@router.post("/ai/web-search", response_model=List[WebSearchResult])
+async def web_search(req: WebSearchRequest, device: str = Depends(require_device)):
+    """Fetch web research snippets for the AI agent. Uses SerpAPI if configured, otherwise DuckDuckGo Instant Answer."""
+    serp_api_key = os.getenv("SERP_API_KEY")
+    if serp_api_key:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.get(
+                    "https://serpapi.com/search",
+                    params={"engine": "google", "q": req.query, "api_key": serp_api_key, "num": min(req.num_results, 10)},
+                )
+                if resp.status_code == 200:
+                    organic = resp.json().get("organic_results", [])
+                    return [
+                        WebSearchResult(title=r.get("title", ""), snippet=r.get("snippet", ""), url=r.get("link", ""))
+                        for r in organic[:req.num_results]
+                    ]
+        except Exception:
+            pass
+
+    # Fallback to DuckDuckGo Instant Answer API (free, limited)
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(
+                "https://api.duckduckgo.com/",
+                params={"q": req.query, "format": "json", "no_html": "1", "no_redirect": "1", "skip_disambig": "1"},
+                headers={"User-Agent": "IINM-AI-Agent/1.0"},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return _parse_duckduckgo_results(data, req.num_results)
+    except Exception:
+        pass
+
+    raise HTTPException(status_code=502, detail="Web search unavailable. Set SERP_API_KEY in environment for better results.")
+
+
+@router.post("/ai/course-agent/chat")
+async def course_agent_chat(req: CourseAgentChatRequest, device: str = Depends(require_device), db: Session = Depends(get_db)):
+    """AI Course Agent — conversational course creation/editing with Plan and Act modes."""
+    import base64, io
+
+    settings = db.query(AISettings).first()
+    if not settings or not settings.openrouter_api_key:
+        raise HTTPException(status_code=400, detail="OpenRouter API key not configured. Please set it in AI Settings.")
+
+    api_key = settings.openrouter_api_key
+    model = req.model or settings.model_general_text or settings.model_thinking or "openai/gpt-4o-mini"
+
+    mode = req.mode if req.mode in ("plan", "act") else "plan"
+    course_ctx = req.course_context or {}
+
+    # Web research context
+    web_search = req.web_search_context or ""
+    if web_search:
+        web_search = f"\n[Web research results to help answer the user]\n{web_search}\n"
+
+    # Build available fields description
+    field_descriptions = """Available course fields (only use these field names in proposed_changes):
+- title (string): Course title
+- description (string): Course description
+- status (string): "DRAFT" | "PUBLISHED" | "ARCHIVED"
+- skill_level (string): "" | "Beginner" | "Intermediate" | "Advanced"
+- target_audience (string): Who the course is for
+- prerequisites (string): What students should know
+- what_you_will_learn (string): Learning outcomes (1 per line)
+- seo_title (string): SEO meta title
+- seo_description (string): SEO meta description
+- seo_keywords (string): Comma-separated keywords
+- thumbnail_url (string): Image URL for course thumbnail
+- promo_video_url (string): YouTube/Vimeo URL for promo video
+- upload_syllabus (string): PDF URL for syllabus
+- price (number): Base price in INR
+- discount_price (number): Discount price in INR
+- price_usd (number): Base price in USD
+- discount_price_usd (number): Discount price in USD
+- is_free (boolean): Whether the course is free
+- validity_days (number): Duration in days (e.g. 180 for 6 months)
+- has_certificate (boolean): Whether course offers completion certificate
+- is_featured (boolean): Whether to mark as featured
+- show_on_homepage (boolean): Whether to show on homepage
+- is_new (boolean): Whether to show NEW badge
+- subject_ids (array of integers): IDs of selected subjects
+- chapter_ids (array of integers): IDs of selected chapters
+- instructor_ids (array of integers): IDs of assigned instructors"""
+
+    available_subjects = course_ctx.get("available_subjects", [])
+    available_instructors = course_ctx.get("available_instructors", [])
+
+    if mode == "plan":
+        system_prompt = f"""You are an AI Course Creation Agent for an educational platform (IINM).
+Your job is to HELP the user plan a course by proposing changes to course fields.
+You are in PLAN MODE — propose changes but do NOT apply them yet. The user will review and approve.
+
+{field_descriptions}
+
+Available subcategories to choose from for new subjects (use these IDs when mapping):
+{json.dumps(course_ctx.get("available_subcategories", []), ensure_ascii=False)}
+
+Available subjects to choose from (use these IDs in subject_ids):
+{json.dumps(available_subjects, ensure_ascii=False)}
+
+Available instructors to choose from (use these IDs in instructor_ids):
+{json.dumps(available_instructors, ensure_ascii=False)}
+
+Current course context (current form values):
+{json.dumps({k: v for k, v in course_ctx.items() if k not in ("available_subjects", "available_instructors", "available_subcategories")}, ensure_ascii=False, default=str)}
+{web_search}
+Rules:
+1. If you have enough information, propose changes as key-value pairs in "proposed_changes".
+2. If a required subject, subcategory, or category doesn't exist, ask the user for the names to create. Once confirmed, return a "proposed_catalog" object with keys: categories (array of {{name}}), subcategories (array of {{name, category_name}}), subjects (array of {{name, subcategory_name}}), chapters (array of {{title, subject_name, content?}}), materials (array of {{title, chapter_title, description?, youtube_url?}}), live_classes (array of {{title, chapter_title, meeting_url?, scheduled_at?}}).
+3. Do NOT propose catalog and changes in the same turn unless the user explicitly asks.
+4. If you need more info, ask clarifying questions in the "questions" array.
+5. Do NOT make up subject/instructor IDs — only use IDs from the available lists above.
+6. For subject_ids, chapter_ids, instructor_ids — only include IDs that exist in the available lists.
+7. Keep your "reply" concise and friendly. Explain what you're proposing and why.
+8. Return ONLY valid JSON: {{"reply": "...", "proposed_changes": {{...}}, "proposed_catalog": {{...}}, "questions": ["..."]}}
+9. If the user's request doesn't relate to course creation, politely steer them back.
+10. If no changes are needed, return empty proposed_changes and explain why in reply.
+11. When proposing curriculum from a syllabus/PDF, ALWAYS include materials (topics) for each chapter with descriptive titles. If you know YouTube URLs for relevant educational videos, include them. Also propose live_classes with placeholder meeting_url "https://meet.google.com/placeholder" if exact URL is unknown.
+12. For materials, "chapter_title" must match the title of a chapter in the same proposed_catalog's chapters array. For live_classes, same rule applies."""
+    else:
+        system_prompt = f"""You are an AI Course Creation Agent for an educational platform (IINM).
+You are in ACT MODE — directly apply the user's instructions to course fields.
+Return the updated field values in "proposed_changes". The system will auto-apply them.
+
+{field_descriptions}
+
+Available subcategories to choose from for new subjects (use these IDs when mapping):
+{json.dumps(course_ctx.get("available_subcategories", []), ensure_ascii=False)}
+
+Available subjects to choose from (use these IDs in subject_ids):
+{json.dumps(available_subjects, ensure_ascii=False)}
+
+Available instructors to choose from (use these IDs in instructor_ids):
+{json.dumps(available_instructors, ensure_ascii=False)}
+
+Current course context (current form values):
+{json.dumps({k: v for k, v in course_ctx.items() if k not in ("available_subjects", "available_instructors", "available_subcategories")}, ensure_ascii=False, default=str)}
+{web_search}
+Rules:
+1. Apply the user's instructions directly by returning field values in "proposed_changes".
+2. If a required subject, subcategory, or category doesn't exist, ask the user for the names to create. Once confirmed, return a "proposed_catalog" object with keys: categories (array of {{name}}), subcategories (array of {{name, category_name}}), subjects (array of {{name, subcategory_name}}), chapters (array of {{title, subject_name, content?}}), materials (array of {{title, chapter_title, description?, youtube_url?}}), live_classes (array of {{title, chapter_title, meeting_url?, scheduled_at?}}).
+3. Do NOT propose catalog and changes in the same turn unless the user explicitly asks.
+4. Do NOT make up subject/instructor IDs — only use IDs from the available lists above.
+5. Keep your "reply" concise — briefly state what was applied.
+6. If you need clarification, still ask in "questions" but apply what you can.
+7. Return ONLY valid JSON: {{"reply": "...", "proposed_changes": {{...}}, "proposed_catalog": {{...}}, "questions": ["..."]}}
+8. When proposing curriculum from a syllabus/PDF, ALWAYS include materials (topics) for each chapter with descriptive titles. If you know YouTube URLs for relevant educational videos, include them. Also propose live_classes with placeholder meeting_url "https://meet.google.com/placeholder" if exact URL is unknown.
+9. For materials, "chapter_title" must match the title of a chapter in the same proposed_catalog's chapters array. For live_classes, same rule applies."""
+
+    # Build user content (text + attachments)
+    user_content = []
+
+    # Include chat history context (last 10 messages)
+    history_text = ""
+    if req.chat_history:
+        recent = req.chat_history[-10:]
+        for msg in recent:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "user":
+                history_text += f"User: {content}\n"
+            elif role == "assistant":
+                history_text += f"Assistant: {content}\n"
+        if history_text:
+            user_content.append({"type": "text", "text": f"Previous conversation:\n{history_text.strip()}"})
+
+    # Main message
+    user_content.append({"type": "text", "text": f"User message:\n{req.message}"})
+
+    # Audio transcript
+    if req.audio_transcript:
+        user_content.append({"type": "text", "text": f"\nAudio transcript:\n{req.audio_transcript}"})
+
+    # Attachments (PDF text extraction + image passthrough)
+    if req.attachments:
+        for att in req.attachments[:5]:
+            mime = att.get("mime_type", "")
+            name = att.get("name", "file")
+            b64 = att.get("data_base64", "")
+            if not b64:
+                continue
+            if mime == "application/pdf":
+                try:
+                    pdf_bytes = base64.b64decode(b64)
+                    pdf_text = _extract_pdf_text(pdf_bytes)
+                    if len(pdf_text) > 30000:
+                        pdf_text = pdf_text[:30000] + "\n\n[... content truncated ...]"
+                    user_content.append({"type": "text", "text": f"\n[Attached PDF: {name}]\nExtracted text:\n{pdf_text}"})
+                except Exception as e:
+                    user_content.append({"type": "text", "text": f"\n[Attached PDF: {name} — failed to extract text: {str(e)}]"})
+            elif mime.startswith("image/"):
+                user_content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mime};base64,{b64}"}
+                })
+            else:
+                user_content.append({"type": "text", "text": f"\n[Attached file: {name} ({mime})]"})
+
+    try:
+        raw_text = await _call_openrouter_chat(api_key, model, system_prompt, user_content, max_tokens=8192)
+
+        try:
+            result = _extract_json(raw_text)
+        except ValueError:
+            # If JSON parse fails, return the raw text as reply
+            return {
+                "reply": str(raw_text),
+                "proposed_changes": None,
+                "proposed_catalog": None,
+                "questions": None,
+                "mode_used": mode,
+                "applied": False,
+                "model_used": model,
+            }
+
+        reply = result.get("reply", "")
+        proposed = result.get("proposed_changes")
+        questions = result.get("questions")
+
+        # Filter proposed_changes to only valid field names
+        valid_fields = {
+            "title", "description", "status", "skill_level", "target_audience",
+            "prerequisites", "what_you_will_learn", "seo_title", "seo_description",
+            "seo_keywords", "thumbnail_url", "promo_video_url", "upload_syllabus",
+            "price", "discount_price", "price_usd", "discount_price_usd", "is_free",
+            "validity_days", "has_certificate", "is_featured", "show_on_homepage",
+            "is_new", "subject_ids", "chapter_ids", "instructor_ids",
+        }
+        if proposed and isinstance(proposed, dict):
+            proposed = {k: v for k, v in proposed.items() if k in valid_fields}
+
+        applied = mode == "act" and bool(proposed)
+
+        return {
+            "reply": reply,
+            "proposed_changes": proposed,
+            "proposed_catalog": result.get("proposed_catalog"),
+            "questions": questions if isinstance(questions, list) else None,
+            "mode_used": mode,
+            "applied": applied,
+            "model_used": model,
+        }
     except HTTPException:
         raise
     except httpx.RequestError as e:

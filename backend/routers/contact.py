@@ -36,12 +36,32 @@ class ContactSettingsSchema(BaseModel):
     linkedin_url: Optional[str] = None
     youtube_url: Optional[str] = None
     twitter_url: Optional[str] = None
+    # Page content
+    page_title: Optional[str] = None
+    page_subtitle: Optional[str] = None
+    get_in_touch_heading: Optional[str] = None
+    get_in_touch_description: Optional[str] = None
+    contact_email_label: Optional[str] = None
+    contact_phone_label: Optional[str] = None
+    registered_office_label: Optional[str] = None
+    registered_office_city: Optional[str] = None
+    registered_office_address: Optional[str] = None
+    form_title: Optional[str] = None
+    form_subtitle: Optional[str] = None
+    state_options: Optional[str] = None
+    qualification_options: Optional[str] = None
+    terms_text: Optional[str] = None
+    terms_url: Optional[str] = None
+    success_message: Optional[str] = None
+    review_badges: Optional[str] = None
 
 class InquirySchema(BaseModel):
     name: str
     email: str
     phone: Optional[str] = None
     interest: Optional[str] = None
+    state: Optional[str] = None
+    qualification: Optional[str] = None
     message: Optional[str] = None
 
 # ══════════════════════════════════════════════════════
@@ -63,6 +83,15 @@ async def get_contact_settings(db: Session = Depends(get_db)):
         "map_embed_url": s.map_embed_url,
         "facebook_url": s.facebook_url, "instagram_url": s.instagram_url,
         "linkedin_url": s.linkedin_url, "youtube_url": s.youtube_url, "twitter_url": s.twitter_url,
+        "page_title": s.page_title, "page_subtitle": s.page_subtitle,
+        "get_in_touch_heading": s.get_in_touch_heading, "get_in_touch_description": s.get_in_touch_description,
+        "contact_email_label": s.contact_email_label, "contact_phone_label": s.contact_phone_label,
+        "registered_office_label": s.registered_office_label, "registered_office_city": s.registered_office_city,
+        "registered_office_address": s.registered_office_address,
+        "form_title": s.form_title, "form_subtitle": s.form_subtitle,
+        "state_options": s.state_options, "qualification_options": s.qualification_options,
+        "terms_text": s.terms_text, "terms_url": s.terms_url,
+        "success_message": s.success_message, "review_badges": s.review_badges,
     }
 
 @router.put("/settings")
@@ -146,7 +175,8 @@ async def submit_inquiry(req: InquirySchema, request: Request, db: Session = Dep
     check_public_rate_limit(client_ip, limit=5, window=300)  # 5 per 5 min
     inquiry = ContactInquiry(
         name=req.name, email=req.email, phone=req.phone,
-        interest=req.interest, message=req.message
+        interest=req.interest, state=req.state,
+        qualification=req.qualification, message=req.message
     )
     db.add(inquiry)
     db.commit()

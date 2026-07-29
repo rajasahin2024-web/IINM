@@ -46,9 +46,17 @@ function extOf(name: string) {
   return (name.split(".").pop() || "").toLowerCase();
 }
 
+function isImage(name: string) {
+  return ["jpg", "jpeg", "png", "gif", "webp", "svg", "avif"].includes(extOf(name));
+}
+
+function isVideo(name: string) {
+  return ["mp4", "webm", "mov", "avi", "mkv"].includes(extOf(name));
+}
+
 function getTypeInfo(name: string): { color: string; bg: string; label: string } {
   const ext = extOf(name);
-  if (["mp4", "webm", "mov", "avi", "mkv"].includes(ext))
+  if (isVideo(name))
     return { color: "#7c3aed", bg: "#ede9fe", label: "VIDEO" };
   if (ext === "pdf")
     return { color: "#d97706", bg: "#fef3c7", label: "PDF" };
@@ -373,10 +381,29 @@ export default function R2FileManager({ initialPrefix = "" }: { initialPrefix?: 
   };
 
   // ── Copy URL ──────────────────────────────────────────────────────────────────
+  const getPublicUrl = (key: string) => state.publicUrl ? `${state.publicUrl.replace(/\/$/, "")}/${key}` : key;
+
   const copyUrl = (file: R2File) => {
-    const url = state.publicUrl ? `${state.publicUrl.replace(/\/$/, "")}/${file.key}` : file.key;
+    const url = getPublicUrl(file.key);
     navigator.clipboard.writeText(url);
     toast.success("URL Copied!");
+  };
+
+  const copyStreamUrl = (file: R2File) => {
+    const url = getPublicUrl(file.key);
+    navigator.clipboard.writeText(url);
+    toast.success("Streamable URL copied!");
+  };
+
+  const copyHtmlEmbed = (file: R2File) => {
+    const url = getPublicUrl(file.key);
+    const ext = extOf(file.name);
+    const isVideo = ["mp4", "webm", "mov", "avi", "mkv"].includes(ext);
+    const html = isVideo
+      ? `<video src="${url}" controls style="max-width:100%"></video>`
+      : `<img src="${url}" alt="${file.name}" style="max-width:100%" />`;
+    navigator.clipboard.writeText(html);
+    toast.success("HTML embed copied!");
   };
 
   // ── Breadcrumb ────────────────────────────────────────────────────────────────
@@ -416,81 +443,49 @@ export default function R2FileManager({ initialPrefix = "" }: { initialPrefix?: 
         .fm-folder-row:hover { background: #fffbeb !important; }
       `}</style>
 
-      {/* ── Toolbar ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: "#fff", borderBottom: "1px solid #f1f5f9", flexWrap: "wrap" }}>
-        {/* Breadcrumb */}
-        <div style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, minWidth: 0, flexWrap: "wrap" }}>
-          <button onClick={() => { setHistory([initialPrefix]); load(initialPrefix); }}
-            style={{ fontSize: 13, fontWeight: 700, color: "#38bdf8", background: "none", border: "none", cursor: "pointer", padding: "3px 8px", borderRadius: 6, display: "flex", alignItems: "center", gap: 4 }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
-            root
+      {/* ── Windows Explorer Toolbar ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
+        <div style={{ display: "flex", gap: 4 }}>
+          {iconBtn("Back", () => { goBack(); }, <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15,18 9,12 15,6"/></svg>, "#64748b", history.length > 1 ? "#38bdf8" : "#cbd5e1")}
+          {iconBtn("Up", () => { if (state.prefix) { const up = state.prefix.replace(/[^/]+\/$/, ""); setHistory(h => [...h, up]); load(up); } }, <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 15l-6-6-6 6"/></svg>, "#64748b", state.prefix ? "#38bdf8" : "#cbd5e1")}
+          {iconBtn("Refresh", () => load(state.prefix), <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: state.loading ? "spin 1s linear infinite" : "none" }}><polyline points="23,4 23,10 17,10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>)}
+        </div>
+
+        {/* Address bar */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden" }}>
+          <button onClick={() => { setHistory([initialPrefix]); load(initialPrefix); }} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", color: "#38bdf8", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg> root
           </button>
           {breadcrumbs.map((seg, i) => {
             const p = breadcrumbs.slice(0, i + 1).join("/") + "/";
-            // if an initial prefix is provided, hide it from the breadcrumbs if it's identical
             if (initialPrefix && p === initialPrefix) return null;
-            const isLast = i === breadcrumbs.length - 1;
             return (
               <React.Fragment key={p}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="2.5"><polyline points="9,18 15,12 9,6"/></svg>
-                <button
-                  onClick={() => { setHistory(h => [...h.slice(0, 1), p]); load(p); }}
-                  style={{ fontSize: 13, fontWeight: isLast ? 700 : 500, color: isLast ? "#0f172a" : "#38bdf8", background: "none", border: "none", cursor: "pointer", padding: "3px 8px", borderRadius: 6 }}>
-                  {seg}
-                </button>
+                <button onClick={() => { setHistory(h => [...h.slice(0, 1), p]); load(p); }} style={{ background: "none", border: "none", cursor: "pointer", color: i === breadcrumbs.length - 1 ? "#0f172a" : "#38bdf8", fontSize: 12, fontWeight: i === breadcrumbs.length - 1 ? 700 : 600, flexShrink: 0 }}>{seg}</button>
               </React.Fragment>
             );
           })}
         </div>
 
-        {/* Search */}
-        <div style={{ position: "relative", flexShrink: 0 }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)" }}>
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <input
-            value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search files..."
-            style={{ paddingLeft: 30, paddingRight: 12, height: 32, borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, outline: "none", width: 180 }}
-          />
-        </div>
-
-        {/* Action buttons */}
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-          {history.length > 1 && iconBtn("Go back", goBack, <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15,18 9,12 15,6"/></svg>)}
-
-          {iconBtn("Refresh", () => load(state.prefix),
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: state.loading ? "spin 1s linear infinite" : "none" }}>
-              <polyline points="23,4 23,10 17,10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
-            </svg>)}
-
-          {iconBtn("New Folder", () => setShowNewFolder(true),
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>,
-            "#64748b", "#f59e0b")}
-
-          <button onClick={() => fileInputRef.current?.click()}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 14px", height: 32, borderRadius: 8, border: "none", background: "linear-gradient(135deg, #38bdf8, #0ea5e9)", color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: "pointer", boxShadow: "0 2px 8px rgba(56,189,248,0.3)", transition: "all 0.15s" }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            Upload
+          <div style={{ position: "relative" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)" }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search current folder..." style={{ paddingLeft: 30, paddingRight: 10, height: 30, borderRadius: 6, border: "1px solid #e2e8f0", fontSize: 12, outline: "none", width: 170, background: "#fff" }} />
+          </div>
+          {iconBtn("New Folder", () => setShowNewFolder(true), <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>, "#64748b", "#f59e0b")}
+          <button onClick={() => fileInputRef.current?.click()} style={{ display: "flex", alignItems: "center", gap: 5, padding: "0 12px", height: 30, borderRadius: 6, border: "none", background: "#38bdf8", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Upload
           </button>
-          <input ref={fileInputRef} type="file" multiple style={{ display: "none" }}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => { if (e.target.files) uploadFiles(e.target.files); e.target.value = ""; }} />
-
-          {iconBtn(viewMode === "list" ? "Grid View" : "List View",
+          <input ref={fileInputRef} type="file" multiple style={{ display: "none" }} onChange={(e: ChangeEvent<HTMLInputElement>) => { if (e.target.files) uploadFiles(e.target.files); e.target.value = ""; }} />
+          {iconBtn(viewMode === "list" ? "Icons" : "Details",
             () => setViewMode(m => m === "list" ? "grid" : "list"),
             viewMode === "list" ? (
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
             ) : (
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
             ))}
-
-          {selected.size > 0 && (
-            <button onClick={() => deleteFiles(Array.from(selected))}
-              style={{ display: "flex", alignItems: "center", gap: 5, padding: "0 12px", height: 32, borderRadius: 8, border: "none", background: "#fef2f2", color: "#ef4444", fontSize: 12.5, fontWeight: 700, cursor: "pointer", transition: "all 0.15s" }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14a2 2 0 01-2 2H8a2 2 0 01-2-2L5,6"/></svg>
-              Delete ({selected.size})
-            </button>
-          )}
+          {selected.size > 0 && iconBtn("Delete selected", () => deleteFiles(Array.from(selected)), <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14a2 2 0 01-2 2H8a2 2 0 01-2-2L5,6"/></svg>, "#ef4444", "#ef4444")}
         </div>
       </div>
 
@@ -502,12 +497,29 @@ export default function R2FileManager({ initialPrefix = "" }: { initialPrefix?: 
         </div>
       )}
 
-      {/* ── Drop Zone + File Area ── */}
-      <div
-        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={onDrop}
-        style={{ flex: 1, overflowY: "auto", background: dragOver ? "#f0f9ff" : "#fff", transition: "background 0.2s", position: "relative" }}>
+      {/* ── Explorer Body: Sidebar + File Area ── */}
+      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+        <aside style={{ width: 220, background: "#f8fafc", borderRight: "1px solid #e2e8f0", overflowY: "auto", padding: "12px 0" }}>
+          <p style={{ padding: "0 14px", fontSize: 11, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 8 }}>This folder</p>
+          {filteredFolders.length === 0 ? (
+            <p style={{ padding: "0 14px", fontSize: 12, color: "#94a3b8" }}>No subfolders</p>
+          ) : (
+            filteredFolders.map(f => {
+              const name = f.replace(state.prefix, "").replace(/\/$/, "");
+              return (
+                <button key={f} onClick={() => navigateTo(f)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#475569", textAlign: "left" }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="#fbbf24" stroke="#d97706" strokeWidth="1.5"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
+                  {name}
+                </button>
+              );
+            })
+          )}
+        </aside>
+        <main
+          onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDrop}
+          style={{ flex: 1, overflowY: "auto", background: dragOver ? "#f0f9ff" : "#fff", transition: "background 0.2s", position: "relative" }}>
 
         {dragOver && (
           <div style={{ position: "absolute", inset: 0, zIndex: 50, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(240,249,255,0.95)", border: "2px dashed #38bdf8", borderRadius: 8, margin: 12 }}>
@@ -615,6 +627,10 @@ export default function R2FileManager({ initialPrefix = "" }: { initialPrefix?: 
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>)}
                             {iconBtn("Copy URL", () => copyUrl(f),
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>)}
+                            {isVideo(f.name) && iconBtn("Copy Stream URL", () => copyStreamUrl(f),
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="5,3 19,12 5,21 5,3"/></svg>, "#7c3aed", "#7c3aed")}
+                            {(isVideo(f.name) || isImage(f.name)) && iconBtn("Copy HTML", () => copyHtmlEmbed(f),
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="16,18 22,12 16,6"/><polyline points="8,6 2,12 8,18"/></svg>, "#0ea5e9", "#0ea5e9")}
                             {iconBtn("Rename", () => { setRenameTarget(f); setRenameName(f.name); },
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
                               "#f59e0b", "#f59e0b")}
@@ -705,6 +721,8 @@ export default function R2FileManager({ initialPrefix = "" }: { initialPrefix?: 
                             </div>
                             <div style={{ display: "flex", borderTop: "1px solid #f1f5f9", padding: "6px 8px", gap: 4 }}>
                               {iconBtn("Copy URL", () => copyUrl(f), <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>)}
+                              {isVideo(f.name) && iconBtn("Stream", () => copyStreamUrl(f), <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="5,3 19,12 5,21 5,3"/></svg>, "#7c3aed", "#7c3aed")}
+                              {(isVideo(f.name) || isImage(f.name)) && iconBtn("HTML", () => copyHtmlEmbed(f), <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="16,18 22,12 16,6"/><polyline points="8,6 2,12 8,18"/></svg>, "#0ea5e9", "#0ea5e9")}
                               {iconBtn("Rename", () => { setRenameTarget(f); setRenameName(f.name); }, <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>, "#f59e0b", "#f59e0b")}
                               {iconBtn("Delete", () => deleteFiles([f.key]), <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14a2 2 0 01-2 2H8a2 2 0 01-2-2L5,6"/></svg>, "#ef4444", "#ef4444")}
                             </div>
@@ -726,6 +744,7 @@ export default function R2FileManager({ initialPrefix = "" }: { initialPrefix?: 
             )}
           </>
         )}
+      </main>
       </div>
 
       {/* ── Status Bar ── */}
@@ -789,14 +808,14 @@ export default function R2FileManager({ initialPrefix = "" }: { initialPrefix?: 
       {previewFile && (() => {
         const pubUrl = state.publicUrl ? `${state.publicUrl.replace(/\/$/, "")}/${previewFile.key}` : "";
         const ext = extOf(previewFile.name);
-        const isImg = ["jpg", "jpeg", "png", "gif", "webp", "svg", "avif"].includes(ext);
-        const isVideo = ["mp4", "webm", "mov"].includes(ext);
-        const isAudio = ["mp3", "wav", "ogg", "aac"].includes(ext);
+        const previewIsImg = ["jpg", "jpeg", "png", "gif", "webp", "svg", "avif"].includes(ext);
+        const previewIsVideo = ["mp4", "webm", "mov"].includes(ext);
+        const previewIsAudio = ["mp3", "wav", "ogg", "aac"].includes(ext);
         const type = getTypeInfo(previewFile.name);
 
         return (
           <div onClick={() => setPreviewFile(null)} style={{ position: "fixed", inset: 0, zIndex: 3000, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", animation: "fadeIn 0.15s" }}>
-            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, overflow: "hidden", maxWidth: "90vw", width: isImg || isVideo ? 860 : 480, maxHeight: "90vh", display: "flex", flexDirection: "column", animation: "slideUp 0.2s", boxShadow: "0 32px 80px rgba(0,0,0,0.4)" }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, overflow: "hidden", maxWidth: "90vw", width: previewIsImg || previewIsVideo ? 860 : 480, maxHeight: "90vh", display: "flex", flexDirection: "column", animation: "slideUp 0.2s", boxShadow: "0 32px 80px rgba(0,0,0,0.4)" }}>
               {/* Preview header */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid #f1f5f9", background: "#f8fafc" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
@@ -813,6 +832,18 @@ export default function R2FileManager({ initialPrefix = "" }: { initialPrefix?: 
                       Copy URL
                     </button>
                   )}
+                  {pubUrl && isVideo(previewFile.name) && (
+                    <button onClick={() => copyStreamUrl(previewFile)}
+                      style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 600, color: "#7c3aed" }}>
+                      Copy Stream URL
+                    </button>
+                  )}
+                  {pubUrl && (isVideo(previewFile.name) || isImage(previewFile.name)) && (
+                    <button onClick={() => copyHtmlEmbed(previewFile)}
+                      style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 600, color: "#0ea5e9" }}>
+                      Copy HTML
+                    </button>
+                  )}
                   {pubUrl && (
                     <a href={pubUrl} target="_blank" rel="noreferrer"
                       style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: "#38bdf8", fontSize: 12, cursor: "pointer", fontWeight: 700, color: "#fff", textDecoration: "none" }}>
@@ -825,11 +856,11 @@ export default function R2FileManager({ initialPrefix = "" }: { initialPrefix?: 
               </div>
 
               {/* Preview content */}
-              <div style={{ overflowY: "auto", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: isImg ? "#0f172a" : "#fff" }}>
-                {isImg && pubUrl && <img src={pubUrl} alt={previewFile.name} style={{ maxWidth: "100%", maxHeight: "65vh", objectFit: "contain", borderRadius: 8 }} />}
-                {isVideo && pubUrl && <video src={pubUrl} controls style={{ maxWidth: "100%", maxHeight: "65vh", outline: "none", borderRadius: 8 }} />}
-                {isAudio && pubUrl && <audio src={pubUrl} controls style={{ width: "100%" }} />}
-                {!isImg && !isVideo && !isAudio && (
+              <div style={{ overflowY: "auto", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: previewIsImg ? "#0f172a" : "#fff" }}>
+                {previewIsImg && pubUrl && <img src={pubUrl} alt={previewFile.name} style={{ maxWidth: "100%", maxHeight: "65vh", objectFit: "contain", borderRadius: 8 }} />}
+                {previewIsVideo && pubUrl && <video src={pubUrl} controls style={{ maxWidth: "100%", maxHeight: "65vh", outline: "none", borderRadius: 8 }} />}
+                {previewIsAudio && pubUrl && <audio src={pubUrl} controls style={{ width: "100%" }} />}
+                {!previewIsImg && !previewIsVideo && !previewIsAudio && (
                   <div style={{ textAlign: "center", padding: 20 }}>
                     <div style={{ width: 80, height: 80, borderRadius: 20, background: type.bg, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
                       <FileIcon name={previewFile.name} size={40} />

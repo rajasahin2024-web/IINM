@@ -152,6 +152,11 @@ cd backend
 uvicorn main:app --reload --host 0.0.0.0 --port 2007
 
 
+cd d:\OneDrive\iinm\backend
+.\venv\Scripts\activate
+uvicorn main:app --host 127.0.0.1 --port 2007 --reload
+
+
 Main admin login (/api/login) credentials:
 
 Email: admin@iinm.com
