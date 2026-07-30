@@ -99,23 +99,33 @@ export default function ContactUsSettingsPage() {
 }
 
 /* ── Inner component — runs inside ToastProvider ── */
-function ContactUsSettingsInner() {
+export function ContactUsSettingsInner({ forceFullScreen = false, onFullScreenClose, initialData }: { forceFullScreen?: boolean; onFullScreenClose?: () => void; initialData?: Partial<S> }) {
   const { showToast } = useToast();
   const toast = { success: (m: string) => showToast(m, "success"), error: (m: string) => showToast(m, "error") };
 
-  const [settings, setSettings] = useState<S>(empty);
+  const [settings, setSettings] = useState<S>({ ...empty, ...(initialData || {}) });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [banners, setBanners] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
   const [inquiries, setInquiries] = useState<any[]>([]);
-  const [tab, setTab] = useState<"settings" | "banners" | "inquiries">("settings");
+  const [googleApi, setGoogleApi] = useState({ google_map_api_key: "", google_client_id: "", google_client_secret: "", google_redirect_uri: "" });
+  const [savingGoogle, setSavingGoogle] = useState(false);
+  const [tab, setTab] = useState<"settings" | "banners" | "inquiries" | "google">("settings");
+  const [fullScreen, setFullScreen] = useState(forceFullScreen);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const p = new URLSearchParams(window.location.search);
+    if (p.get("fullscreen") === "1") setFullScreen(true);
+  }, []);
 
   useEffect(() => {
     fetchSettings();
     fetchBanners();
     fetchInquiries();
+    fetchGoogleApi();
   }, []);
 
   const fetchSettings = async () => {
@@ -176,6 +186,30 @@ function ContactUsSettingsInner() {
     fetchBanners();
   };
 
+  const fetchGoogleApi = async () => {
+    try {
+      const res = await apiFetch(`${BASE}/api/contact/google-api/admin`);
+      if (res.ok) { const d = await res.json(); setGoogleApi(prev => ({ ...prev, ...d })); }
+    } catch {}
+  };
+
+  const handleSaveGoogle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingGoogle(true);
+    try {
+      const payload: any = {};
+      Object.entries(googleApi).forEach(([k, v]) => { payload[k] = (v as string).trim() === "" ? null : v; });
+      const res = await apiFetch(`${BASE}/api/contact/google-api`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      toast.success("Google API settings saved!");
+    } catch { toast.error("Failed to save Google API settings."); }
+    finally { setSavingGoogle(false); }
+  };
+
+  const setGoogle = (k: keyof typeof googleApi) => (e: any) => setGoogleApi(p => ({ ...p, [k]: e.target.value }));
+
   const set = (k: keyof S) => (e: any) => setSettings(p => ({ ...p, [k]: e.target.value }));
 
   if (loading) return (
@@ -188,6 +222,7 @@ function ContactUsSettingsInner() {
     { id: "settings", label: "Contact Info", icon: "phone" },
     { id: "banners", label: "Carousel Banners", icon: "image" },
     { id: "inquiries", label: "Enquiries", icon: "mail" },
+    { id: "google", label: "Google API", icon: "globe" },
   ] as const;
 
   return (
@@ -199,6 +234,11 @@ function ContactUsSettingsInner() {
         <p style={{ margin: "6px 0 0", fontSize: 14, color: "#64748b" }}>
           Manage all details shown on the public Contact Us page.
         </p>
+        {tab === "settings" && (
+          <button onClick={() => setFullScreen(true)} style={{ marginTop: 14, background: "#0f172a", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+            <Icon name="external-link" size={14} /> Open Full Screen Editor
+          </button>
+        )}
       </header>
 
       {/* Tab Bar */}
@@ -217,9 +257,18 @@ function ContactUsSettingsInner() {
 
       {/* ── Tab: Contact Info ── */}
       {tab === "settings" && (
+        <div style={fullScreen ? { position: "fixed", inset: 0, zIndex: 100, background: "#f8fafc", overflow: "auto" } : {}}>
+          {fullScreen && (
+            <div style={{ position: "sticky", top: 0, background: "#fff", borderBottom: "1px solid #e2e8f0", padding: "16px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#0f172a" }}>Edit Contact Page Content</h2>
+              <button onClick={() => { if (onFullScreenClose) onFullScreenClose(); else setFullScreen(false); }} type="button" style={{ background: "#f1f5f9", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                <Icon name="x" size={14} /> Close
+              </button>
+            </div>
+          )}
         <form onSubmit={handleSave}>
-          <div style={cardStyle}>
-            <div style={padded}>
+          <div style={{ ...cardStyle, ...(fullScreen ? { borderRadius: 0, border: "none", boxShadow: "none", marginBottom: 0 } : {}) }}>
+            <div style={{ ...padded, ...(fullScreen ? { maxWidth: 1200, margin: "0 auto" } : {}) }}>
               <SectionHeader num="1" title="Phone & Email" />
               <div style={grid2}>
                 <FInput label="Phone 1" value={settings.phone1} onChange={set("phone1")} />
@@ -328,6 +377,7 @@ function ContactUsSettingsInner() {
             </div>
           </div>
         </form>
+        </div>
       )}
 
       {/* ── Tab: Banners ── */}
@@ -431,6 +481,43 @@ function ContactUsSettingsInner() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Tab: Google API ── */}
+      {tab === "google" && (
+        <form onSubmit={handleSaveGoogle}>
+          <div style={cardStyle}>
+            <div style={padded}>
+              <SectionHeader num="1" title="Google Maps API Key" />
+              <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 16px" }}>
+                Store your Google Maps API key here. This key is used for embedding maps on the contact page and other locations.
+              </p>
+              <div style={{ marginBottom: 24 }}>
+                <FInput label="Google Map API Key" value={googleApi.google_map_api_key} onChange={setGoogle("google_map_api_key")} />
+              </div>
+
+              <SectionHeader num="2" title="Google Sign-In / OAuth Credentials" />
+              <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 16px" }}>
+                Configure Google OAuth credentials for Google Sign-In / Login functionality.
+              </p>
+              <div style={grid2}>
+                <FInput label="Google Client ID" value={googleApi.google_client_id} onChange={setGoogle("google_client_id")} />
+                <FInput label="Google Client Secret" value={googleApi.google_client_secret} onChange={setGoogle("google_client_secret")} />
+              </div>
+              <div style={{ marginBottom: 24 }}>
+                <FInput label="Google Redirect URI" value={googleApi.google_redirect_uri} onChange={setGoogle("google_redirect_uri")} />
+              </div>
+            </div>
+            <div style={{ padding: "16px 32px", background: "#f8fafc", display: "flex", justifyContent: "flex-end" }}>
+              <button type="submit" disabled={savingGoogle}
+                style={{ background: "#38bdf8", color: "#fff", border: "none", padding: "12px 28px", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: savingGoogle ? "not-allowed" : "pointer", opacity: savingGoogle ? 0.7 : 1, display: "flex", alignItems: "center", gap: 8, boxShadow: "0 4px 6px -1px rgba(56,189,248,.3)" }}
+                onMouseEnter={e => !savingGoogle && (e.currentTarget.style.transform = "translateY(-1px)")}
+                onMouseLeave={e => !savingGoogle && (e.currentTarget.style.transform = "none")}>
+                {savingGoogle ? "Saving..." : <><Icon name="save" size={16} /> Save Google API Settings</>}
+              </button>
+            </div>
+          </div>
+        </form>
       )}
     </div>
   );

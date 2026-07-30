@@ -404,6 +404,7 @@ export default function CourseDetailsPage() {
   const [selectedModuleIdx, setSelectedModuleIdx] = useState<number>(0);
   const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
   const [openFaqs, setOpenFaqs] = useState<Record<number, boolean>>({});
+  const [activeFaqCategory, setActiveFaqCategory] = useState<string>("General Questions");
 
   // Lead Modal & Video Modal States
   const [leadModalOpen, setLeadModalOpen] = useState(false);
@@ -465,6 +466,12 @@ export default function CourseDetailsPage() {
   const [certificatesEditorOpen, setCertificatesEditorOpen] = useState(false);
   const [certificatesForm, setCertificatesForm] = useState<CertificateContent>(DEFAULT_CERTIFICATES);
 
+  // FAQ Full-Screen Editor State
+  const [faqEditorOpen, setFaqEditorOpen] = useState(false);
+  const [faqForm, setFaqForm] = useState<Record<string, Array<{ question: string; answer: string }>>>({});
+  const [faqNewCategory, setFaqNewCategory] = useState("");
+  const [faqPreviewCategory, setFaqPreviewCategory] = useState("General Questions");
+
   // About Alumni Logos for Hiring Partners Marquee
   const [alumniLogos, setAlumniLogos] = useState<Array<{ id: string; image_url: string }>>([]);
 
@@ -498,6 +505,20 @@ export default function CourseDetailsPage() {
       })
       .catch(err => { setError(err.message); setLoading(false); });
   }, [slug]);
+
+  useEffect(() => {
+    if (!course) return;
+    const raw = course.extended?.faqs || [];
+    let cats: string[] = [];
+    if (Array.isArray(raw)) {
+      cats = Array.from(new Set<string>(raw.map((f: any) => (f.category as string) || "General Questions")));
+    } else if (typeof raw === "object" && raw !== null) {
+      cats = Object.keys(raw);
+    }
+    if (cats.length > 0 && !cats.includes(activeFaqCategory)) {
+      setActiveFaqCategory(cats[0]);
+    }
+  }, [course, activeFaqCategory]);
 
   const showToast = (msg: string) => {
     const tId = Date.now();
@@ -581,6 +602,51 @@ export default function CourseDetailsPage() {
     } catch (err: any) {
       setSubmittingLead(false);
       showToast("Failed to submit request: " + err.message);
+    }
+  };
+
+  // FAQ Full-Screen Editor Open / Save
+  const openFaqEditor = () => {
+    if (!course) return;
+    const raw = course.extended?.faqs || [];
+    const parsed: Record<string, Array<{ question: string; answer: string }>> = {};
+    if (Array.isArray(raw)) {
+      raw.forEach((q: any) => {
+        const cat = (q.category as string) || "General Questions";
+        if (!parsed[cat]) parsed[cat] = [];
+        parsed[cat].push({ question: q.question || "", answer: q.answer || "" });
+      });
+    } else if (typeof raw === "object" && raw !== null) {
+      Object.keys(raw).forEach(cat => {
+        parsed[cat] = (raw[cat] || []).map((q: any) => ({ question: q.question || "", answer: q.answer || "" }));
+      });
+    }
+    if (Object.keys(parsed).length === 0) parsed["General Questions"] = [];
+    setFaqForm(parsed);
+    const cats = Object.keys(parsed);
+    setFaqPreviewCategory(cats[0] || "General Questions");
+    setFaqEditorOpen(true);
+  };
+
+  const saveFaqEditor = async () => {
+    if (!course) return;
+    setSavingEdit(true);
+    try {
+      const res = await apiFetch(`/api/courses/${course.id}/extended`, {
+        method: "PUT",
+        body: JSON.stringify({ faqs_json: JSON.stringify(faqForm) })
+      });
+      if (!res.ok) throw new Error("Failed to save FAQs");
+      setCourse(prev => {
+        if (!prev) return prev;
+        return { ...prev, extended: { ...prev.extended, faqs: faqForm } };
+      });
+      setFaqEditorOpen(false);
+      showToast("FAQs updated!");
+    } catch (err: any) {
+      showToast("Save error: " + err.message);
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -720,7 +786,19 @@ export default function CourseDetailsPage() {
   const compareRows = (ext.comparison_matrix && ext.comparison_matrix.length > 0) ? ext.comparison_matrix : DEFAULT_COMPARE_ROWS;
   const certContent: CertificateContent = (ext.certificates && ext.certificates.items && ext.certificates.items.length > 0) ? ext.certificates : DEFAULT_CERTIFICATES;
   const reviews = ext.video_testimonials || [];
-  const faqs = ext.faqs || [];
+  const faqsRaw = ext.faqs || [];
+  let faqs: any[] = [];
+  let faqCategories: string[] = [];
+  if (Array.isArray(faqsRaw)) {
+    faqs = faqsRaw;
+    faqCategories = Array.from(new Set<string>(faqs.map((f: any) => (f.category as string) || "General Questions")));
+  } else if (typeof faqsRaw === "object" && faqsRaw !== null) {
+    faqCategories = Object.keys(faqsRaw);
+    faqs = faqCategories.flatMap(cat => (faqsRaw[cat] || []).map((q: any) => ({ ...q, category: cat })));
+  }
+  const filteredFaqs: { faq: any; i: number }[] = faqs
+    .map((f: any, i: number) => ({ faq: f, i }))
+    .filter(({ faq }: { faq: any }) => (faq.category || "General Questions") === activeFaqCategory);
 
   return (
     <div className="cd-root">
@@ -1538,8 +1616,8 @@ export default function CourseDetailsPage() {
                 Thousands of professionals have switched to their dream data roles with IINM. <strong>Your transformation could be next.</strong>
               </p>
               <button onClick={() => setLeadModalOpen(true)} className="cd-cta-btn">
-                <span>Get Instant Callback</span>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.79 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                <span>Book Your Admission Slot</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
               </button>
               <span className="cd-cta-note">Join the next batch before seats fill up!</span>
             </div>
@@ -1567,30 +1645,49 @@ export default function CourseDetailsPage() {
       {/* ── FAQ ACCORDION ── */}
       <div className="cd-section-wrapper">
         {isAdmin && (
-          <button onClick={() => openSectionEditor("faqs")} className="cd-admin-edit-btn">
+          <button onClick={openFaqEditor} className="cd-admin-edit-btn">
             <Icons.Edit /> Edit FAQs
           </button>
         )}
-        <section className="cd-faq-sec">
+        <section className="cd-faq-sec" id="faq_sec">
           <div className="cd-container">
-            <div className="cd-sec-header">
-              <span className="cd-sec-eyebrow">Got Questions?</span>
-              <h2 className="cd-sec-title">Frequently Asked Questions</h2>
+            <div className="cd-faq-header">
+              <h2 className="cd-faq-title">Frequently Asked Questions</h2>
             </div>
 
-            <div className="cd-faq-box">
-              {faqs.map((faq: any, i: number) => {
-                const isOpen = !!openFaqs[i];
-                return (
-                  <div key={i} className="cd-faq-item">
-                    <div className="cd-faq-q" onClick={() => toggleFaq(i)}>
-                      <span>{faq.question}</span>
-                      {isOpen ? <Icons.ChevronUp /> : <Icons.ChevronDown />}
-                    </div>
-                    {isOpen && <div className="cd-faq-a">{faq.answer}</div>}
-                  </div>
-                );
-              })}
+            <div className="cd-faq-layout">
+              <div className="cd-faq-tabs">
+                {faqCategories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveFaqCategory(cat)}
+                    className={`cd-faq-tab ${activeFaqCategory === cat ? 'active' : ''}`}>
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              <div className="cd-faq-card">
+                <h3 className="cd-faq-card-title">{activeFaqCategory}</h3>
+                <div className="cd-faq-list">
+                  {filteredFaqs.length === 0 ? (
+                    <p className="cd-faq-empty">No questions in this category yet.</p>
+                  ) : (
+                    filteredFaqs.map(({ faq, i }) => {
+                      const isOpen = !!openFaqs[i];
+                      return (
+                        <div key={i} className={`cd-faq-item ${isOpen ? 'open' : ''}`}>
+                          <div className="cd-faq-q" onClick={() => toggleFaq(i)}>
+                            <span>{faq.question}</span>
+                            {isOpen ? <Icons.ChevronUp /> : <Icons.ChevronDown />}
+                          </div>
+                          {isOpen && <div className="cd-faq-a">{faq.answer}</div>}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -2932,6 +3029,105 @@ export default function CourseDetailsPage() {
                   {certificatesForm.items.map((cert, i) => (
                     <div key={i} className="cd-certificate-card">
                       <img src={cert.image_url || "/placeholder.svg"} alt={cert.alt} style={{ maxHeight: 220 }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── FAQ FULL-SCREEN EDITOR MODAL ── */}
+      {faqEditorOpen && (
+        <div className="cd-hero-editor-overlay">
+          <div className="cd-hero-editor-header">
+            <div>
+              <h2 style={{ fontSize: 20, fontWeight: 600, color: "#fef08a", margin: 0 }}>Edit FAQs</h2>
+              <p style={{ fontSize: 13, color: "#94a3b8", margin: "4px 0 0" }}>Manage per-course FAQ categories and questions.</p>
+            </div>
+            <div style={{ display: "flex", gap: 12 }}>
+              <button onClick={() => setFaqEditorOpen(false)} className="cd-btn-secondary" style={{ padding: "10px 20px" }}>Cancel</button>
+              <button onClick={saveFaqEditor} className="cd-btn-primary" style={{ padding: "10px 28px" }} disabled={savingEdit}>
+                {savingEdit ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </div>
+
+          <div className="cd-hero-editor-body">
+            <div className="cd-hero-editor-form" style={{ maxWidth: 720 }}>
+              <div className="cd-hero-editor-group">
+                <h3 className="cd-hero-editor-group-title">Add Category</h3>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    className="cd-form-input"
+                    value={faqNewCategory}
+                    onChange={e => setFaqNewCategory(e.target.value)}
+                    placeholder="e.g. Program & Curriculum"
+                  />
+                  <button onClick={() => {
+                    const cat = faqNewCategory.trim();
+                    if (cat && !faqForm[cat]) {
+                      setFaqForm(p => ({ ...p, [cat]: [] }));
+                      setFaqNewCategory("");
+                    }
+                  }} className="cd-btn-secondary" style={{ padding: "10px 20px" }}>Add</button>
+                </div>
+              </div>
+
+              {Object.keys(faqForm).map(cat => (
+                <div key={cat} className="cd-hero-editor-group">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <h3 className="cd-hero-editor-group-title">{cat}</h3>
+                    <button onClick={() => {
+                      const { [cat]: _, ...rest } = faqForm;
+                      setFaqForm(rest);
+                    }} className="cd-hero-editor-remove">×</button>
+                  </div>
+                  {faqForm[cat].map((q, idx) => (
+                    <div key={idx} style={{ marginBottom: 16, padding: 14, background: "rgba(15,23,42,0.5)", borderRadius: 8 }}>
+                      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                        <input
+                          className="cd-form-input"
+                          style={{ flex: 1 }}
+                          value={q.question}
+                          onChange={e => setFaqForm(p => {
+                            const updated = { ...p, [cat]: [...p[cat]] };
+                            updated[cat][idx] = { ...updated[cat][idx], question: e.target.value };
+                            return updated;
+                          })}
+                          placeholder="Question"
+                        />
+                        <button onClick={() => setFaqForm(p => ({ ...p, [cat]: p[cat].filter((_, j) => j !== idx) }))} className="cd-hero-editor-remove">×</button>
+                      </div>
+                      <textarea
+                        className="cd-form-input"
+                        value={q.answer}
+                        onChange={e => setFaqForm(p => {
+                          const updated = { ...p, [cat]: [...p[cat]] };
+                          updated[cat][idx] = { ...updated[cat][idx], answer: e.target.value };
+                          return updated;
+                        })}
+                        placeholder="Answer"
+                        rows={3}
+                      />
+                    </div>
+                  ))}
+                  <button onClick={() => setFaqForm(p => ({ ...p, [cat]: [...p[cat], { question: "", answer: "" }] }))} className="cd-hero-editor-add">+ Add Question</button>
+                </div>
+              ))}
+            </div>
+
+            <div className="cd-hero-editor-preview" style={{ background: "#ffffff" }}>
+              <div className="cd-faq-card" style={{ width: "100%", maxWidth: 600 }}>
+                <h3 className="cd-faq-card-title">{faqPreviewCategory}</h3>
+                <div className="cd-faq-list">
+                  {(faqForm[faqPreviewCategory] || []).map((q, i) => (
+                    <div key={i} className="cd-faq-item">
+                      <div className="cd-faq-q">
+                        <span>{q.question || "Untitled question"}</span>
+                        <Icons.ChevronDown />
+                      </div>
                     </div>
                   ))}
                 </div>

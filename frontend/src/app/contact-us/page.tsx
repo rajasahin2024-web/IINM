@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import PublicNavbar from "@/components/PublicNavbar";
 import PublicFooter from "@/components/PublicFooter";
+import { ContactUsSettingsInner } from "@/app/admin/settings/institute/contact-us/page";
+import { ToastProvider } from "@/app/admin/components/ToastProvider";
 import { BASE_URL } from "@/lib/config";
 
 interface ContactData {
@@ -100,6 +102,16 @@ export default function ContactUsPage() {
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [copied, setCopied] = useState<string | null>(null);
   const [showFloat, setShowFloat] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showEditor, setShowEditor] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const loggedIn = localStorage.getItem("iinm_is_logged_in") === "true";
+    const expiry = localStorage.getItem("iinm_login_expiry");
+    const valid = loggedIn && expiry ? Date.now() < Number(expiry) : false;
+    setIsAdmin(valid);
+  }, []);
 
   useEffect(() => {
     fetch(`${BASE_URL}/api/contact/settings`)
@@ -172,9 +184,29 @@ export default function ContactUsPage() {
   const email = contact.email1 || "info@dataspaceacademy.com";
   const phone = contact.phone1 || "+91 9163231144";
 
+  const closeEditor = () => {
+    setShowEditor(false);
+    if (typeof window !== "undefined") window.location.reload();
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "'Inter','Segoe UI',sans-serif" }}>
       <PublicNavbar />
+
+      {isAdmin && !showEditor && (
+        <button onClick={() => setShowEditor(true)} style={{ position: "fixed", top: 100, right: 20, zIndex: 150, background: "#0f172a", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 6px 20px rgba(0,0,0,.25)" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Edit Contact Page
+        </button>
+      )}
+
+      {showEditor && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "#f8fafc" }}>
+          <ToastProvider>
+            <ContactUsSettingsInner forceFullScreen onFullScreenClose={closeEditor} initialData={contact as any} />
+          </ToastProvider>
+        </div>
+      )}
 
       <main style={{ padding: "40px 48px" }}>
         <div style={{ maxWidth: 1400, margin: "0 auto" }}>
@@ -310,6 +342,16 @@ export default function ContactUsPage() {
             </div>
           ))}
           </div>
+
+          {/* Map */}
+          {contact.map_embed_url && contact.map_embed_url.includes("embed") && (
+            <div style={{ marginTop: 56 }}>
+              <h2 style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", marginBottom: 16, textAlign: "center" }}>Find Us on Map</h2>
+              <div style={{ borderRadius: 6, overflow: "hidden", border: "1px solid #e2e8f0", boxShadow: "0 4px 24px rgba(0,0,0,.05)" }}>
+                <iframe src={contact.map_embed_url} width="100%" height="400" style={{ border: 0, display: "block" }} allowFullScreen loading="lazy" />
+              </div>
+            </div>
+          )}
         </div>
       </main>
 

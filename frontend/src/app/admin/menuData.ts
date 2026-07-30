@@ -156,6 +156,7 @@ export const adminMenuData: MenuItem[] = [
       { label: "Payment Settings", href: "/admin/settings/payment", icon: "credit-card" },
       { label: "R2 Bucket Setup",  href: "/admin/settings/r2",      icon: "database" },
       { label: "AI Settings",      href: "/admin/settings/ai",      icon: "cpu" },
+      { label: "Google API",        href: "/admin/settings/google",   icon: "globe" },
       {
         label: "Site Settings",
         href: "/admin/settings/site",

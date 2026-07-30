@@ -5,7 +5,7 @@ from typing import Optional, List
 import os, uuid, shutil
 
 from database import get_db
-from models import ContactSettings, ContactBanner, ContactInquiry
+from models import ContactSettings, ContactBanner, ContactInquiry, GoogleApiSettings
 from routers.auth import require_device
 from helpers import rewrite_url
 from security import validate_upload, ALLOWED_IMAGE_EXTENSIONS, check_public_rate_limit, get_client_ip
@@ -216,3 +216,121 @@ async def mark_inquiry_read(inquiry_id: int, device: str = Depends(require_devic
     inq.is_read = True
     db.commit()
     return {"message": "Marked as read"}
+
+
+# ══════════════════════════════════════════════════════
+#  GOOGLE API SETTINGS — Admin
+# ══════════════════════════════════════════════════════
+
+class GoogleApiSchema(BaseModel):
+    google_map_api_key: Optional[str] = None
+    google_client_id: Optional[str] = None
+    google_client_secret: Optional[str] = None
+    google_redirect_uri: Optional[str] = None
+
+@router.get("/google-api")
+async def get_google_api_settings(db: Session = Depends(get_db)):
+    """Public: get Google API settings (map key only, secrets excluded)."""
+    s = db.query(GoogleApiSettings).first()
+    if not s:
+        return {}
+    return {
+        "google_map_api_key": s.google_map_api_key or "",
+    }
+
+@router.get("/google-api/admin")
+async def get_google_api_settings_admin(device: str = Depends(require_device), db: Session = Depends(get_db)):
+    """Admin: get all Google API settings including secrets."""
+    s = db.query(GoogleApiSettings).first()
+    if not s:
+        return {}
+    return {
+        "google_map_api_key": s.google_map_api_key or "",
+        "google_client_id": s.google_client_id or "",
+        "google_client_secret": s.google_client_secret or "",
+        "google_redirect_uri": s.google_redirect_uri or "",
+    }
+
+@router.put("/google-api")
+async def update_google_api_settings(
+    req: GoogleApiSchema,
+    device: str = Depends(require_device),
+    db: Session = Depends(get_db)
+):
+    """Admin: create or update Google API settings."""
+    s = db.query(GoogleApiSettings).first()
+    if not s:
+        s = GoogleApiSettings()
+        db.add(s)
+    for field, val in req.dict().items():
+        setattr(s, field, val or None)
+    db.commit()
+    return {"message": "Google API settings updated successfully."}
+
+
+# ══════════════════════════════════════════════════════
+#  GOOGLE API — TEST ENDPOINTS
+# ══════════════════════════════════════════════════════
+
+@router.post("/google-api/test-map")
+async def test_google_map_api_key(device: str = Depends(require_device), db: Session = Depends(get_db)):
+    """Admin: test the Google Maps API key by making a simple Geocoding API call."""
+    import httpx
+    s = db.query(GoogleApiSettings).first()
+    if not s or not s.google_map_api_key:
+        raise HTTPException(status_code=400, detail="No Google Map API key configured.")
+    try:
+        url = f"https://maps.googleapis.com/maps/api/geocode/json?address=Kolkata&key={s.google_map_api_key}"
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url)
+            data = resp.json()
+        if data.get("status") == "OK":
+            return {"success": True, "message": "API key is valid. Google Maps Geocoding API responded successfully."}
+        elif data.get("status") == "REQUEST_DENIED":
+            return {"success": False, "message": f"Request denied: {data.get('error_message', 'API key may be restricted or invalid.')}"}
+        elif data.get("status") == "INVALID_REQUEST":
+            return {"success": False, "message": f"Invalid request: {data.get('error_message', 'Check API key restrictions.')}"}
+        else:
+            return {"success": False, "message": f"API returned status: {data.get('status')}. {data.get('error_message', '')}"}
+    except httpx.TimeoutException:
+        return {"success": False, "message": "Request timed out. Check your network connection."}
+    except Exception as e:
+        return {"success": False, "message": f"Test failed: {str(e)}"}
+
+
+@router.post("/google-api/test-oauth")
+async def test_google_oauth_credentials(device: str = Depends(require_device), db: Session = Depends(get_db)):
+    """Admin: test Google OAuth credentials by checking the token endpoint."""
+    import httpx
+    s = db.query(GoogleApiSettings).first()
+    if not s or not s.google_client_id or not s.google_client_secret:
+        raise HTTPException(status_code=400, detail="Google Client ID and Secret are required for testing.")
+    try:
+        # Try to get a token info with invalid code — if credentials are wrong, we get invalid_client
+        url = "https://oauth2.googleapis.com/token"
+        payload = {
+            "client_id": s.google_client_id,
+            "client_secret": s.google_client_secret,
+            "grant_type": "authorization_code",
+            "code": "4/0test_dummy_code_for_validation",
+            "redirect_uri": s.google_redirect_uri or "http://localhost",
+        }
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(url, data=payload)
+            data = resp.json()
+        if data.get("error") == "invalid_grant":
+            return {"success": True, "message": "OAuth credentials are valid. (Invalid grant expected for dummy code — credentials accepted by Google.)"}
+        elif data.get("error") == "invalid_client":
+            return {"success": False, "message": f"Invalid client credentials: {data.get('error_description', 'Check Client ID and Secret.')}"}
+        elif data.get("error") == "redirect_uri_mismatch":
+            return {"success": False, "message": f"Redirect URI mismatch: {data.get('error_description', 'The redirect URI is not registered in Google Console.')}"}
+        else:
+            err = data.get("error", "unknown")
+            desc = data.get("error_description", "")
+            if err == "invalid_grant":
+                return {"success": True, "message": "OAuth credentials appear valid. (Dummy code rejected as expected.)"}
+            return {"success": False, "message": f"Test result: {err} — {desc}"}
+    except httpx.TimeoutException:
+        return {"success": False, "message": "Request timed out. Check your network connection."}
+    except Exception as e:
+        return {"success": False, "message": f"Test failed: {str(e)}"}

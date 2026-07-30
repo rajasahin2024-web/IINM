@@ -1066,6 +1066,21 @@ class ContactInquiry(Base):
 
 
 # ══════════════════════════════════════════════════════
+#  GOOGLE API — Map API Key, Google Sign-In credentials
+# ══════════════════════════════════════════════════════
+
+class GoogleApiSettings(Base):
+    __tablename__ = "google_api_settings"
+    id              = Column(Integer, primary_key=True, index=True)
+    google_map_api_key      = Column(String(500), nullable=True)
+    google_client_id        = Column(String(500), nullable=True)
+    google_client_secret    = Column(String(500), nullable=True)
+    google_redirect_uri     = Column(String(500), nullable=True)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at      = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+# ══════════════════════════════════════════════════════
 #  ABOUT US — Settings, Banners, Core Values
 # ══════════════════════════════════════════════════════
 
