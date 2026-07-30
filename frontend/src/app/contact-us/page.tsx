@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import PublicNavbar from "@/components/PublicNavbar";
 import PublicFooter from "@/components/PublicFooter";
-import { ContactUsSettingsInner } from "@/app/admin/settings/institute/contact-us/page";
+import { ContactUsSettingsInner } from "@/app/admin/settings/institute/contact-us/ContactUsSettingsInner";
 import { ToastProvider } from "@/app/admin/components/ToastProvider";
 import { BASE_URL } from "@/lib/config";
 
