@@ -548,12 +548,11 @@ function InteractiveMap({ apiKey, lat, lng }: { apiKey: string; lat: number; lng
     const map = new g.maps.Map(mapRef.current, {
       center: { lat, lng },
       zoom: 14,
-      mapId: "iinm-contact-map",
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: true,
     });
-    new g.maps.marker.AdvancedMarkerElement({
+    new g.maps.Marker({
       position: { lat, lng },
       map,
     });
