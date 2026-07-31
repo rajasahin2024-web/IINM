@@ -11,9 +11,11 @@ from fastapi import HTTPException, UploadFile
 
 MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024   # 10 MB for images
 MAX_GENERAL_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB for general uploads
+MAX_VIDEO_SIZE_BYTES = 500 * 1024 * 1024  # 500 MB for videos
 
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg", ".ico", ".avif"}
 ALLOWED_DOC_EXTENSIONS = {".pdf"}
+ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi"}
 
 # Extensions that must NEVER be stored — XSS / code execution
 BLOCKED_EXTENSIONS = {

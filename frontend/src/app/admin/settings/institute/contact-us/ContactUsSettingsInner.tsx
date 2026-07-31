@@ -62,6 +62,7 @@ type S = {
   address_line1: string; address_line2: string; city: string; state: string;
   pin_code: string; country: string; weekday_hours: string; weekend_hours: string;
   map_embed_url: string;
+  map_lat: string; map_lng: string;
   facebook_url: string; instagram_url: string; linkedin_url: string; youtube_url: string; twitter_url: string;
   page_title: string; page_subtitle: string;
   get_in_touch_heading: string; get_in_touch_description: string;
@@ -74,18 +75,28 @@ type S = {
 };
 
 const empty: S = {
-  phone1: "", phone2: "", whatsapp: "", email1: "", email2: "",
-  address_line1: "", address_line2: "", city: "", state: "", pin_code: "", country: "",
-  weekday_hours: "", weekend_hours: "", map_embed_url: "",
+  phone1: "+91 9163231144", phone2: "", whatsapp: "+91 9163231144",
+  email1: "info@iinm.in", email2: "",
+  address_line1: "", address_line2: "", city: "Kolkata", state: "West Bengal", pin_code: "700091", country: "India",
+  weekday_hours: "Mon - Fri: 9:00 AM - 6:00 PM", weekend_hours: "Sat: 10:00 AM - 2:00 PM",
+  map_embed_url: "", map_lat: "", map_lng: "",
   facebook_url: "", instagram_url: "", linkedin_url: "", youtube_url: "", twitter_url: "",
-  page_title: "", page_subtitle: "",
-  get_in_touch_heading: "", get_in_touch_description: "",
-  contact_email_label: "", contact_phone_label: "",
-  registered_office_label: "", registered_office_city: "", registered_office_address: "",
-  form_title: "", form_subtitle: "",
-  state_options: "", qualification_options: "",
-  terms_text: "", terms_url: "",
-  success_message: "", review_badges: "",
+  page_title: "Contact Us", page_subtitle: "",
+  get_in_touch_heading: "Get In Touch",
+  get_in_touch_description: "Get in touch with us for any inquiries or assistance. Our team is here to help you.\nYou can reach us via email or phone:",
+  contact_email_label: "Email", contact_phone_label: "Phone",
+  registered_office_label: "Registered Office", registered_office_city: "Kolkata",
+  registered_office_address: "3rd Floor, Seven Hills Building, EN 34, Salt Lake Sector 5, Kolkata 700091.",
+  form_title: "Let us know about", form_subtitle: "",
+  state_options: JSON.stringify(["Andhra Pradesh","Assam","Bihar","Chhattisgarh","Delhi","Goa","Gujarat","Haryana","Himachal Pradesh","Jharkhand","Karnataka","Kerala","Madhya Pradesh","Maharashtra","Odisha","Punjab","Rajasthan","Tamil Nadu","Telangana","Uttar Pradesh","West Bengal"]),
+  qualification_options: JSON.stringify(["10th Pass","12th Pass","Graduate","Post Graduate","Working Professional","Other"]),
+  terms_text: "You agree to our Terms of Service and Privacy Policy.", terms_url: "/terms",
+  success_message: "Thank you! We will reach out to you soon.",
+  review_badges: JSON.stringify([
+    { name: "Google Reviews", rating: "4.8", icon: "/icons/google-logo.svg" },
+    { name: "Trustpilot", rating: "4.0", icon: "/icons/trust-pilot.svg" },
+    { name: "Just Dial", rating: "4.8", icon: "/icons/just-dial.svg" },
+  ]),
 };
 
 /* ── Page wrapper — AdminProvider must be outermost ── */
@@ -94,7 +105,9 @@ export function ContactUsSettingsInner({ forceFullScreen = false, onFullScreenCl
   const { showToast } = useToast();
   const toast = { success: (m: string) => showToast(m, "success"), error: (m: string) => showToast(m, "error") };
 
-  const [settings, setSettings] = useState<S>({ ...empty, ...(initialData || {}) });
+  const [settings, setSettings] = useState<S>(
+    { ...empty, ...Object.fromEntries(Object.entries(initialData || {}).filter(([, v]) => v != null && v !== "").map(([k, v]) => [k, v])) } as S
+  );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [banners, setBanners] = useState<any[]>([]);
@@ -113,10 +126,18 @@ export function ContactUsSettingsInner({ forceFullScreen = false, onFullScreenCl
   }, []);
 
   useEffect(() => {
-    fetchSettings();
-    fetchBanners();
-    fetchInquiries();
-    fetchGoogleApi();
+    if (initialData) {
+      setLoading(false);
+    } else {
+      fetchSettings();
+    }
+    if (forceFullScreen) {
+      Promise.allSettled([fetchBanners(), fetchInquiries(), fetchGoogleApi()]);
+    } else {
+      fetchBanners();
+      fetchInquiries();
+      fetchGoogleApi();
+    }
   }, []);
 
   const fetchSettings = async () => {
@@ -124,27 +145,45 @@ export function ContactUsSettingsInner({ forceFullScreen = false, onFullScreenCl
       const res = await apiFetch(`${BASE}/api/contact/settings`);
       if (res.ok) {
         const d = await res.json();
-        setSettings({ ...empty, ...Object.fromEntries(Object.entries(d).map(([k, v]) => [k, v ?? ""])) } as S);
+        setSettings({ ...empty, ...Object.fromEntries(Object.entries(d).filter(([, v]) => v != null && v !== "").map(([k, v]) => [k, v])) } as S);
       }
     } finally { setLoading(false); }
   };
 
   const fetchBanners = async () => {
-    const res = await apiFetch(`${BASE}/api/contact/banners/all`);
-    if (res.ok) setBanners(await res.json());
+    try {
+      const res = await apiFetch(`${BASE}/api/contact/banners/all`);
+      if (res.ok) setBanners(await res.json());
+    } catch {}
   };
 
   const fetchInquiries = async () => {
-    const res = await apiFetch(`${BASE}/api/contact/inquiries?limit=50`);
-    if (res.ok) { const d = await res.json(); setInquiries(d.items || []); }
+    try {
+      const res = await apiFetch(`${BASE}/api/contact/inquiries?limit=50`);
+      if (res.ok) { const d = await res.json(); setInquiries(d.items || []); }
+    } catch {}
   };
+
+  const FULLSCREEN_FIELDS = [
+    "phone1", "whatsapp", "email1",
+    "map_lat", "map_lng", "map_embed_url",
+    "get_in_touch_heading", "get_in_touch_description",
+    "contact_email_label", "contact_phone_label",
+    "registered_office_label", "registered_office_city", "registered_office_address",
+    "form_title", "form_subtitle", "terms_url", "terms_text",
+    "success_message", "state_options", "qualification_options", "review_badges",
+  ];
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
       const payload: any = {};
-      Object.entries(settings).forEach(([k, v]) => { payload[k] = (v as string).trim() === "" ? null : v; });
+      const keys = forceFullScreen ? FULLSCREEN_FIELDS : Object.keys(settings);
+      keys.forEach(k => {
+        const v = (settings as any)[k];
+        payload[k] = typeof v === "string" && v.trim() === "" ? null : v;
+      });
       const res = await apiFetch(`${BASE}/api/contact/settings`, {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
       });
@@ -218,33 +257,37 @@ export function ContactUsSettingsInner({ forceFullScreen = false, onFullScreenCl
 
   return (
     <div className="manager-content" style={{ width: "100%" }}>
-      <header style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: "#0f172a", display: "flex", alignItems: "center", gap: 12 }}>
-          <Icon name="phone" size={28} /> Contact Us Settings
-        </h1>
-        <p style={{ margin: "6px 0 0", fontSize: 14, color: "#64748b" }}>
-          Manage all details shown on the public Contact Us page.
-        </p>
-        {tab === "settings" && (
-          <button onClick={() => setFullScreen(true)} style={{ marginTop: 14, background: "#0f172a", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
-            <Icon name="external-link" size={14} /> Open Full Screen Editor
-          </button>
-        )}
-      </header>
+      {!forceFullScreen && (
+        <header style={{ marginBottom: 24 }}>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: "#0f172a", display: "flex", alignItems: "center", gap: 12 }}>
+            <Icon name="phone" size={28} /> Contact Us Settings
+          </h1>
+          <p style={{ margin: "6px 0 0", fontSize: 14, color: "#64748b" }}>
+            Manage all details shown on the public Contact Us page.
+          </p>
+          {tab === "settings" && (
+            <button onClick={() => setFullScreen(true)} style={{ marginTop: 14, background: "#0f172a", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+              <Icon name="external-link" size={14} /> Open Full Screen Editor
+            </button>
+          )}
+        </header>
+      )}
 
-      {/* Tab Bar */}
-      <div style={{ display: "flex", gap: 4, background: "#f1f5f9", borderRadius: 12, padding: 4, marginBottom: 24, width: "fit-content" }}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            style={{ padding: "8px 18px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-              background: tab === t.id ? "#fff" : "transparent",
-              color: tab === t.id ? "#0f172a" : "#64748b",
-              boxShadow: tab === t.id ? "0 1px 4px rgba(0,0,0,.08)" : "none",
-              transition: "all .2s", display: "flex", alignItems: "center", gap: 6 }}>
-            <Icon name={t.icon} size={14} /> {t.label}
-          </button>
-        ))}
-      </div>
+      {/* Tab Bar — hidden in fullscreen inline editor */}
+      {!forceFullScreen && (
+        <div style={{ display: "flex", gap: 4, background: "#f1f5f9", borderRadius: 12, padding: 4, marginBottom: 24, width: "fit-content" }}>
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              style={{ padding: "8px 18px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                background: tab === t.id ? "#fff" : "transparent",
+                color: tab === t.id ? "#0f172a" : "#64748b",
+                boxShadow: tab === t.id ? "0 1px 4px rgba(0,0,0,.08)" : "none",
+                transition: "all .2s", display: "flex", alignItems: "center", gap: 6 }}>
+              <Icon name={t.icon} size={14} /> {t.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── Tab: Contact Info ── */}
       {tab === "settings" && (
@@ -263,34 +306,47 @@ export function ContactUsSettingsInner({ forceFullScreen = false, onFullScreenCl
               <SectionHeader num="1" title="Phone & Email" />
               <div style={grid2}>
                 <FInput label="Phone 1" value={settings.phone1} onChange={set("phone1")} />
-                <FInput label="Phone 2" value={settings.phone2} onChange={set("phone2")} />
                 <FInput label="WhatsApp Number" value={settings.whatsapp} onChange={set("whatsapp")} />
                 <FInput label="Email 1" type="email" value={settings.email1} onChange={set("email1")} />
-                <FInput label="Email 2" type="email" value={settings.email2} onChange={set("email2")} />
+                {!forceFullScreen && <FInput label="Phone 2" value={settings.phone2} onChange={set("phone2")} />}
+                {!forceFullScreen && <FInput label="Email 2" type="email" value={settings.email2} onChange={set("email2")} />}
               </div>
 
-              <SectionHeader num="2" title="Address" />
+              {!forceFullScreen && (
+                <>
+                  <SectionHeader num="2" title="Address" />
+                  <div style={{ marginBottom: 24 }}>
+                    <div style={{ marginBottom: 8 }}><FInput label="Address Line 1" value={settings.address_line1} onChange={set("address_line1")} /></div>
+                    <div style={{ marginBottom: 8 }}><FInput label="Address Line 2 (Optional)" value={settings.address_line2} onChange={set("address_line2")} /></div>
+                    <div style={grid2}>
+                      <FInput label="City" value={settings.city} onChange={set("city")} />
+                      <FInput label="State" value={settings.state} onChange={set("state")} />
+                      <FInput label="PIN Code" value={settings.pin_code} onChange={set("pin_code")} />
+                      <FInput label="Country" value={settings.country} onChange={set("country")} />
+                    </div>
+                  </div>
+
+                  <SectionHeader num="3" title="Office Hours" />
+                  <div style={grid2}>
+                    <FInput label="Weekday Hours (e.g. Mon–Fri: 9AM–6PM)" value={settings.weekday_hours} onChange={set("weekday_hours")} />
+                    <FInput label="Weekend Hours (e.g. Sat: 10AM–2PM)" value={settings.weekend_hours} onChange={set("weekend_hours")} />
+                  </div>
+                </>
+              )}
+
+              <SectionHeader num={forceFullScreen ? "2" : "4"} title="Google Maps Location" />
               <div style={{ marginBottom: 24 }}>
-                <div style={{ marginBottom: 8 }}><FInput label="Address Line 1" value={settings.address_line1} onChange={set("address_line1")} /></div>
-                <div style={{ marginBottom: 8 }}><FInput label="Address Line 2 (Optional)" value={settings.address_line2} onChange={set("address_line2")} /></div>
-                <div style={grid2}>
-                  <FInput label="City" value={settings.city} onChange={set("city")} />
-                  <FInput label="State" value={settings.state} onChange={set("state")} />
-                  <FInput label="PIN Code" value={settings.pin_code} onChange={set("pin_code")} />
-                  <FInput label="Country" value={settings.country} onChange={set("country")} />
+                <div style={{ marginBottom: 12, padding: "12px 16px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, fontSize: 13, color: "#1e40af", lineHeight: 1.6 }}>
+                  <strong>Interactive Map:</strong> Set latitude & longitude below, or use the "Mark Location" button on the public contact page to pick a location visually.
+                  <br />
+                  <strong>Embed Fallback:</strong> You can also paste a Google Maps embed iframe URL below as a fallback.
                 </div>
-              </div>
-
-              <SectionHeader num="3" title="Office Hours" />
-              <div style={grid2}>
-                <FInput label="Weekday Hours (e.g. Mon–Fri: 9AM–6PM)" value={settings.weekday_hours} onChange={set("weekday_hours")} />
-                <FInput label="Weekend Hours (e.g. Sat: 10AM–2PM)" value={settings.weekend_hours} onChange={set("weekend_hours")} />
-              </div>
-
-              <SectionHeader num="4" title="Google Maps Embed" />
-              <div style={{ marginBottom: 24 }}>
+                <div style={grid2}>
+                  <FInput label="Map Latitude (e.g. 22.5726)" value={settings.map_lat} onChange={set("map_lat")} />
+                  <FInput label="Map Longitude (e.g. 88.3639)" value={settings.map_lng} onChange={set("map_lng")} />
+                </div>
                 <FInput 
-                  label="Google Maps iframe src URL (Paste full <iframe> code or src link)" 
+                  label="Google Maps iframe src URL (Paste full <iframe> code or src link) — Fallback" 
                   value={settings.map_embed_url} 
                   onChange={(e: any) => {
                     let val = e.target.value;
@@ -323,38 +379,61 @@ export function ContactUsSettingsInner({ forceFullScreen = false, onFullScreenCl
                 )}
               </div>
 
-              <SectionHeader num="5" title="Social Media Links" />
+              {!forceFullScreen && (
+                <>
+                  <SectionHeader num="5" title="Social Media Links" />
+                  <div style={grid2}>
+                    {[
+                      { k: "facebook_url", label: "Facebook URL" },
+                      { k: "instagram_url", label: "Instagram URL" },
+                      { k: "linkedin_url", label: "LinkedIn URL" },
+                      { k: "youtube_url", label: "YouTube URL" },
+                      { k: "twitter_url", label: "Twitter / X URL" },
+                    ].map(({ k, label }) => (
+                      <FInput key={k} label={label} value={(settings as any)[k]} onChange={set(k as keyof S)} />
+                    ))}
+                  </div>
+                  <SectionHeader num="6" title="Public Page Content" />
+                  <div style={grid2}>
+                    <FInput label="Page Title" value={settings.page_title} onChange={set("page_title")} />
+                    <FInput label="Page Subtitle" value={settings.page_subtitle} onChange={set("page_subtitle")} />
+                  </div>
+                </>
+              )}
+              <SectionHeader num={forceFullScreen ? "3" : "7"} title="Get In Touch Section" />
               <div style={grid2}>
-                {[
-                  { k: "facebook_url", label: "Facebook URL" },
-                  { k: "instagram_url", label: "Instagram URL" },
-                  { k: "linkedin_url", label: "LinkedIn URL" },
-                  { k: "youtube_url", label: "YouTube URL" },
-                  { k: "twitter_url", label: "Twitter / X URL" },
-                ].map(({ k, label }) => (
-                  <FInput key={k} label={label} value={(settings as any)[k]} onChange={set(k as keyof S)} />
-                ))}
-              </div>
-              <SectionHeader num="6" title="Public Page Content" />
-              <div style={grid2}>
-                <FInput label="Page Title" value={settings.page_title} onChange={set("page_title")} />
-                <FInput label="Page Subtitle" value={settings.page_subtitle} onChange={set("page_subtitle")} />
                 <FInput label="Get In Touch Heading" value={settings.get_in_touch_heading} onChange={set("get_in_touch_heading")} />
                 <FInput label="Contact Email Label" value={settings.contact_email_label} onChange={set("contact_email_label")} />
                 <FInput label="Contact Phone Label" value={settings.contact_phone_label} onChange={set("contact_phone_label")} />
+              </div>
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ marginBottom: 8 }}><FInput label="Get In Touch Description" value={settings.get_in_touch_description} onChange={set("get_in_touch_description")} isTextArea /></div>
+              </div>
+
+              <SectionHeader num={forceFullScreen ? "4" : "8"} title="Registered Office" />
+              <div style={grid2}>
                 <FInput label="Registered Office Heading" value={settings.registered_office_label} onChange={set("registered_office_label")} />
                 <FInput label="Registered Office City" value={settings.registered_office_city} onChange={set("registered_office_city")} />
+              </div>
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ marginBottom: 8 }}><FInput label="Registered Office Address" value={settings.registered_office_address} onChange={set("registered_office_address")} isTextArea /></div>
+              </div>
+
+              <SectionHeader num={forceFullScreen ? "5" : "9"} title="Contact Form Settings" />
+              <div style={grid2}>
                 <FInput label="Form Title" value={settings.form_title} onChange={set("form_title")} />
                 <FInput label="Form Subtitle" value={settings.form_subtitle} onChange={set("form_subtitle")} />
                 <FInput label="Terms URL" value={settings.terms_url} onChange={set("terms_url")} />
               </div>
               <div style={{ marginBottom: 24 }}>
-                <div style={{ marginBottom: 8 }}><FInput label="Get In Touch Description" value={settings.get_in_touch_description} onChange={set("get_in_touch_description")} isTextArea /></div>
-                <div style={{ marginBottom: 8 }}><FInput label="Registered Office Address" value={settings.registered_office_address} onChange={set("registered_office_address")} isTextArea /></div>
                 <div style={{ marginBottom: 8 }}><FInput label="Success Message" value={settings.success_message} onChange={set("success_message")} isTextArea /></div>
                 <div style={{ marginBottom: 8 }}><FInput label="Terms Text (HTML allowed)" value={settings.terms_text} onChange={set("terms_text")} isTextArea /></div>
                 <div style={{ marginBottom: 8 }}><FInput label="State Options (JSON array)" value={settings.state_options} onChange={set("state_options")} isTextArea /></div>
                 <FInput label="Qualification Options (JSON array)" value={settings.qualification_options} onChange={set("qualification_options")} isTextArea />
+              </div>
+
+              <SectionHeader num={forceFullScreen ? "6" : "10"} title="Review Badges" />
+              <div style={{ marginBottom: 24 }}>
                 <FInput label="Review Badges (JSON array: [{name, rating, icon}])" value={settings.review_badges} onChange={set("review_badges")} isTextArea />
               </div>
             </div>

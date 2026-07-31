@@ -629,6 +629,7 @@ class CourseExtendedUpdate(BaseModel):
     certificates_json: Optional[str] = None
     video_testimonials_json: Optional[str] = None
     faqs_json: Optional[str] = None
+    video_playlist_json: Optional[str] = None
 
 
 def get_default_course_extended_data(course_title: str):
@@ -648,6 +649,9 @@ def get_default_course_extended_data(course_title: str):
             {"name": "OpenAI", "logo": "/company-openai.svg"}
         ],
         "market_impact": {
+            "section_eyebrow": "Industry Demand",
+            "section_title": "Why Agentic AI Skills Are In Massive Demand",
+            "section_desc": "Companies are pivoting from plain chat models to autonomous AI agents that write code, analyze data, and execute complex workflows.",
             "quote": "Generative AI is expected to transform 38 million organized-sector jobs in India by 2030 , primarily by redesigning tasks and boosting productivity.",
             "quote_author": "KEN RESEARCH",
             "stat_main": "76%",
@@ -803,7 +807,14 @@ def get_default_course_extended_data(course_title: str):
                 "question": "How do I download the full course curriculum brochure?",
                 "answer": "Click the 'Download Brochure' button on the hero section or top banner, enter your details, and the full PDF syllabus will open directly for download."
             }
-        ]
+        ],
+        "video_playlist": {
+            "section_eyebrow": "Watch & Learn",
+            "section_title": "Course Preview & Demo Videos",
+            "section_desc": "Get a sneak peek into our teaching style, course modules, and real-world projects.",
+            "bg_image_url": "",
+            "videos": []
+        }
     }
 
 
@@ -837,6 +848,7 @@ def get_public_course_extended_details(slug: str, db: Session = Depends(get_db))
         "certificates": safe_parse(ext.certificates_json if ext else None, defaults["certificates"]),
         "video_testimonials": safe_parse(ext.video_testimonials_json if ext else None, defaults["video_testimonials"]),
         "faqs": safe_parse(ext.faqs_json if ext else None, defaults["faqs"]),
+        "video_playlist": safe_parse(ext.video_playlist_json if ext else None, defaults["video_playlist"]),
     }
 
     base_data["extended"] = extended_data
@@ -879,6 +891,8 @@ def update_course_extended_details(
         ext.video_testimonials_json = payload.video_testimonials_json
     if payload.faqs_json is not None:
         ext.faqs_json = payload.faqs_json
+    if payload.video_playlist_json is not None:
+        ext.video_playlist_json = payload.video_playlist_json
 
     db.commit()
     db.refresh(ext)
@@ -1497,3 +1511,92 @@ def set_course_instructors(course_id: int, req: CourseInstructorUpdate, device: 
     db.commit()
     db.refresh(course)
     return {"status": "success", "assigned": len(instructors)}
+
+
+# ─── YOUTUBE VIDEO INFO ──────────────────────────────────────────
+
+def _extract_youtube_id(url: str) -> Optional[str]:
+    """Extract YouTube video ID from various URL formats."""
+    patterns = [
+        r'(?:youtube\.com/embed/)([a-zA-Z0-9_-]{11})',
+        r'(?:youtube\.com/watch\?v=)([a-zA-Z0-9_-]{11})',
+        r'(?:youtu\.be/)([a-zA-Z0-9_-]{11})',
+        r'(?:youtube\.com/shorts/)([a-zA-Z0-9_-]{11})',
+        r'(?:youtube\.com/v/)([a-zA-Z0-9_-]{11})',
+    ]
+    for p in patterns:
+        m = re.search(p, url)
+        if m and m.group(1):
+            return m.group(1)
+    return None
+
+
+@router.get("/youtube/info")
+async def get_youtube_video_info(url: str = Query(..., description="YouTube video URL or ID"), db: Session = Depends(get_db)):
+    """Fetch YouTube video title, duration, and thumbnail from oEmbed + Data API.
+    No authentication required — used by admin editor for auto-filling fields."""
+    video_id = _extract_youtube_id(url) if "http" in url else (url.strip() if len(url.strip()) == 11 else _extract_youtube_id(url))
+    if not video_id:
+        raise HTTPException(status_code=400, detail="Could not extract YouTube video ID from URL")
+
+    thumbnail_url = f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
+    title = ""
+    duration = ""
+
+    # 1. Try oEmbed for title (no API key needed)
+    try:
+        import urllib.request
+        import urllib.parse
+        oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
+        req = urllib.request.Request(oembed_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            import json as _json
+            data = _json.loads(resp.read().decode())
+            title = data.get("title", "")
+    except Exception:
+        pass
+
+    # 2. Try YouTube Data API v3 for duration (needs Google API key)
+    try:
+        google_api = db.query(models.GoogleApiSettings).first()
+        if google_api and google_api.google_map_api_key:
+            api_key = google_api.google_map_api_key
+            api_url = f"https://www.googleapis.com/youtube/v3/videos?part=contentDetails,snippet&id={video_id}&key={api_key}"
+            import urllib.request as _urllib2
+            req2 = _urllib2.Request(api_url, headers={"User-Agent": "Mozilla/5.0"})
+            with _urllib2.urlopen(req2, timeout=5) as resp2:
+                import json as _json2
+                data2 = _json2.loads(resp2.read().decode())
+                items = data2.get("items", [])
+                if items:
+                    iso_duration = items[0].get("contentDetails", {}).get("duration", "")
+                    # Parse ISO 8601 duration (PT#H#M#S) to HH:MM:SS or MM:SS
+                    duration = _parse_iso_duration(iso_duration)
+                    if not title:
+                        title = items[0].get("snippet", {}).get("title", "")
+    except Exception:
+        pass
+
+    return {
+        "video_id": video_id,
+        "title": title,
+        "duration": duration,
+        "thumbnail_url": thumbnail_url
+    }
+
+
+def _parse_iso_duration(iso_duration: str) -> str:
+    """Parse ISO 8601 duration (e.g. PT1H23M45S) to HH:MM:SS or MM:SS format."""
+    if not iso_duration:
+        return ""
+    import re as _re
+    pattern = r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?'
+    match = _re.match(pattern, iso_duration)
+    if not match:
+        return ""
+    hours = int(match.group(1) or 0)
+    minutes = int(match.group(2) or 0)
+    seconds = int(match.group(3) or 0)
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes}:{seconds:02d}"
