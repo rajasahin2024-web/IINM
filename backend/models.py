@@ -1013,6 +1013,8 @@ class ContactSettings(Base):
     weekend_hours   = Column(String(100), nullable=True)
     # Map
     map_embed_url   = Column(Text, nullable=True)
+    map_lat         = Column(String(30), nullable=True)
+    map_lng         = Column(String(30), nullable=True)
     # Social Links
     facebook_url    = Column(String(500), nullable=True)
     instagram_url   = Column(String(500), nullable=True)
@@ -1483,6 +1485,7 @@ class CourseExtendedContent(Base):
     video_testimonials_json = Column(Text, nullable=True) # JSON: video review cards
     certificates_json   = Column(Text, nullable=True) # JSON: industry-recognized certificate images/titles
     faqs_json           = Column(Text, nullable=True) # JSON: course specific FAQs
+    video_playlist_json = Column(Text, nullable=True) # JSON: video player with playlist section
     created_at          = Column(DateTime(timezone=True), server_default=func.now())
     updated_at          = Column(DateTime(timezone=True), onupdate=func.now())
 

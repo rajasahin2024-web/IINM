@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, Response
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 import os, uuid, shutil
 
@@ -31,6 +31,8 @@ class ContactSettingsSchema(BaseModel):
     weekday_hours: Optional[str] = None
     weekend_hours: Optional[str] = None
     map_embed_url: Optional[str] = None
+    map_lat: Optional[str] = None
+    map_lng: Optional[str] = None
     facebook_url: Optional[str] = None
     instagram_url: Optional[str] = None
     linkedin_url: Optional[str] = None
@@ -56,21 +58,29 @@ class ContactSettingsSchema(BaseModel):
     review_badges: Optional[str] = None
 
 class InquirySchema(BaseModel):
-    name: str
-    email: str
-    phone: Optional[str] = None
-    interest: Optional[str] = None
-    state: Optional[str] = None
-    qualification: Optional[str] = None
-    message: Optional[str] = None
+    name: str = Field(..., min_length=1, max_length=100)
+    email: str = Field(..., min_length=1, max_length=200)
+    phone: Optional[str] = Field(None, max_length=20)
+    interest: Optional[str] = Field(None, max_length=200)
+    state: Optional[str] = Field(None, max_length=100)
+    qualification: Optional[str] = Field(None, max_length=100)
+    message: Optional[str] = Field(None, max_length=2000)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        if not v or "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("Invalid email address")
+        return v.strip().lower()
 
 # ══════════════════════════════════════════════════════
 #  CONTACT SETTINGS — Admin
 # ══════════════════════════════════════════════════════
 
 @router.get("/settings")
-async def get_contact_settings(db: Session = Depends(get_db)):
+async def get_contact_settings(response: Response, db: Session = Depends(get_db)):
     """Public: get contact settings for the public Contact Us page."""
+    response.headers["Cache-Control"] = "public, max-age=60"
     s = db.query(ContactSettings).first()
     if not s:
         return {}
@@ -81,6 +91,7 @@ async def get_contact_settings(db: Session = Depends(get_db)):
         "city": s.city, "state": s.state, "pin_code": s.pin_code, "country": s.country,
         "weekday_hours": s.weekday_hours, "weekend_hours": s.weekend_hours,
         "map_embed_url": s.map_embed_url,
+        "map_lat": s.map_lat, "map_lng": s.map_lng,
         "facebook_url": s.facebook_url, "instagram_url": s.instagram_url,
         "linkedin_url": s.linkedin_url, "youtube_url": s.youtube_url, "twitter_url": s.twitter_url,
         "page_title": s.page_title, "page_subtitle": s.page_subtitle,
@@ -105,7 +116,7 @@ async def update_contact_settings(
     if not s:
         s = ContactSettings()
         db.add(s)
-    for field, val in req.dict().items():
+    for field, val in req.dict(exclude_unset=True).items():
         setattr(s, field, val or None)
     db.commit()
     db.refresh(s)

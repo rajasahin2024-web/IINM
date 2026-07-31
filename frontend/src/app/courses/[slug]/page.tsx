@@ -38,6 +38,169 @@ interface HeroContent {
   stats?: HeroStat[];
   cta_primary?: string;
   cta_secondary?: string;
+  bg_color?: string;
+  gradient_from?: string;
+  gradient_to?: string;
+  spotlight_color?: string;
+}
+
+const DEFAULT_HERO_COLORS = {
+  bg_color: "#060d1a",
+  gradient_from: "#0f1f38",
+  gradient_to: "#060d1a",
+  spotlight_color: "#3b82f6",
+};
+
+// Auto-bold numbers, percentages, and "X million/illion" phrases in text
+function renderBoldedText(text: string): React.ReactNode[] {
+  if (!text) return [];
+  const regex = /(\d+(?:\.\d+)?\s*(?:%|million|million\+|billion|lakh|crore)?)/gi;
+  const parts = text.split(regex);
+  const testRegex = /^\d+(?:\.\d+)?\s*(?:%|million|million\+|billion|lakh|crore)?$/i;
+  return parts.map((part, i) => {
+    if (!part) return null;
+    if (testRegex.test(part.trim())) {
+      return <strong key={i}>{part}</strong>;
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
+// Extract YouTube video ID from various URL formats and return high-quality thumbnail URL
+function getYouTubeThumbnail(url: string): string {
+  if (!url) return "";
+  const id = extractYouTubeId(url);
+  return id ? `https://img.youtube.com/vi/${id}/maxresdefault.jpg` : "";
+}
+
+// Extract YouTube video ID from any YouTube URL format
+function extractYouTubeId(url: string): string {
+  if (!url) return "";
+  const patterns = [
+    /(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+    /(?:youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/,
+    /(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+    /(?:youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
+    /(?:youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/,
+    /(?:youtube\.com\/live\/)([a-zA-Z0-9_-]{11})/,
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m && m[1]) return m[1];
+  }
+  // If it's already just an 11-char ID
+  if (/^[a-zA-Z0-9_-]{11}$/.test(url.trim())) return url.trim();
+  return "";
+}
+
+// Convert any YouTube URL to embed format for iframe use
+function getYouTubeEmbedUrl(url: string): string {
+  if (!url) return "";
+  const id = extractYouTubeId(url);
+  if (id) return `https://www.youtube.com/embed/${id}`;
+  // If we couldn't extract an ID, return the original URL as-is
+  return url;
+}
+
+// Reusable file upload + URL paste field (supports images and videos)
+function VideoDropzoneField({
+  label, value, onChange, placeholder, accept = "image/*", uploadEndpoint, showUploadOnly = false
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  accept?: string;
+  uploadEndpoint?: string;
+  showUploadOnly?: boolean;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+
+  const isVideo = accept.includes("video");
+  const fullUrl = value && value.startsWith("http") ? value : value ? `${API_BASE_URL.replace("/api", "")}${value}` : "";
+
+  const handleFile = async (file: File) => {
+    if (!file || !uploadEndpoint) return;
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const res = await fetch(uploadEndpoint, { method: "POST", body: formData });
+      if (res.ok) {
+        const data = await res.json();
+        onChange(data.url);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert("Upload failed: " + (err.detail || res.statusText));
+      }
+    } catch {
+      alert("Network error. Could not upload file.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div
+      onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={e => {
+        e.preventDefault(); setDragOver(false);
+        if (e.dataTransfer.files?.[0]) handleFile(e.dataTransfer.files[0]);
+      }}
+      style={{
+        border: dragOver ? "2px dashed #38bdf8" : "1px solid rgba(255,255,255,0.1)",
+        background: dragOver ? "rgba(56,189,248,0.08)" : "rgba(255,255,255,0.03)",
+        borderRadius: 8,
+        padding: "12px",
+        transition: "all 0.2s",
+      }}
+    >
+      {label && <label style={{ display: "block", fontSize: 10, fontWeight: 800, color: "#94a3b8", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</label>}
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        {value && (value.startsWith("http") || value.startsWith("/")) && (
+          isVideo ? (
+            <div style={{ width: 36, height: 36, borderRadius: 6, background: "rgba(56,189,248,0.15)", color: "#38bdf8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Icons.PlaySolid />
+            </div>
+          ) : (
+            <img src={fullUrl} alt="Preview" style={{ width: 36, height: 36, borderRadius: 6, objectFit: "cover" }} />
+          )
+        )}
+        {!showUploadOnly && (
+          <div style={{ flex: 1 }}>
+            <input
+              type="text"
+              value={value}
+              onChange={e => onChange(e.target.value)}
+              placeholder={placeholder}
+              style={{ width: "100%", padding: "8px 0", border: "none", background: "transparent", outline: "none", fontSize: 13, color: "#e2e8f0" }}
+            />
+          </div>
+        )}
+        {uploadEndpoint && (
+          <div style={{ position: "relative", overflow: "hidden", flexShrink: 0 }}>
+            <button type="button" disabled={uploading} style={{ background: "rgba(56,189,248,0.15)", color: "#38bdf8", border: "1px solid rgba(56,189,248,0.3)", padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+              {uploading ? "Uploading..." : "Upload"}
+            </button>
+            <input
+              type="file"
+              accept={accept}
+              onChange={e => {
+                if (e.target.files?.[0]) handleFile(e.target.files[0]);
+                e.target.value = "";
+              }}
+              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }}
+            />
+          </div>
+        )}
+      </div>
+      <div style={{ fontSize: 10, color: "#64748b", marginTop: 6, fontWeight: 600 }}>
+        {uploading ? "Uploading, please wait..." : showUploadOnly ? "Click Upload to select a file" : "Paste a URL or drag & drop a file here"}
+      </div>
+    </div>
+  );
 }
 
 interface Material { id: number; title: string; file_type: string; }
@@ -59,6 +222,7 @@ interface CourseDetails {
   has_certificate: boolean; validity_days: number | null; prerequisites: string | null;
   what_you_will_learn: string | null; target_audience: string | null;
   upload_syllabus: string | null; chapters: Chapter[]; instructors: Instructor[];
+  min_payment_value: number | null;
   extended?: any;
 }
 interface ProjectCard {
@@ -421,17 +585,34 @@ export default function CourseDetailsPage() {
 
   // Hero Full-Screen Editor State
   const [heroEditorOpen, setHeroEditorOpen] = useState(false);
-  const [heroForm, setHeroForm] = useState<HeroContent>({ badges: [], stats: [], cta_primary: "", cta_secondary: "" });
+  const [heroForm, setHeroForm] = useState<HeroContent>({ badges: [], stats: [], cta_primary: "", cta_secondary: "", ...DEFAULT_HERO_COLORS });
 
   // Market Stats Full-Screen Editor State
   const [marketEditorOpen, setMarketEditorOpen] = useState(false);
   const [marketForm, setMarketForm] = useState({
+    section_eyebrow: "",
+    section_title: "",
+    section_desc: "",
     quote: "",
     quote_author: "",
     stat_main: "",
     stat_label: "",
     cards: [] as Array<{ title: string; value: string; desc: string }>
   });
+
+  // Video Playlist Editor State
+  const [videoPlaylistEditorOpen, setVideoPlaylistEditorOpen] = useState(false);
+  const [activeVideoIdx, setActiveVideoIdx] = useState(0);
+  const [videoPlaylistForm, setVideoPlaylistForm] = useState({
+    section_eyebrow: "",
+    section_title: "",
+    section_desc: "",
+    bg_image_url: "",
+    videos: [] as Array<{ video_type: string; video_url: string; title: string; thumbnail_url: string; duration: string }>
+  });
+  const [ytFetchingIdx, setYtFetchingIdx] = useState<number | null>(null);
+  const [draggedVideoIdx, setDraggedVideoIdx] = useState<number | null>(null);
+  const [dragOverVideoIdx, setDragOverVideoIdx] = useState<number | null>(null);
 
   // Who Is For Full-Screen Editor State
   const [whoEditorOpen, setWhoEditorOpen] = useState(false);
@@ -768,12 +949,16 @@ export default function CourseDetailsPage() {
   // Parse hero content — backward compatible: array = old format, object = new format
   const heroRaw = ext.hero_badges || {};
   const heroContent: HeroContent = Array.isArray(heroRaw)
-    ? { badges: heroRaw, stats: DEFAULT_HERO_STATS, cta_primary: "Apply Now & Enroll", cta_secondary: "Download Brochure / Syllabus" }
+    ? { badges: heroRaw, stats: DEFAULT_HERO_STATS, cta_primary: "Apply Now & Enroll", cta_secondary: "Download Brochure / Syllabus", ...DEFAULT_HERO_COLORS }
     : {
         badges: heroRaw.badges || DEFAULT_BADGES,
         stats: heroRaw.stats || DEFAULT_HERO_STATS,
         cta_primary: heroRaw.cta_primary || "Apply Now & Enroll",
-        cta_secondary: heroRaw.cta_secondary || "Download Brochure / Syllabus"
+        cta_secondary: heroRaw.cta_secondary || "Download Brochure / Syllabus",
+        bg_color: heroRaw.bg_color || DEFAULT_HERO_COLORS.bg_color,
+        gradient_from: heroRaw.gradient_from || DEFAULT_HERO_COLORS.gradient_from,
+        gradient_to: heroRaw.gradient_to || DEFAULT_HERO_COLORS.gradient_to,
+        spotlight_color: heroRaw.spotlight_color || DEFAULT_HERO_COLORS.spotlight_color,
       };
   const heroBadges = heroContent.badges || DEFAULT_BADGES;
   const heroStats = heroContent.stats || DEFAULT_HERO_STATS;
@@ -786,6 +971,7 @@ export default function CourseDetailsPage() {
   const compareRows = (ext.comparison_matrix && ext.comparison_matrix.length > 0) ? ext.comparison_matrix : DEFAULT_COMPARE_ROWS;
   const certContent: CertificateContent = (ext.certificates && ext.certificates.items && ext.certificates.items.length > 0) ? ext.certificates : DEFAULT_CERTIFICATES;
   const reviews = ext.video_testimonials || [];
+  const videoPlaylist = ext.video_playlist || {};
   const faqsRaw = ext.faqs || [];
   let faqs: any[] = [];
   let faqCategories: string[] = [];
@@ -822,14 +1008,26 @@ export default function CourseDetailsPage() {
               badges: [...heroBadges],
               stats: heroStats.map(s => ({ ...s })),
               cta_primary: heroContent.cta_primary || "Apply Now & Enroll",
-              cta_secondary: heroContent.cta_secondary || "Download Brochure / Syllabus"
+              cta_secondary: heroContent.cta_secondary || "Download Brochure / Syllabus",
+              bg_color: heroContent.bg_color || DEFAULT_HERO_COLORS.bg_color,
+              gradient_from: heroContent.gradient_from || DEFAULT_HERO_COLORS.gradient_from,
+              gradient_to: heroContent.gradient_to || DEFAULT_HERO_COLORS.gradient_to,
+              spotlight_color: heroContent.spotlight_color || DEFAULT_HERO_COLORS.spotlight_color,
             });
             setHeroEditorOpen(true);
           }} className="cd-admin-edit-btn">
             <Icons.Edit /> Edit Hero Section
           </button>
         )}
-        <section className="cd-hero">
+        <section
+          className="cd-hero"
+          style={{
+            ["--hero-bg" as any]: heroContent.bg_color || DEFAULT_HERO_COLORS.bg_color,
+            ["--hero-gradient-from" as any]: heroContent.gradient_from || DEFAULT_HERO_COLORS.gradient_from,
+            ["--hero-gradient-to" as any]: heroContent.gradient_to || DEFAULT_HERO_COLORS.gradient_to,
+            ["--hero-spotlight" as any]: heroContent.spotlight_color || DEFAULT_HERO_COLORS.spotlight_color,
+          }}
+        >
           <HeroGridSpotlight />
           <div className="cd-container cd-hero-layout">
             <div>
@@ -874,18 +1072,14 @@ export default function CourseDetailsPage() {
               </div>
             </div>
 
-            {/* Hero Right Video Preview Card */}
+            {/* Hero Right Preview Card */}
             <div className="cd-hero-card">
-              <div className="cd-hero-card-video" onClick={() => setVideoModalUrl(course.promo_video_url || "https://www.youtube.com/embed/dQw4w9WgXcQ")}>
+              <div className="cd-hero-card-video">
                 {course.thumbnail_url ? (
                   <img src={course.thumbnail_url.startsWith("http") ? course.thumbnail_url : `${baseUrl}${course.thumbnail_url}`} alt={course.title} />
                 ) : (
                   <div style={{ width: "100%", height: "100%", background: "#0f1f38" }} />
                 )}
-                <div className="cd-video-play-overlay">
-                  <div className="cd-play-icon-circle"><Icons.PlaySolid /></div>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>Watch Course Trailer</span>
-                </div>
               </div>
 
               <div className="cd-hero-card-body">
@@ -911,7 +1105,9 @@ export default function CourseDetailsPage() {
                 </ul>
 
                 <button onClick={() => setLeadModalOpen(true)} className="cd-btn-primary" style={{ width: "100%", justifyContent: "center" }}>
-                  Enroll Now
+                  {course.min_payment_value && course.min_payment_value > 0
+                    ? `Book Your Slot — ${currencySymbol}${Number(course.min_payment_value).toLocaleString()}`
+                    : "Book Your Slot"}
                 </button>
               </div>
             </div>
@@ -950,12 +1146,138 @@ export default function CourseDetailsPage() {
         </div>
       </section>
 
+      {/* ── VIDEO PLAYER WITH PLAYLIST ── */}
+      <div className="cd-section-wrapper">
+        {isAdmin && (
+          <button onClick={() => {
+            const vp = course?.extended?.video_playlist || {};
+            setVideoPlaylistForm({
+              section_eyebrow: vp.section_eyebrow || "Watch & Learn",
+              section_title: vp.section_title || "Course Preview & Demo Videos",
+              section_desc: vp.section_desc || "Get a sneak peek into our teaching style, course modules, and real-world projects.",
+              bg_image_url: vp.bg_image_url || "",
+              videos: (vp.videos || []).map((v: any) => ({
+                video_type: v.video_type || "youtube",
+                video_url: v.video_url || "",
+                title: v.title || "",
+                thumbnail_url: v.thumbnail_url || "",
+                duration: v.duration || ""
+              }))
+            });
+            setActiveVideoIdx(0);
+            setVideoPlaylistEditorOpen(true);
+          }} className="cd-admin-edit-btn">
+            <Icons.Edit /> Edit Video Playlist
+          </button>
+        )}
+        <section
+          className={`cd-video-playlist-sec${videoPlaylist.bg_image_url ? " cd-has-bg" : ""}`}
+          style={videoPlaylist.bg_image_url ? { ["--cd-video-playlist-bg" as any]: `url("${videoPlaylist.bg_image_url.startsWith("http") ? videoPlaylist.bg_image_url : `${baseUrl}${videoPlaylist.bg_image_url}`}")` } : undefined}
+        >
+          <div className="cd-container">
+            <div className="cd-sec-header cd-video-playlist-header">
+              <span className="cd-sec-eyebrow">{videoPlaylist.section_eyebrow || "Watch & Learn"}</span>
+              <h2 className="cd-sec-title cd-video-playlist-title">{videoPlaylist.section_title || "Course Preview & Demo Videos"}</h2>
+              <p className="cd-sec-desc">{videoPlaylist.section_desc || "Get a sneak peek into our teaching style, course modules, and real-world projects."}</p>
+            </div>
+
+            {videoPlaylist.videos && videoPlaylist.videos.length > 0 ? (
+              <div className="cd-video-playlist-layout">
+                {/* Main video player */}
+                <div className="cd-video-player-main">
+                  {(() => {
+                    const v = videoPlaylist.videos[activeVideoIdx] || videoPlaylist.videos[0];
+                    const rawUrl = v.video_url && v.video_url.startsWith("http") ? v.video_url : `${baseUrl}${v.video_url}`;
+                    const thumbSrc = v.thumbnail_url && v.thumbnail_url.startsWith("http") ? v.thumbnail_url : (v.thumbnail_url ? `${baseUrl}${v.thumbnail_url}` : "");
+                    if (v.video_type === "youtube") {
+                      // Convert any YouTube URL format to embed format, then add minimal controls params
+                      const embedUrl = getYouTubeEmbedUrl(rawUrl);
+                      const sep = embedUrl.includes("?") ? "&" : "?";
+                      // rel=0: no related videos, modestbranding=1: less YouTube logo, fs=0: hide fullscreen, disablekbtx=1: disable keyboard controls
+                      const autoplaySrc = `${embedUrl}${sep}autoplay=1&rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&disablekbtx=1`;
+                      return (
+                        <iframe
+                          key={activeVideoIdx}
+                          src={autoplaySrc}
+                          title={v.title || "Course Video"}
+                          className="cd-video-player-video"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      );
+                    }
+                    return (
+                      <video
+                        key={activeVideoIdx}
+                        src={rawUrl}
+                        controls
+                        autoPlay
+                        poster={thumbSrc || undefined}
+                        className="cd-video-player-video"
+                      />
+                    );
+                  })()}
+                </div>
+
+                {/* Playlist sidebar */}
+                <div className="cd-video-playlist-sidebar">
+                  <div className="cd-video-playlist-sidebar-header">
+                    <Icons.PlaySolid />
+                    <span>Playlist</span>
+                    <span className="cd-video-playlist-count">{videoPlaylist.videos.length}</span>
+                  </div>
+                  <div className="cd-video-playlist-sidebar-list">
+                    {videoPlaylist.videos.map((v: any, i: number) => {
+                      const thumbSrc = v.thumbnail_url && v.thumbnail_url.startsWith("http") ? v.thumbnail_url : (v.thumbnail_url ? `${baseUrl}${v.thumbnail_url}` : "");
+                      return (
+                        <div
+                          key={i}
+                          className={`cd-video-playlist-item${i === activeVideoIdx ? " active" : ""}`}
+                          onClick={() => setActiveVideoIdx(i)}
+                        >
+                          <div className="cd-video-playlist-item-thumb-wrap">
+                            {thumbSrc ? (
+                              <img src={thumbSrc} alt={v.title || ""} className="cd-video-playlist-item-thumb" />
+                            ) : (
+                              <div className="cd-video-playlist-item-thumb cd-video-playlist-item-nothumb">
+                                <Icons.PlaySolid />
+                              </div>
+                            )}
+                            {i === activeVideoIdx && (
+                              <div className="cd-video-playlist-item-playing">
+                                <span className="cd-video-playlist-bar" /><span className="cd-video-playlist-bar" /><span className="cd-video-playlist-bar" />
+                              </div>
+                            )}
+                            {v.duration && <span className="cd-video-playlist-item-dur">{v.duration}</span>}
+                          </div>
+                          <div className="cd-video-playlist-item-info">
+                            <div className="cd-video-playlist-item-title">{v.title || `Video ${i + 1}`}</div>
+                            <div className="cd-video-playlist-item-type">
+                              {v.video_type === "youtube" ? "YouTube" : "R2 Video"}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="cd-video-playlist-empty">No videos available yet.</div>
+            )}
+          </div>
+        </section>
+      </div>
+
       {/* ── MARKET IMPACT & INDUSTRY DEMAND ── */}
       <div className="cd-section-wrapper">
         {isAdmin && (
           <button onClick={() => {
             const mi = course?.extended?.market_impact || {};
             setMarketForm({
+              section_eyebrow: mi.section_eyebrow || "Industry Demand",
+              section_title: mi.section_title || "Why Agentic AI Skills Are In Massive Demand",
+              section_desc: mi.section_desc || "Companies are pivoting from plain chat models to autonomous AI agents that write code, analyze data, and execute complex workflows.",
               quote: mi.quote || "",
               quote_author: mi.quote_author || "",
               stat_main: mi.stat_main || "76%",
@@ -970,9 +1292,9 @@ export default function CourseDetailsPage() {
         <section className="cd-market-sec">
           <div className="cd-container">
             <div className="cd-sec-header">
-              <span className="cd-sec-eyebrow">Industry Demand</span>
-              <h2 className="cd-sec-title">Why Agentic AI Skills Are In Massive Demand</h2>
-              <p className="cd-sec-desc">Companies are pivoting from plain chat models to autonomous AI agents that write code, analyze data, and execute complex workflows.</p>
+              <span className="cd-sec-eyebrow">{marketImpact.section_eyebrow || "Industry Demand"}</span>
+              <h2 className="cd-sec-title">{marketImpact.section_title || "Why Agentic AI Skills Are In Massive Demand"}</h2>
+              <p className="cd-sec-desc">{marketImpact.section_desc || "Companies are pivoting from plain chat models to autonomous AI agents that write code, analyze data, and execute complex workflows."}</p>
             </div>
 
             <div className="cd-market-layout">
@@ -981,34 +1303,35 @@ export default function CourseDetailsPage() {
                 <div className="cd-market-quote-banner">
                   <span className="cd-quote-watermark cd-quote-wm-left">&ldquo;</span>
                   <p className="cd-market-quote-text">
-                    <strong>Generative AI</strong> is expected to transform <strong>38 million</strong> organized-sector jobs in India by <strong>2030</strong> , primarily by redesigning tasks and <strong>boosting productivity</strong>.
+                    {marketImpact.quote
+                      ? renderBoldedText(marketImpact.quote)
+                      : renderBoldedText("Generative AI is expected to transform 38 million organized-sector jobs in India by 2030 , primarily by redesigning tasks and boosting productivity.")}
                   </p>
                   <span className="cd-quote-watermark cd-quote-wm-right">&rdquo;</span>
                   <div className="cd-market-author-row">
                     <span className="cd-author-dash">-</span>
-                    <span className="cd-author-badge">K</span>
+                    <span className="cd-author-badge">{(marketImpact.quote_author || "KEN RESEARCH").charAt(0)}</span>
                     <span className="cd-author-name">{marketImpact.quote_author || "KEN RESEARCH"}</span>
                   </div>
                 </div>
 
                 <div className="cd-market-subcards">
-                  <div className="cd-market-subcard">
-                    <div className="cd-subcard-icon">
-                      <Icons.User />
+                  {(marketImpact.cards && marketImpact.cards.length > 0
+                    ? marketImpact.cards
+                    : [
+                        { title: "Professionals Demand", value: "Data & AI", desc: "The demand for professionals who can work at the intersection of data, engineering, and AI is growing faster than ever." },
+                        { title: "NASSCOM Forecast", value: "1.5 Million+", desc: "According to NASSCOM, India alone is expected to have over 1.5 million data and AI job openings by 2026." }
+                      ]
+                  ).map((card: any, i: number) => (
+                    <div key={i} className="cd-market-subcard">
+                      <div className="cd-subcard-icon">
+                        {i % 2 === 0 ? <Icons.User /> : <Icons.Sparkles />}
+                      </div>
+                      <p className="cd-subcard-text">
+                        {renderBoldedText(card.desc || card.title || "")}
+                      </p>
                     </div>
-                    <p className="cd-subcard-text">
-                      The demand for <strong>professionals</strong> who can work at the intersection of <strong>data, engineering, and AI</strong> is growing faster than ever.
-                    </p>
-                  </div>
-
-                  <div className="cd-market-subcard">
-                    <div className="cd-subcard-icon">
-                      <Icons.Sparkles />
-                    </div>
-                    <p className="cd-subcard-text">
-                      According to <strong>NASSCOM</strong>, India alone is expected to have over <strong>1.5 million data and AI</strong> job openings by <strong>2026</strong>.
-                    </p>
-                  </div>
+                  ))}
                 </div>
               </div>
 
@@ -1022,10 +1345,10 @@ export default function CourseDetailsPage() {
                     <div className="cd-circle-ring cd-ring-3"></div>
                     <div className="cd-circle-ring cd-ring-2"></div>
                     <div className="cd-circle-ring cd-ring-1"></div>
-                    <div className="cd-center-white-badge">76%</div>
+                    <div className="cd-center-white-badge">{marketImpact.stat_main || "76%"}</div>
                   </div>
                   <p className="cd-featured-caption">
-                    76% of business leaders are willing to pay higher compensation for professionals with AI skills.
+                    {marketImpact.stat_label || "76% of business leaders are willing to pay higher compensation for professionals with AI skills."}
                   </p>
                 </div>
                 <div className="cd-featured-bottom">
@@ -1758,7 +2081,11 @@ export default function CourseDetailsPage() {
                     badges: heroForm.badges?.filter(b => b.trim()),
                     stats: heroForm.stats?.filter(s => s.value.trim() || s.label.trim()),
                     cta_primary: heroForm.cta_primary,
-                    cta_secondary: heroForm.cta_secondary
+                    cta_secondary: heroForm.cta_secondary,
+                    bg_color: heroForm.bg_color || DEFAULT_HERO_COLORS.bg_color,
+                    gradient_from: heroForm.gradient_from || DEFAULT_HERO_COLORS.gradient_from,
+                    gradient_to: heroForm.gradient_to || DEFAULT_HERO_COLORS.gradient_to,
+                    spotlight_color: heroForm.spotlight_color || DEFAULT_HERO_COLORS.spotlight_color,
                   });
                   const res = await apiFetch(`/api/courses/${course.id}/extended`, {
                     method: "PUT",
@@ -1866,11 +2193,44 @@ export default function CourseDetailsPage() {
                   />
                 </div>
               </div>
+
+              {/* Hero Background Colors */}
+              <div className="cd-hero-editor-group">
+                <h3 className="cd-hero-editor-group-title">Hero Background Colors</h3>
+                <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 12px" }}>Customize the hero section background, gradient, and mouse spotlight color for this course.</p>
+                {([
+                  { key: "bg_color" as const, label: "Background Color" },
+                  { key: "gradient_from" as const, label: "Gradient From" },
+                  { key: "gradient_to" as const, label: "Gradient To" },
+                  { key: "spotlight_color" as const, label: "Spotlight Color" },
+                ]).map(({ key, label }) => (
+                  <div key={key} className="cd-hero-color-row">
+                    <label className="cd-form-label" style={{ flex: 1 }}>{label}</label>
+                    <input
+                      type="color"
+                      className="cd-hero-color-picker"
+                      value={heroForm[key] || DEFAULT_HERO_COLORS[key]}
+                      onChange={e => setHeroForm(p => ({ ...p, [key]: e.target.value }))}
+                    />
+                    <input
+                      className="cd-form-input cd-hero-color-text"
+                      value={heroForm[key] || DEFAULT_HERO_COLORS[key]}
+                      onChange={e => setHeroForm(p => ({ ...p, [key]: e.target.value }))}
+                      placeholder={DEFAULT_HERO_COLORS[key]}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Live Preview */}
             <div className="cd-hero-editor-preview">
-              <div className="cd-hero-editor-preview-inner">
+              <div
+                className="cd-hero-editor-preview-inner"
+                style={{
+                  background: `radial-gradient(circle at 50% 20%, ${heroForm.gradient_from || DEFAULT_HERO_COLORS.gradient_from} 0%, ${heroForm.gradient_to || DEFAULT_HERO_COLORS.gradient_to} 80%)`,
+                }}
+              >
                 <div className="cd-badge-pills" style={{ marginBottom: 16 }}>
                   {(heroForm.badges || []).filter(b => b.trim()).map((b, i) => (
                     <span key={i} className={`cd-badge-pill ${i === 0 ? "hot" : ""}`} style={{ fontSize: 11, padding: "4px 10px" }}>
@@ -1954,6 +2314,9 @@ export default function CourseDetailsPage() {
                 setSavingEdit(true);
                 try {
                   const payload = JSON.stringify({
+                    section_eyebrow: marketForm.section_eyebrow,
+                    section_title: marketForm.section_title,
+                    section_desc: marketForm.section_desc,
                     quote: marketForm.quote,
                     quote_author: marketForm.quote_author,
                     stat_main: marketForm.stat_main,
@@ -1984,6 +2347,39 @@ export default function CourseDetailsPage() {
 
           <div className="cd-hero-editor-body">
             <div className="cd-hero-editor-form">
+              {/* Section Header */}
+              <div className="cd-hero-editor-group">
+                <h3 className="cd-hero-editor-group-title">Section Header</h3>
+                <div className="cd-form-group">
+                  <label className="cd-form-label">Eyebrow Text</label>
+                  <input
+                    className="cd-form-input"
+                    value={marketForm.section_eyebrow}
+                    onChange={e => setMarketForm(p => ({ ...p, section_eyebrow: e.target.value }))}
+                    placeholder="e.g. Industry Demand"
+                  />
+                </div>
+                <div className="cd-form-group">
+                  <label className="cd-form-label">Section Title</label>
+                  <input
+                    className="cd-form-input"
+                    value={marketForm.section_title}
+                    onChange={e => setMarketForm(p => ({ ...p, section_title: e.target.value }))}
+                    placeholder="e.g. Why Agentic AI Skills Are In Massive Demand"
+                  />
+                </div>
+                <div className="cd-form-group">
+                  <label className="cd-form-label">Section Description</label>
+                  <textarea
+                    className="cd-form-input"
+                    style={{ height: 70, resize: "vertical" }}
+                    value={marketForm.section_desc}
+                    onChange={e => setMarketForm(p => ({ ...p, section_desc: e.target.value }))}
+                    placeholder="e.g. Companies are pivoting from plain chat models to autonomous AI agents..."
+                  />
+                </div>
+              </div>
+
               {/* Quote Banner */}
               <div className="cd-hero-editor-group">
                 <h3 className="cd-hero-editor-group-title">Quote Banner (Top Left Card)</h3>
@@ -2148,6 +2544,364 @@ export default function CourseDetailsPage() {
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── VIDEO PLAYLIST FULL-SCREEN EDITOR MODAL ── */}
+      {videoPlaylistEditorOpen && (
+        <div className="cd-hero-editor-overlay">
+          <div className="cd-hero-editor-header">
+            <div>
+              <h2 style={{ fontSize: 20, fontWeight: 600, color: "#fef08a", margin: 0 }}>Edit Video Playlist Section</h2>
+              <p style={{ fontSize: 13, color: "#94a3b8", margin: "4px 0 0" }}>Update section header, background image, and video playlist items. Supports R2 bucket videos and YouTube.</p>
+            </div>
+            <div style={{ display: "flex", gap: 12 }}>
+              <button onClick={() => setVideoPlaylistEditorOpen(false)} className="cd-btn-secondary" style={{ padding: "10px 20px" }}>Cancel</button>
+              <button onClick={async () => {
+                setSavingEdit(true);
+                try {
+                  const payload = JSON.stringify({
+                    section_eyebrow: videoPlaylistForm.section_eyebrow,
+                    section_title: videoPlaylistForm.section_title,
+                    section_desc: videoPlaylistForm.section_desc,
+                    bg_image_url: videoPlaylistForm.bg_image_url,
+                    videos: videoPlaylistForm.videos.filter(v => v.video_url.trim() || v.title.trim())
+                  });
+                  const res = await apiFetch(`/api/courses/${course.id}/extended`, {
+                    method: "PUT",
+                    body: JSON.stringify({ video_playlist_json: payload })
+                  });
+                  if (!res.ok) throw new Error("Failed to save");
+                  setCourse(prev => {
+                    if (!prev) return prev;
+                    return { ...prev, extended: { ...prev.extended, video_playlist: JSON.parse(payload) } };
+                  });
+                  setSavingEdit(false);
+                  setVideoPlaylistEditorOpen(false);
+                  showToast("Video Playlist section updated!");
+                } catch (err: any) {
+                  setSavingEdit(false);
+                  showToast("Save error: " + err.message);
+                }
+              }} className="cd-btn-primary" style={{ padding: "10px 28px" }} disabled={savingEdit}>
+                {savingEdit ? "Saving..." : "Save Video Playlist"}
+              </button>
+            </div>
+          </div>
+
+          <div className="cd-hero-editor-body">
+            <div className="cd-hero-editor-form">
+              {/* Section Header */}
+              <div className="cd-hero-editor-group">
+                <h3 className="cd-hero-editor-group-title">Section Header</h3>
+                <div className="cd-form-group">
+                  <label className="cd-form-label">Eyebrow Text</label>
+                  <input
+                    className="cd-form-input"
+                    value={videoPlaylistForm.section_eyebrow}
+                    onChange={e => setVideoPlaylistForm(p => ({ ...p, section_eyebrow: e.target.value }))}
+                    placeholder="e.g. Watch & Learn"
+                  />
+                </div>
+                <div className="cd-form-group">
+                  <label className="cd-form-label">Section Title</label>
+                  <input
+                    className="cd-form-input"
+                    value={videoPlaylistForm.section_title}
+                    onChange={e => setVideoPlaylistForm(p => ({ ...p, section_title: e.target.value }))}
+                    placeholder="e.g. Course Preview & Demo Videos"
+                  />
+                </div>
+                <div className="cd-form-group">
+                  <label className="cd-form-label">Section Description</label>
+                  <textarea
+                    className="cd-form-input"
+                    style={{ height: 70, resize: "vertical" }}
+                    value={videoPlaylistForm.section_desc}
+                    onChange={e => setVideoPlaylistForm(p => ({ ...p, section_desc: e.target.value }))}
+                    placeholder="e.g. Get a sneak peek into our teaching style..."
+                  />
+                </div>
+              </div>
+
+              {/* Background Image */}
+              <div className="cd-hero-editor-group">
+                <h3 className="cd-hero-editor-group-title">Background Image (Optional)</h3>
+                <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 12px" }}>Upload an abstract AI/network themed image. Leave empty to use the default SVG pattern. Shown at very low opacity over white.</p>
+                <VideoDropzoneField
+                  label="Background Image URL"
+                  value={videoPlaylistForm.bg_image_url}
+                  onChange={v => setVideoPlaylistForm(p => ({ ...p, bg_image_url: v }))}
+                  placeholder="Paste image URL or upload..."
+                  accept="image/*"
+                  uploadEndpoint={`${API_BASE_URL}/settings/site/upload`}
+                />
+              </div>
+
+              {/* Playlist Videos — drag & drop reorderable */}
+              <div className="cd-hero-editor-group">
+                <h3 className="cd-hero-editor-group-title">
+                  Playlist Videos
+                  <span style={{ fontSize: 11, color: "#64748b", fontWeight: 400, marginLeft: 8 }}>Drag to reorder</span>
+                </h3>
+                {videoPlaylistForm.videos.map((v, i) => (
+                  <div
+                    key={i}
+                    draggable
+                    onDragStart={() => setDraggedVideoIdx(i)}
+                    onDragOver={e => { e.preventDefault(); setDragOverVideoIdx(i); }}
+                    onDragLeave={() => setDragOverVideoIdx(null)}
+                    onDrop={() => {
+                      if (draggedVideoIdx === null || draggedVideoIdx === i) { setDraggedVideoIdx(null); setDragOverVideoIdx(null); return; }
+                      const updated = [...videoPlaylistForm.videos];
+                      const [moved] = updated.splice(draggedVideoIdx, 1);
+                      updated.splice(i, 0, moved);
+                      setVideoPlaylistForm(p => ({ ...p, videos: updated }));
+                      setDraggedVideoIdx(null);
+                      setDragOverVideoIdx(null);
+                    }}
+                    onDragEnd={() => { setDraggedVideoIdx(null); setDragOverVideoIdx(null); }}
+                    style={{
+                      marginBottom: 12,
+                      padding: 12,
+                      borderRadius: 8,
+                      border: `1px solid ${dragOverVideoIdx === i ? "#38bdf8" : "rgba(255,255,255,0.08)"}`,
+                      background: dragOverVideoIdx === i ? "rgba(56,189,248,0.08)" : draggedVideoIdx === i ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.02)",
+                      transition: "border-color 0.15s, background 0.15s",
+                      opacity: draggedVideoIdx === i ? 0.5 : 1,
+                      cursor: "grab",
+                    }}
+                  >
+                    {/* Card header: drag handle + number + thumbnail preview + remove */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                      <div style={{ color: "#64748b", cursor: "grab", flexShrink: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                        <span style={{ fontSize: 14, lineHeight: 1 }}>⠿</span>
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", flexShrink: 0, minWidth: 20 }}>#{i + 1}</span>
+                      {/* Thumbnail preview */}
+                      {(() => {
+                        const thumb = v.thumbnail_url && v.thumbnail_url.startsWith("http") ? v.thumbnail_url : (v.thumbnail_url ? `${API_BASE_URL.replace("/api", "")}${v.thumbnail_url}` : "");
+                        return thumb ? (
+                          <img src={thumb} alt="" style={{ width: 48, height: 30, borderRadius: 3, objectFit: "cover", flexShrink: 0 }} />
+                        ) : (
+                          <div style={{ width: 48, height: 30, borderRadius: 3, background: "#0a1628", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#475569" }}>
+                            <Icons.PlaySolid />
+                          </div>
+                        );
+                      })()}
+                      <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#e2e8f0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {v.title || "(untitled)"}
+                      </span>
+                      {v.video_type === "youtube" && <span style={{ fontSize: 9, fontWeight: 700, color: "#ef4444", background: "rgba(239,68,68,0.1)", padding: "2px 6px", borderRadius: 3, flexShrink: 0 }}>YT</span>}
+                      {v.video_type === "r2" && <span style={{ fontSize: 9, fontWeight: 700, color: "#38bdf8", background: "rgba(56,189,248,0.1)", padding: "2px 6px", borderRadius: 3, flexShrink: 0 }}>R2</span>}
+                      <button onClick={() => {
+                        const updated = videoPlaylistForm.videos.filter((_, j) => j !== i);
+                        setVideoPlaylistForm(p => ({ ...p, videos: updated }));
+                      }} className="cd-hero-editor-remove" style={{ flexShrink: 0 }}>Remove</button>
+                    </div>
+
+                    {/* Compact 2-column layout: type + title on top, URL + thumbnail + duration below */}
+                    <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 8, marginBottom: 8 }}>
+                      {/* Video type selector */}
+                      <div>
+                        <label className="cd-form-label" style={{ fontSize: 9 }}>Source</label>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          {(["youtube", "r2"] as const).map(t => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => {
+                                const updated = [...videoPlaylistForm.videos];
+                                updated[i] = { ...updated[i], video_type: t };
+                                if (t === "youtube" && updated[i].video_url) {
+                                  const autoThumb = getYouTubeThumbnail(updated[i].video_url);
+                                  const isAutoGenerated = !updated[i].thumbnail_url || updated[i].thumbnail_url.startsWith("https://img.youtube.com/");
+                                  if (autoThumb && isAutoGenerated) {
+                                    updated[i] = { ...updated[i], thumbnail_url: autoThumb };
+                                  }
+                                }
+                                setVideoPlaylistForm(p => ({ ...p, videos: updated }));
+                              }}
+                              style={{
+                                flex: 1, padding: "8px 6px", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                                border: `1.5px solid ${v.video_type === t ? "#38bdf8" : "rgba(255,255,255,0.1)"}`,
+                                background: v.video_type === t ? "rgba(56,189,248,0.15)" : "transparent",
+                                color: v.video_type === t ? "#38bdf8" : "#94a3b8",
+                                transition: "all 0.2s",
+                              }}
+                            >
+                              {t === "youtube" ? "YouTube" : "R2"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Title */}
+                      <div>
+                        <label className="cd-form-label" style={{ fontSize: 9 }}>Title</label>
+                        <input
+                          className="cd-form-input"
+                          style={{ padding: "8px 10px", fontSize: 13 }}
+                          value={v.title}
+                          onChange={e => {
+                            const updated = [...videoPlaylistForm.videos];
+                            updated[i] = { ...updated[i], title: e.target.value };
+                            setVideoPlaylistForm(p => ({ ...p, videos: updated }));
+                          }}
+                          placeholder="e.g. Course Introduction"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Video URL */}
+                    <div className="cd-form-group" style={{ marginBottom: 8 }}>
+                      <label className="cd-form-label" style={{ fontSize: 9 }}>{v.video_type === "youtube" ? "YouTube URL (any format)" : "R2 Video URL"}</label>
+                      <VideoDropzoneField
+                        label=""
+                        value={v.video_url}
+                        onChange={val => {
+                          const updated = [...videoPlaylistForm.videos];
+                          updated[i] = { ...updated[i], video_url: val };
+                          if (v.video_type === "youtube") {
+                            const autoThumb = getYouTubeThumbnail(val);
+                            const prevAutoThumb = getYouTubeThumbnail(v.video_url);
+                            const isAutoGenerated = !updated[i].thumbnail_url || updated[i].thumbnail_url === prevAutoThumb || updated[i].thumbnail_url.startsWith("https://img.youtube.com/");
+                            if (autoThumb && isAutoGenerated) {
+                              updated[i] = { ...updated[i], thumbnail_url: autoThumb };
+                            }
+                            if (autoThumb) {
+                              setYtFetchingIdx(i);
+                              fetch(`${API_BASE_URL}/youtube/info?url=${encodeURIComponent(val)}`)
+                                .then(r => r.ok ? r.json() : null)
+                                .then(info => {
+                                  if (info) {
+                                    setVideoPlaylistForm(prev => {
+                                      const vids = [...prev.videos];
+                                      if (!vids[i].title && info.title) vids[i].title = info.title;
+                                      if (!vids[i].duration && info.duration) vids[i].duration = info.duration;
+                                      if (info.thumbnail_url && isAutoGenerated) vids[i].thumbnail_url = info.thumbnail_url;
+                                      return { ...prev, videos: vids };
+                                    });
+                                  }
+                                })
+                                .catch(() => {})
+                                .finally(() => setYtFetchingIdx(null));
+                            }
+                          }
+                          setVideoPlaylistForm(p => ({ ...p, videos: updated }));
+                        }}
+                        placeholder={v.video_type === "youtube" ? "https://youtube.com/watch?v=... or youtu.be/..." : "https://r2-bucket-url/video.mp4 or upload"}
+                        accept="video/*"
+                        uploadEndpoint={v.video_type === "r2" ? `${API_BASE_URL}/settings/video/upload` : undefined}
+                        showUploadOnly={v.video_type === "r2"}
+                      />
+                      {v.video_type === "youtube" && v.video_url && ytFetchingIdx === i && (
+                        <p style={{ fontSize: 10, color: "#38bdf8", margin: "4px 0 0", fontWeight: 600 }}>⏳ Fetching from YouTube...</p>
+                      )}
+                      {v.video_type === "youtube" && v.video_url && ytFetchingIdx !== i && (
+                        <p style={{ fontSize: 10, color: "#22c55e", margin: "4px 0 0", fontWeight: 600 }}>✓ Auto-filled thumbnail, title & duration</p>
+                      )}
+                    </div>
+
+                    {/* Thumbnail + Duration in a row */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 100px", gap: 8 }}>
+                      <div>
+                        <label className="cd-form-label" style={{ fontSize: 9 }}>Thumbnail (auto from YouTube)</label>
+                        <VideoDropzoneField
+                          label=""
+                          value={v.thumbnail_url}
+                          onChange={val => {
+                            const updated = [...videoPlaylistForm.videos];
+                            updated[i] = { ...updated[i], thumbnail_url: val };
+                            setVideoPlaylistForm(p => ({ ...p, videos: updated }));
+                          }}
+                          placeholder="Auto or paste URL..."
+                          accept="image/*"
+                          uploadEndpoint={`${API_BASE_URL}/settings/site/upload`}
+                        />
+                      </div>
+                      <div>
+                        <label className="cd-form-label" style={{ fontSize: 9 }}>Duration</label>
+                        <input
+                          className="cd-form-input"
+                          style={{ padding: "8px 10px", fontSize: 13 }}
+                          value={v.duration}
+                          onChange={e => {
+                            const updated = [...videoPlaylistForm.videos];
+                            updated[i] = { ...updated[i], duration: e.target.value };
+                            setVideoPlaylistForm(p => ({ ...p, videos: updated }));
+                          }}
+                          placeholder="12:34"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <button onClick={() => setVideoPlaylistForm(p => ({ ...p, videos: [...p.videos, { video_type: "youtube", video_url: "", title: "", thumbnail_url: "", duration: "" }] }))} className="cd-hero-editor-add">+ Add Video</button>
+              </div>
+            </div>
+
+            {/* Live Preview */}
+            <div className="cd-hero-editor-preview">
+              <div className="cd-hero-editor-preview-inner" style={{ maxWidth: 560, padding: 0, border: "none", background: "transparent" }}>
+                <div style={{ textAlign: "center", marginBottom: 20 }}>
+                  <div style={{ fontSize: 11, color: "#e63946", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>
+                    {videoPlaylistForm.section_eyebrow || "Watch & Learn"}
+                  </div>
+                  <h3 style={{ fontSize: 22, fontWeight: 600, color: "#f1f5f9", margin: "0 0 8px" }}>
+                    {videoPlaylistForm.section_title || "Course Preview & Demo Videos"}
+                  </h3>
+                  <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 18px" }}>
+                    {videoPlaylistForm.section_desc || "Get a sneak peek into our teaching style..."}
+                  </p>
+                </div>
+                {(() => {
+                  const validVideos = videoPlaylistForm.videos.filter(v => v.video_url.trim());
+                  if (validVideos.length === 0) {
+                    return (
+                      <div style={{ textAlign: "center", padding: 40, color: "#94a3b8", fontSize: 13, background: "#f8fafc", borderRadius: 12 }}>
+                        No videos added yet. Add a video to see preview.
+                      </div>
+                    );
+                  }
+                  const firstVideo = validVideos[0];
+                  const firstThumb = firstVideo.thumbnail_url && firstVideo.thumbnail_url.startsWith("http") ? firstVideo.thumbnail_url : (firstVideo.thumbnail_url ? `${API_BASE_URL.replace("/api", "")}${firstVideo.thumbnail_url}` : "");
+                  return (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", gap: 10, alignItems: "start" }}>
+                      {/* Main video preview */}
+                      <div style={{ borderRadius: 4, overflow: "hidden", position: "relative", aspectRatio: "16/9", background: firstThumb ? `url("${firstThumb}") center/cover` : "#000", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {!firstThumb && <Icons.PlaySolid />}
+                        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "8px 10px", background: "linear-gradient(transparent, rgba(0,0,0,0.85))", color: "#fff", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {firstVideo.title || "Video Preview"}
+                          {firstVideo.duration && <span style={{ marginLeft: 8, fontSize: 10, color: "#cbd5e1", fontWeight: 500 }}>{firstVideo.duration}</span>}
+                        </div>
+                      </div>
+                      {/* Playlist items */}
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 200, overflowY: "auto" }}>
+                        {validVideos.slice(0, 5).map((v, i) => {
+                          const thumb = v.thumbnail_url && v.thumbnail_url.startsWith("http") ? v.thumbnail_url : (v.thumbnail_url ? `${API_BASE_URL.replace("/api", "")}${v.thumbnail_url}` : "");
+                          return (
+                            <div key={i} style={{ display: "flex", gap: 6, padding: 4, borderRadius: 4, border: `1px solid ${i === 0 ? "rgba(230,57,70,0.4)" : "rgba(255,255,255,0.08)"}`, background: i === 0 ? "rgba(230,57,70,0.1)" : "rgba(15,31,56,0.6)", alignItems: "center" }}>
+                              {thumb ? (
+                                <img src={thumb} alt="" style={{ width: 36, height: 24, borderRadius: 3, objectFit: "cover", flexShrink: 0 }} />
+                              ) : (
+                                <div style={{ width: 36, height: 24, borderRadius: 3, background: "#0a1628", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+                                  <Icons.PlaySolid />
+                                </div>
+                              )}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 10, fontWeight: 600, color: i === 0 ? "#fca5a5" : "#e2e8f0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v.title || `Video ${i + 1}`}</div>
+                                {v.duration && <div style={{ fontSize: 9, color: "#64748b" }}>{v.duration}</div>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>

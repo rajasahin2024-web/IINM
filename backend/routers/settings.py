@@ -25,7 +25,7 @@ from models import (
 )
 from routers.auth import require_device
 from helpers import rewrite_url
-from security import validate_upload, ALLOWED_IMAGE_EXTENSIONS, ALLOWED_DOC_EXTENSIONS, MAX_IMAGE_SIZE_BYTES
+from security import validate_upload, ALLOWED_IMAGE_EXTENSIONS, ALLOWED_DOC_EXTENSIONS, ALLOWED_VIDEO_EXTENSIONS, MAX_IMAGE_SIZE_BYTES, MAX_VIDEO_SIZE_BYTES
 
 router = APIRouter(
     prefix="/api/settings",
@@ -383,6 +383,41 @@ async def upload_ticker_icon(file: UploadFile = File(...), device: str = Depends
     with open(filepath, "wb") as buffer:
         buffer.write(content)
     return {"url": f"/uploads/ticker-icons/{filename}"}
+
+
+@router.post("/video/upload")
+async def upload_video_file(file: UploadFile = File(...), device: str = Depends(require_device), db: Session = Depends(get_db)):
+    """Upload a video file to R2 bucket (with local fallback). Returns the URL."""
+    ext = validate_upload(file, ALLOWED_VIDEO_EXTENSIONS, max_size=MAX_VIDEO_SIZE_BYTES)
+    content = await file.read()
+    unique_name = f"videos/{uuid.uuid4().hex}.{ext}"
+
+    # Try R2 first
+    try:
+        from models import R2Settings
+        import boto3
+        r2 = db.query(R2Settings).first()
+        if r2 and r2.is_active and r2.account_id and r2.secret_access_key and r2.bucket_name:
+            account = (r2.account_id or "").strip()
+            if "r2.cloudflarestorage.com" in account:
+                endpoint = account if account.startswith("http") else f"https://{account}"
+            else:
+                endpoint = f"https://{account}.r2.cloudflarestorage.com"
+            s3 = boto3.client(service_name="s3", endpoint_url=endpoint, aws_access_key_id=r2.access_key_id, aws_secret_access_key=r2.secret_access_key, region_name="auto")
+            s3.put_object(Bucket=r2.bucket_name, Key=unique_name, Body=content, ContentType=file.content_type or "video/mp4")
+            pub = (r2.public_url or "").rstrip("/")
+            return {"url": f"{pub}/{unique_name}" if pub else unique_name}
+    except Exception as e:
+        logging.warning(f"R2 upload failed for video upload, falling back to local: {e}")
+
+    # Local fallback
+    os.makedirs("uploads/videos", exist_ok=True)
+    filename = unique_name.split("/")[-1]
+    filepath = os.path.join("uploads/videos", filename)
+    with open(filepath, "wb") as buffer:
+        buffer.write(content)
+    return {"url": f"/uploads/videos/{filename}"}
+
 
 # ══════════════════════════════════════════════════════
 #  PAYMENT SETTINGS
