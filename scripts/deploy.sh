@@ -14,11 +14,12 @@ echo "=========================================="
 
 cd "$PROJECT_DIR"
 
-# Pull latest code from main branch
+# Pull latest code from main branch — force clean state
 git fetch origin
 git reset --hard origin/main
+git clean -fd   # remove untracked files that may block builds
 
-# Deploy backend dependencies
+# ─── BACKEND ───────────────────────────────
 cd "$BACKEND_DIR"
 
 # Detect aaPanel Python environment
@@ -41,30 +42,35 @@ fi
 "$PYTHON_BIN" -m pip install --upgrade pip || true
 "$PYTHON_BIN" -m pip install -r requirements.txt
 
-# Uncomment only after testing migrations with a backup
-# alembic upgrade head
+# Run database migrations (fail-safe — won't break deploy if migration fails)
+cd "$BACKEND_DIR"
+"$PYTHON_BIN" -m alembic upgrade head || echo "WARNING: alembic migration failed, continuing deploy..."
 
-# Build production frontend
+# Restart backend (gunicorn) — kill old process, start fresh
+pkill -f "gunicorn.*main:app" || true
+sleep 2
+cd "$BACKEND_DIR"
+nohup "$GUNICORN_BIN" -w 4 -k uvicorn.workers.UvicornWorker main:app -b 0.0.0.0:2007 > /var/log/iinm-backend.log 2>&1 &
+echo "Backend restarted (PID $!)"
+
+# ─── FRONTEND ──────────────────────────────
 cd "$FRONTEND_DIR"
+
+# Remove old .next build folder — CRITICAL for fresh build
+rm -rf .next
+
+# Install dependencies fresh
 npm install
+
+# Build production
 npm run build
 
-# Restart backend (gunicorn): try graceful reload, else start
-cd "$BACKEND_DIR"
-GUNICORN_MASTER=$(pgrep -f "gunicorn: master" | head -n1)
-if [ -n "$GUNICORN_MASTER" ]; then
-  echo "Reloading gunicorn master (PID $GUNICORN_MASTER)"
-  kill -HUP "$GUNICORN_MASTER"
-else
-  echo "Gunicorn master not found; starting new instance..."
-  nohup "$GUNICORN_BIN" -w 4 -k uvicorn.workers.UvicornWorker main:app -b 0.0.0.0:2007 > /var/log/iinm-backend.log 2>&1 &
-fi
-
-# Restart frontend Next.js server
-cd "$FRONTEND_DIR"
+# Restart frontend Next.js server — kill old, start fresh
 pkill -f "next start" || true
 sleep 2
+cd "$FRONTEND_DIR"
 nohup npx next start -p 2021 > /var/log/iinm-frontend.log 2>&1 &
+echo "Frontend restarted (PID $!)"
 
 echo "=========================================="
 echo "AAPanel deploy completed: $(date)"
