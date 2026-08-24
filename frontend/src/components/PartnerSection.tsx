@@ -116,9 +116,9 @@ function PartnerLogoFallback({ name }: { name: string }) {
   return <span style={{ fontSize: 15, fontWeight: 700, color: "#94a3b8", letterSpacing: "-0.3px", whiteSpace: "nowrap" }}>{name}</span>;
 }
 
-export default function PartnerSection() {
-  const [data, setData] = useState<PartnerSectionData>(defaultData);
-  const [loading, setLoading] = useState(true);
+export default function PartnerSection({ initialData }: { initialData?: PartnerSectionData } = {}) {
+  const [data, setData] = useState<PartnerSectionData>(initialData || defaultData);
+  const [loading, setLoading] = useState(!initialData);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<PartnerSectionData>(defaultData);
@@ -129,6 +129,7 @@ export default function PartnerSection() {
   const [pendingUpload, setPendingUpload] = useState<{ type: "icon" | "logo"; idx: number } | null>(null);
 
   const loadData = useCallback(async () => {
+    if (initialData) return; // skip client fetch when server data exists
     try {
       const res = await apiFetch("/api/settings/partners");
       if (res.ok) {
@@ -136,7 +137,7 @@ export default function PartnerSection() {
         if (json.content) setData(json.content);
       }
     } catch { /* ignore */ } finally { setLoading(false); }
-  }, []);
+  }, [initialData]);
 
   useEffect(() => {
     loadData();

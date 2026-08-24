@@ -15,6 +15,7 @@ function GoogleApiSettingsInner() {
     google_client_id: "",
     google_client_secret: "",
     google_redirect_uri: "",
+    enable_google_login: false,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -39,6 +40,7 @@ function GoogleApiSettingsInner() {
           google_client_id: d.google_client_id || "",
           google_client_secret: d.google_client_secret || "",
           google_redirect_uri: d.google_redirect_uri || "",
+          enable_google_login: !!d.enable_google_login,
         });
       }
     } catch {
@@ -54,7 +56,11 @@ function GoogleApiSettingsInner() {
     try {
       const payload: any = {};
       Object.entries(settings).forEach(([k, v]) => {
-        payload[k] = (v as string).trim() === "" ? null : v;
+        if (typeof v === "boolean") {
+          payload[k] = v;
+        } else {
+          payload[k] = (v as string).trim() === "" ? null : v;
+        }
       });
       const res = await apiFetch(`${BASE_URL}/api/contact/google-api`, {
         method: "PUT",
@@ -321,6 +327,28 @@ function GoogleApiSettingsInner() {
                   </button>
                 </div>
               </div>
+            </div>
+
+            <div style={{ marginTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f8fafc", borderRadius: 10, padding: "14px 16px", border: "1px solid #e2e8f0" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>Enable Google Login for Slot Booking</div>
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>Show &quot;Sign in with Google&quot; button on the public slot booking form to pre-fill student details.</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSettings(p => ({ ...p, enable_google_login: !p.enable_google_login }))}
+                style={{
+                  width: 48, height: 26, borderRadius: 13, border: "none", cursor: "pointer",
+                  background: settings.enable_google_login ? "#0a1628" : "#cbd5e1",
+                  position: "relative", transition: "background-color 0.25s ease", flexShrink: 0,
+                }}
+              >
+                <span style={{
+                  position: "absolute", top: 3, left: settings.enable_google_login ? 25 : 3,
+                  width: 20, height: 20, borderRadius: "50%", background: "#fff",
+                  transition: "left 0.25s ease", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                }} />
+              </button>
             </div>
 
             <div style={{ marginTop: 16 }}>

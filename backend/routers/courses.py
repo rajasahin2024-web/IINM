@@ -113,6 +113,9 @@ class CourseBase(BaseModel):
     currency: str = "INR"
     min_payment_type: Optional[str] = None   # 'percentage' | 'amount' | None
     min_payment_value: Optional[float] = None
+    full_payment_discount_type: Optional[str] = None       # 'percentage' | 'amount' | None
+    full_payment_discount_value: Optional[float] = None
+    full_payment_discount_valid_till: Optional[datetime] = None
     thumbnail_url: Optional[str] = None
     promo_video_url: Optional[str] = None
     status: str = "DRAFT"
@@ -152,6 +155,9 @@ class CourseUpdate(BaseModel):
     currency: Optional[str] = None
     min_payment_type: Optional[str] = None
     min_payment_value: Optional[float] = None
+    full_payment_discount_type: Optional[str] = None
+    full_payment_discount_value: Optional[float] = None
+    full_payment_discount_valid_till: Optional[datetime] = None
     thumbnail_url: Optional[str] = None
     promo_video_url: Optional[str] = None
     status: Optional[str] = None
@@ -606,6 +612,13 @@ def get_public_course_details(slug: str, db: Session = Depends(get_db)):
         "show_instructor_publicly": c.show_instructor_publicly if c.show_instructor_publicly is not None else True,
         "chapters": chapters_data,
         "instructors": instructors_data,
+        # ── SEO fields (additive — already in DB, now exposed for SSR metadata) ──
+        "seo_title": c.seo_title,
+        "seo_description": c.seo_description,
+        "seo_keywords": c.seo_keywords,
+        "skill_level": c.skill_level,
+        "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+        "created_at": c.created_at.isoformat() if c.created_at else None,
     }
 
 
@@ -630,6 +643,7 @@ class CourseExtendedUpdate(BaseModel):
     video_testimonials_json: Optional[str] = None
     faqs_json: Optional[str] = None
     video_playlist_json: Optional[str] = None
+    tools_covered_json: Optional[str] = None
 
 
 def get_default_course_extended_data(course_title: str):
@@ -814,6 +828,12 @@ def get_default_course_extended_data(course_title: str):
             "section_desc": "Get a sneak peek into our teaching style, course modules, and real-world projects.",
             "bg_image_url": "",
             "videos": []
+        },
+        "tools_covered": {
+            "section_eyebrow": "Tools & Technologies",
+            "section_title": "Tools Covered in course",
+            "section_desc": "Hands-on mastery over the industry's leading AI tools, frameworks, and platforms.",
+            "tools": []
         }
     }
 
@@ -849,10 +869,40 @@ def get_public_course_extended_details(slug: str, db: Session = Depends(get_db))
         "video_testimonials": safe_parse(ext.video_testimonials_json if ext else None, defaults["video_testimonials"]),
         "faqs": safe_parse(ext.faqs_json if ext else None, defaults["faqs"]),
         "video_playlist": safe_parse(ext.video_playlist_json if ext else None, defaults["video_playlist"]),
+        "tools_covered": safe_parse(ext.tools_covered_json if ext else None, defaults["tools_covered"]),
     }
 
     base_data["extended"] = extended_data
     return base_data
+
+
+@router.get("/public/courses/{slug}/faqs")
+def get_public_course_faqs_by_slug(slug: str, db: Session = Depends(get_db)):
+    """Public: return active FAQs for a course by slug (for SSR FAQPage schema).
+    Falls back to CourseExtendedContent.faqs_json if no CourseFaq rows exist."""
+    c = db.query(models.Course).filter(models.Course.slug == slug, models.Course.status == "PUBLISHED").first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Course not found")
+    from models import CourseFaq
+    faqs = db.query(CourseFaq).filter(
+        CourseFaq.course_id == c.id, CourseFaq.is_active == True
+    ).order_by(CourseFaq.order_index.asc(), CourseFaq.id.asc()).all()
+    if faqs:
+        return [{"question": f.question, "answer": f.answer} for f in faqs]
+    # Fallback: parse faqs_json from extended content
+    ext = c.extended_content
+    if ext and ext.faqs_json:
+        try:
+            raw = json.loads(ext.faqs_json)
+            if isinstance(raw, list):
+                return [
+                    {"question": item.get("question") or item.get("q") or "", "answer": item.get("answer") or item.get("a") or ""}
+                    for item in raw
+                    if (item.get("question") or item.get("q")) and (item.get("answer") or item.get("a"))
+                ]
+        except Exception:
+            pass
+    return []
 
 
 @router.put("/courses/{course_id}/extended")
@@ -893,6 +943,8 @@ def update_course_extended_details(
         ext.faqs_json = payload.faqs_json
     if payload.video_playlist_json is not None:
         ext.video_playlist_json = payload.video_playlist_json
+    if payload.tools_covered_json is not None:
+        ext.tools_covered_json = payload.tools_covered_json
 
     db.commit()
     db.refresh(ext)
@@ -948,6 +1000,9 @@ def create_course(course: CourseCreate, device: str = Depends(require_device), d
         is_free=course.is_free,
         min_payment_type=course.min_payment_type,
         min_payment_value=course.min_payment_value,
+        full_payment_discount_type=course.full_payment_discount_type,
+        full_payment_discount_value=course.full_payment_discount_value,
+        full_payment_discount_valid_till=course.full_payment_discount_valid_till,
         thumbnail_url=course.thumbnail_url,
         promo_video_url=course.promo_video_url,
         status=course.status,
@@ -1523,6 +1578,7 @@ def _extract_youtube_id(url: str) -> Optional[str]:
         r'(?:youtu\.be/)([a-zA-Z0-9_-]{11})',
         r'(?:youtube\.com/shorts/)([a-zA-Z0-9_-]{11})',
         r'(?:youtube\.com/v/)([a-zA-Z0-9_-]{11})',
+        r'(?:youtube\.com/live/)([a-zA-Z0-9_-]{11})',
     ]
     for p in patterns:
         m = re.search(p, url)

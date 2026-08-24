@@ -297,6 +297,8 @@ export default function Login() {
       // Store 48-hour expiry timestamp
       const expiryMs = Date.now() + 48 * 60 * 60 * 1000;
       localStorage.setItem("iinm_login_expiry", String(expiryMs));
+      // Set admin cookie so middleware can bypass maintenance for admins
+      document.cookie = "iinm_admin=1; path=/; max-age=172800"; // 48h
       showToast("Signed in successfully! Redirecting…", "success");
       setTimeout(() => { window.location.href = "/admin"; }, 1000);
 

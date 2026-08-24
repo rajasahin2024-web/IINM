@@ -103,9 +103,9 @@ function useTypewriter(words: string[], speed = 100, pause = 2500) {
   return displayText;
 }
 
-export default function FounderDeskSection() {
-  const [data, setData] = useState<FounderDeskData>(DEFAULT_DATA);
-  const [loading, setLoading] = useState(true);
+export default function FounderDeskSection({ initialData }: { initialData?: FounderDeskData | null } = {}) {
+  const [data, setData] = useState<FounderDeskData>(initialData || DEFAULT_DATA);
+  const [loading, setLoading] = useState(!initialData);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<FounderDeskData>>({});
@@ -116,7 +116,8 @@ export default function FounderDeskSection() {
 
   const typewriterText = useTypewriter(data.typewriter_words || [], 120, 2500);
 
-  const fetchData = async () => {
+  const fetchData = async (force = false) => {
+    if (initialData && !force) return; // skip client fetch when server data exists
     try {
       setLoading(true);
       const res = await apiFetch("/api/settings/founder-desk");
@@ -147,7 +148,7 @@ export default function FounderDeskSection() {
         method: "PUT",
         body: JSON.stringify(editData),
       });
-      if (res.ok) { setIsEditing(false); fetchData(); }
+      if (res.ok) { setIsEditing(false); fetchData(true); }
     } catch { /* ignore */ } finally { setIsSaving(false); }
   };
 

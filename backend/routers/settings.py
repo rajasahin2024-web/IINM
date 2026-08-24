@@ -8,6 +8,7 @@ from pydantic import BaseModel
 import smtplib
 from email.message import EmailMessage
 import logging
+from datetime import datetime
 from typing import Optional, List
 
 from database import get_db
@@ -160,6 +161,15 @@ class SiteSettingsSchema(BaseModel):
     maintenance_message: Optional[str] = None
     maintenance_video_url: Optional[str] = None
     maintenance_bg_image_url: Optional[str] = None
+    founder_name: Optional[str] = None
+    founder_designation: Optional[str] = None
+    founder_signature_url: Optional[str] = None
+    # ── SEO / AEO fields (additive — accepted on PUT, returned on GET) ──
+    og_image_url: Optional[str] = None
+    twitter_handle: Optional[str] = None
+    canonical_base_url: Optional[str] = None
+    google_site_verification: Optional[str] = None
+    default_robots_index: Optional[bool] = None
 
 @router.get("/site")
 async def get_site_settings(db: Session = Depends(get_db)):
@@ -189,6 +199,15 @@ async def get_site_settings(db: Session = Depends(get_db)):
         "maintenance_message": settings.maintenance_message,
         "maintenance_video_url": settings.maintenance_video_url,
         "maintenance_bg_image_url": settings.maintenance_bg_image_url,
+        "founder_name": settings.founder_name,
+        "founder_designation": settings.founder_designation,
+        "founder_signature_url": rewrite_url(settings.founder_signature_url),
+        # ── SEO / AEO fields (additive) ──
+        "og_image_url": rewrite_url(settings.og_image_url) if hasattr(settings, 'og_image_url') else None,
+        "twitter_handle": settings.twitter_handle if hasattr(settings, 'twitter_handle') else None,
+        "canonical_base_url": settings.canonical_base_url if hasattr(settings, 'canonical_base_url') else None,
+        "google_site_verification": settings.google_site_verification if hasattr(settings, 'google_site_verification') else None,
+        "default_robots_index": settings.default_robots_index if hasattr(settings, 'default_robots_index') and settings.default_robots_index is not None else True,
     }
 
 @router.put("/site")
@@ -323,7 +342,7 @@ async def upload_site_image(file: UploadFile = File(...), device: str = Depends(
         folder = "images"
     else:
         folder = "documents"
-    unique_name = f"{folder}/{uuid.uuid4().hex}.{ext}"
+    unique_name = f"{folder}/{uuid.uuid4().hex}{ext}"
 
     # Try R2 first
     try:
@@ -339,7 +358,9 @@ async def upload_site_image(file: UploadFile = File(...), device: str = Depends(
             s3 = boto3.client(service_name="s3", endpoint_url=endpoint, aws_access_key_id=r2.access_key_id, aws_secret_access_key=r2.secret_access_key, region_name="auto")
             s3.put_object(Bucket=r2.bucket_name, Key=unique_name, Body=content, ContentType=file.content_type or "application/octet-stream")
             pub = (r2.public_url or "").rstrip("/")
-            return {"url": f"{pub}/{unique_name}" if pub else unique_name}
+            if pub:
+                return {"url": f"{pub}/{unique_name}"}
+            logging.warning("R2 upload succeeded but public_url is empty, falling back to local: %s", unique_name)
     except Exception as e:
         logging.warning(f"R2 upload failed for site upload, falling back to local: {e}")
 
@@ -351,11 +372,46 @@ async def upload_site_image(file: UploadFile = File(...), device: str = Depends(
         buffer.write(content)
     return {"url": f"/uploads/{folder}/{filename}"}
 
+@router.post("/site/upload-founder-signature")
+async def upload_founder_signature(file: UploadFile = File(...), device: str = Depends(require_device), db: Session = Depends(get_db)):
+    """Upload the founder signature image to R2 (with local fallback). Returns the URL."""
+    ext = validate_upload(file, ALLOWED_IMAGE_EXTENSIONS, max_size=MAX_IMAGE_SIZE_BYTES)
+    content = await file.read()
+    unique_name = f"images/founder-signature-{uuid.uuid4().hex}{ext}"
+
+    # Try R2 first
+    try:
+        from models import R2Settings
+        import boto3
+        r2 = db.query(R2Settings).first()
+        if r2 and r2.is_active and r2.account_id and r2.secret_access_key and r2.bucket_name:
+            account = (r2.account_id or "").strip()
+            if "r2.cloudflarestorage.com" in account:
+                endpoint = account if account.startswith("http") else f"https://{account}"
+            else:
+                endpoint = f"https://{account}.r2.cloudflarestorage.com"
+            s3 = boto3.client(service_name="s3", endpoint_url=endpoint, aws_access_key_id=r2.access_key_id, aws_secret_access_key=r2.secret_access_key, region_name="auto")
+            s3.put_object(Bucket=r2.bucket_name, Key=unique_name, Body=content, ContentType=file.content_type or "image/png")
+            pub = (r2.public_url or "").rstrip("/")
+            if pub:
+                return {"url": f"{pub}/{unique_name}"}
+            logging.warning("R2 upload succeeded but public_url is empty, falling back to local: %s", unique_name)
+    except Exception as e:
+        logging.warning(f"R2 upload failed for founder signature, falling back to local: {e}")
+
+    # Local fallback
+    os.makedirs("uploads/images", exist_ok=True)
+    filename = unique_name.split("/")[-1]
+    filepath = os.path.join("uploads", "images", filename)
+    with open(filepath, "wb") as buffer:
+        buffer.write(content)
+    return {"url": f"/uploads/images/{filename}"}
+
 @router.post("/site/ticker-icon-upload")
 async def upload_ticker_icon(file: UploadFile = File(...), device: str = Depends(require_device), db: Session = Depends(get_db)):
     """Upload a ticker icon to R2 bucket (with local fallback). Returns the URL."""
     ext = validate_upload(file, ALLOWED_IMAGE_EXTENSIONS)
-    unique_name = f"ticker-icons/{uuid.uuid4().hex}.{ext}"
+    unique_name = f"ticker-icons/{uuid.uuid4().hex}{ext}"
     content = await file.read()
 
     # Try R2 first
@@ -372,7 +428,9 @@ async def upload_ticker_icon(file: UploadFile = File(...), device: str = Depends
             s3 = boto3.client(service_name="s3", endpoint_url=endpoint, aws_access_key_id=r2.access_key_id, aws_secret_access_key=r2.secret_access_key, region_name="auto")
             s3.put_object(Bucket=r2.bucket_name, Key=unique_name, Body=content, ContentType=file.content_type or "application/octet-stream")
             pub = (r2.public_url or "").rstrip("/")
-            return {"url": f"{pub}/{unique_name}" if pub else unique_name}
+            if pub:
+                return {"url": f"{pub}/{unique_name}"}
+            logging.warning("R2 upload succeeded but public_url is empty, falling back to local: %s", unique_name)
     except Exception as e:
         logging.warning(f"R2 upload failed for ticker icon, falling back to local: {e}")
 
@@ -390,7 +448,7 @@ async def upload_video_file(file: UploadFile = File(...), device: str = Depends(
     """Upload a video file to R2 bucket (with local fallback). Returns the URL."""
     ext = validate_upload(file, ALLOWED_VIDEO_EXTENSIONS, max_size=MAX_VIDEO_SIZE_BYTES)
     content = await file.read()
-    unique_name = f"videos/{uuid.uuid4().hex}.{ext}"
+    unique_name = f"videos/{uuid.uuid4().hex}{ext}"
 
     # Try R2 first
     try:
@@ -406,7 +464,9 @@ async def upload_video_file(file: UploadFile = File(...), device: str = Depends(
             s3 = boto3.client(service_name="s3", endpoint_url=endpoint, aws_access_key_id=r2.access_key_id, aws_secret_access_key=r2.secret_access_key, region_name="auto")
             s3.put_object(Bucket=r2.bucket_name, Key=unique_name, Body=content, ContentType=file.content_type or "video/mp4")
             pub = (r2.public_url or "").rstrip("/")
-            return {"url": f"{pub}/{unique_name}" if pub else unique_name}
+            if pub:
+                return {"url": f"{pub}/{unique_name}"}
+            logging.warning("R2 upload succeeded but public_url is empty, falling back to local: %s", unique_name)
     except Exception as e:
         logging.warning(f"R2 upload failed for video upload, falling back to local: {e}")
 
@@ -426,29 +486,57 @@ async def upload_video_file(file: UploadFile = File(...), device: str = Depends(
 class PaymentSettingsSchema(BaseModel):
     razorpay_key_id: Optional[str] = None
     razorpay_key_secret: Optional[str] = None  # write field (accepted on PUT)
+    razorpay_test_key_id: Optional[str] = None
+    razorpay_test_key_secret: Optional[str] = None
+    razorpay_live_key_id: Optional[str] = None
+    razorpay_live_key_secret: Optional[str] = None
     is_test_mode: bool = True
     currency: str = "INR"
+    upi_enabled: Optional[bool] = False
+    upi_qr_url: Optional[str] = None
+    upi_id: Optional[str] = None
+    upi_payee_name: Optional[str] = None
 
 class PaymentSettingsResponse(BaseModel):
-    """Same as PaymentSettingsSchema but secret key is masked for security."""
+    """Same as PaymentSettingsSchema but secret keys are masked for security."""
     razorpay_key_id: Optional[str] = None
     razorpay_key_secret: Optional[str] = None  # always None in GET — write-only
+    razorpay_test_key_id: Optional[str] = None
+    razorpay_test_key_secret: Optional[str] = None
+    razorpay_live_key_id: Optional[str] = None
+    razorpay_live_key_secret: Optional[str] = None
     is_test_mode: bool = True
     currency: str = "INR"
     has_secret: bool = False  # tells frontend whether a secret is saved
+    has_test_secret: bool = False
+    has_live_secret: bool = False
+    upi_enabled: bool = False
+    upi_qr_url: Optional[str] = None
+    upi_id: Optional[str] = None
+    upi_payee_name: Optional[str] = None
 
 @router.get("/payment", response_model=PaymentSettingsResponse)
 async def get_payment_settings(device: str = Depends(require_device), db: Session = Depends(get_db)):
-    """Retrieve the global payment settings. Secret key is never returned for security."""
+    """Retrieve the global payment settings. Secret keys are never returned for security."""
     settings = db.query(PaymentSettings).first()
     if not settings:
         return PaymentSettingsResponse()
     return PaymentSettingsResponse(
         razorpay_key_id=settings.razorpay_key_id,
         razorpay_key_secret=None,  # never expose secret
+        razorpay_test_key_id=settings.razorpay_test_key_id,
+        razorpay_test_key_secret=None,
+        razorpay_live_key_id=settings.razorpay_live_key_id,
+        razorpay_live_key_secret=None,
         is_test_mode=settings.is_test_mode,
         currency=settings.currency,
         has_secret=bool(settings.razorpay_key_secret),
+        has_test_secret=bool(settings.razorpay_test_key_secret),
+        has_live_secret=bool(settings.razorpay_live_key_secret),
+        upi_enabled=settings.upi_enabled or False,
+        upi_qr_url=rewrite_url(settings.upi_qr_url) if settings.upi_qr_url else None,
+        upi_id=settings.upi_id,
+        upi_payee_name=settings.upi_payee_name,
     )
 
 @router.put("/payment", response_model=PaymentSettingsSchema)
@@ -462,8 +550,18 @@ async def update_payment_settings(req: PaymentSettingsSchema, device: str = Depe
     settings.razorpay_key_id     = req.razorpay_key_id
     if req.razorpay_key_secret:
         settings.razorpay_key_secret = req.razorpay_key_secret
+    settings.razorpay_test_key_id = req.razorpay_test_key_id
+    if req.razorpay_test_key_secret:
+        settings.razorpay_test_key_secret = req.razorpay_test_key_secret
+    settings.razorpay_live_key_id = req.razorpay_live_key_id
+    if req.razorpay_live_key_secret:
+        settings.razorpay_live_key_secret = req.razorpay_live_key_secret
     settings.is_test_mode        = req.is_test_mode
     settings.currency            = req.currency
+    settings.upi_enabled         = req.upi_enabled or False
+    settings.upi_qr_url          = req.upi_qr_url
+    settings.upi_id              = req.upi_id
+    settings.upi_payee_name      = req.upi_payee_name
 
     db.commit()
     db.refresh(settings)
@@ -473,6 +571,10 @@ class PublicPaymentSettingsResponse(BaseModel):
     razorpay_key_id: Optional[str] = None
     currency: str = "INR"
     is_test_mode: bool = True
+    upi_enabled: bool = False
+    upi_qr_url: Optional[str] = None
+    upi_id: Optional[str] = None
+    upi_payee_name: Optional[str] = None
 
 @router.get("/public/payment", response_model=PublicPaymentSettingsResponse)
 async def get_public_payment_settings(db: Session = Depends(get_db)):
@@ -480,11 +582,47 @@ async def get_public_payment_settings(db: Session = Depends(get_db)):
     settings = db.query(PaymentSettings).first()
     if not settings:
         return PublicPaymentSettingsResponse()
+    # Send the correct key (test or live) based on is_test_mode
+    if settings.is_test_mode:
+        rzp_key = settings.razorpay_test_key_id or settings.razorpay_key_id
+    else:
+        rzp_key = settings.razorpay_live_key_id or settings.razorpay_key_id
     return PublicPaymentSettingsResponse(
-        razorpay_key_id=settings.razorpay_key_id,
+        razorpay_key_id=rzp_key,
         currency=settings.currency,
         is_test_mode=settings.is_test_mode,
+        upi_enabled=settings.upi_enabled or False,
+        upi_qr_url=rewrite_url(settings.upi_qr_url) if settings.upi_qr_url else None,
+        upi_id=settings.upi_id,
+        upi_payee_name=settings.upi_payee_name,
     )
+
+@router.post("/payment/upload-upi-qr")
+async def upload_upi_qr(file: UploadFile = File(...), device: str = Depends(require_device), db: Session = Depends(get_db)):
+    """Upload UPI QR image to R2 bucket (with local fallback). Returns the URL."""
+    ext = validate_upload(file, ALLOWED_IMAGE_EXTENSIONS, max_size=MAX_IMAGE_SIZE_BYTES)
+    content = await file.read()
+    unique_name = f"images/upi-qr-{uuid.uuid4().hex}{ext}"
+
+    # Try R2 upload
+    r2 = db.query(R2Settings).first()
+    if r2 and r2.secret_access_key:
+        try:
+            from helpers import upload_to_r2 as r2_upload
+            r2_upload(r2, unique_name, content)
+            pub = (r2.public_url or "").rstrip("/")
+            if pub:
+                return {"url": f"{pub}/{unique_name}"}
+        except Exception as e:
+            logging.warning(f"R2 upload failed for UPI QR, falling back to local: {e}")
+
+    # Local fallback
+    os.makedirs("uploads/images", exist_ok=True)
+    filename = unique_name.split("/")[-1]
+    filepath = os.path.join("uploads", "images", filename)
+    with open(filepath, "wb") as buffer:
+        buffer.write(content)
+    return {"url": f"/uploads/images/{filename}"}
 
 # ══════════════════════════════════════════════════════
 #  R2 BUCKET SETTINGS
@@ -3773,5 +3911,97 @@ async def create_or_update_cta_section(req: HomeCTASectionSchema, device: str = 
     db.commit()
     db.refresh(section)
     return {"status": "success", "message": "CTA section updated"}
+
+
+# ══════════════════════════════════════════════════════
+#  PUSHER SETTINGS — Push Notifications
+# ══════════════════════════════════════════════════════
+from models import PusherSettings
+
+class PusherSettingsSchema(BaseModel):
+    app_id: Optional[str] = None
+    key: Optional[str] = None
+    secret: Optional[str] = None
+    cluster: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class PusherSettingsResponse(BaseModel):
+    app_id: Optional[str] = None
+    key: Optional[str] = None
+    secret: Optional[str] = None
+    cluster: Optional[str] = None
+    is_active: bool = False
+    has_secret: bool = False
+
+@router.get("/pusher", response_model=PusherSettingsResponse)
+async def get_pusher_settings(device: str = Depends(require_device), db: Session = Depends(get_db)):
+    """Admin: retrieve Pusher settings. Secret is masked."""
+    settings = db.query(PusherSettings).first()
+    if not settings:
+        return PusherSettingsResponse()
+    return PusherSettingsResponse(
+        app_id=settings.app_id,
+        key=settings.key,
+        secret=None,
+        cluster=settings.cluster,
+        is_active=settings.is_active or False,
+        has_secret=bool(settings.secret),
+    )
+
+@router.put("/pusher", response_model=PusherSettingsResponse)
+async def update_pusher_settings(req: PusherSettingsSchema, device: str = Depends(require_device), db: Session = Depends(get_db)):
+    """Admin: create or update Pusher settings."""
+    settings = db.query(PusherSettings).first()
+    if not settings:
+        settings = PusherSettings()
+        db.add(settings)
+    if req.app_id is not None:
+        settings.app_id = req.app_id
+    if req.key is not None:
+        settings.key = req.key
+    if req.secret:
+        settings.secret = req.secret
+    if req.cluster is not None:
+        settings.cluster = req.cluster
+    if req.is_active is not None:
+        settings.is_active = req.is_active
+    db.commit()
+    db.refresh(settings)
+    return PusherSettingsResponse(
+        app_id=settings.app_id,
+        key=settings.key,
+        secret=None,
+        cluster=settings.cluster,
+        is_active=settings.is_active or False,
+        has_secret=bool(settings.secret),
+    )
+
+class PusherTestRequest(BaseModel):
+    channel: str = "slot-bookings"
+    event: str = "test-event"
+
+@router.post("/pusher/test")
+async def test_pusher_connection(req: PusherTestRequest, device: str = Depends(require_device), db: Session = Depends(get_db)):
+    """Admin: test the Pusher connection by sending a test event."""
+    try:
+        from pusher import Pusher
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Pusher SDK is not installed on the server.")
+    settings = db.query(PusherSettings).first()
+    if not settings or not settings.app_id or not settings.key or not settings.secret:
+        raise HTTPException(status_code=400, detail="Pusher credentials must be saved first.")
+    try:
+        client = Pusher(
+            app_id=settings.app_id,
+            key=settings.key,
+            secret=settings.secret,
+            cluster=settings.cluster or "ap2",
+            ssl=True,
+        )
+        client.trigger(req.channel, req.event, {"message": "Test from IINM Admin", "timestamp": str(datetime.now())})
+        return {"status": "success", "message": "Test event sent successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Pusher test failed: {str(e)}")
+
 
 

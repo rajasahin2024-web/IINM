@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from datetime import datetime, date
 from pydantic import BaseModel
@@ -8,7 +8,10 @@ from database import get_db
 import razorpay
 import hmac
 import hashlib
+import uuid
+import os
 from security import check_public_rate_limit, get_client_ip
+from helpers import rewrite_url, validate_upload, ALLOWED_IMAGE_EXTENSIONS, MAX_IMAGE_SIZE_BYTES
 
 router = APIRouter(
     prefix="/api/invoice",
@@ -19,12 +22,23 @@ router = APIRouter(
 def _get_razorpay_client(db: Session):
     """Get Razorpay client using keys stored in PaymentSettings."""
     settings = db.query(models.PaymentSettings).first()
-    if not settings or not settings.razorpay_key_id or not settings.razorpay_key_secret:
+    if not settings:
         raise HTTPException(
             status_code=503,
             detail="Razorpay is not configured. Please add your API keys in Admin Settings."
         )
-    return razorpay.Client(auth=(settings.razorpay_key_id, settings.razorpay_key_secret))
+    if settings.is_test_mode:
+        key_id = settings.razorpay_test_key_id or settings.razorpay_key_id
+        key_secret = settings.razorpay_test_key_secret or settings.razorpay_key_secret
+    else:
+        key_id = settings.razorpay_live_key_id or settings.razorpay_key_id
+        key_secret = settings.razorpay_live_key_secret or settings.razorpay_key_secret
+    if not key_id or not key_secret:
+        raise HTTPException(
+            status_code=503,
+            detail="Razorpay is not configured. Please add your API keys in Admin Settings."
+        )
+    return razorpay.Client(auth=(key_id, key_secret))
 
 
 class CreateOrderRequest(BaseModel):
@@ -53,16 +67,47 @@ def get_public_invoice(invoice_uuid: str, db: Session = Depends(get_db)):
     student = db.query(models.Student).filter(models.Student.id == purchase.student_id).first()
     course = db.query(models.Course).filter(models.Course.id == purchase.course_id).first()
 
+    # Site settings for receipt-style rendering
+    site = db.query(models.SiteSettings).first()
+    contact_settings = db.query(models.ContactSettings).first()
+
+    # Payment settings (Razorpay key + UPI QR)
+    pay_settings = db.query(models.PaymentSettings).first()
+    razorpay_key_id = None
+    if pay_settings:
+        if pay_settings.is_test_mode:
+            razorpay_key_id = pay_settings.razorpay_test_key_id or pay_settings.razorpay_key_id
+        else:
+            razorpay_key_id = pay_settings.razorpay_live_key_id or pay_settings.razorpay_key_id
+
     # Determine what's currently due
     current_due_amount = purchase.due_amount
     due_date = None
     item_title = course.title
     installment_no = None
     total_installments = None
-    already_paid = purchase.paid_amount  # total paid so far
+    already_paid = purchase.paid_amount
 
+    # Installment schedule
+    installments = []
     if purchase.is_installment:
-        # Use paid_amount < amount (not stored status) to reliably find next due installment
+        inst_rows = db.query(models.InstallmentSchedule).filter(
+            models.InstallmentSchedule.purchase_id == purchase.id
+        ).order_by(models.InstallmentSchedule.installment_no).all()
+
+        for inst in inst_rows:
+            installments.append({
+                "id": inst.id,
+                "installment_no": inst.installment_no,
+                "due_date": inst.due_date.isoformat() if inst.due_date else None,
+                "amount": inst.amount,
+                "paid_amount": inst.paid_amount,
+                "status": inst.status,
+                "payment_method": inst.payment_method,
+                "reference_no": inst.reference_no,
+                "paid_at": inst.paid_at.isoformat() if inst.paid_at else None,
+            })
+
         next_inst = db.query(models.InstallmentSchedule).filter(
             models.InstallmentSchedule.purchase_id == purchase.id,
             models.InstallmentSchedule.paid_amount < models.InstallmentSchedule.amount
@@ -75,12 +120,25 @@ def get_public_invoice(invoice_uuid: str, db: Session = Depends(get_db)):
             total_installments = purchase.total_installments
             item_title = f"{course.title} — Installment #{next_inst.installment_no} of {purchase.total_installments}"
         else:
-            # All installments paid
             current_due_amount = 0
 
-    # Fetch razorpay key_id (public) to send to frontend
-    pay_settings = db.query(models.PaymentSettings).first()
-    razorpay_key_id = pay_settings.razorpay_key_id if pay_settings else None
+    # Transaction history
+    transactions = []
+    txns = db.query(models.PaymentTransaction).filter(
+        models.PaymentTransaction.purchase_id == purchase.id
+    ).order_by(models.PaymentTransaction.created_at.desc()).all()
+
+    for t in txns:
+        transactions.append({
+            "id": t.id,
+            "amount": t.amount,
+            "payment_method": t.payment_method,
+            "reference_no": t.reference_no,
+            "notes": t.notes,
+            "status": t.status,
+            "screenshot_url": rewrite_url(t.screenshot_url) if t.screenshot_url else None,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+        })
 
     status = "paid"
     if current_due_amount > 0:
@@ -88,6 +146,43 @@ def get_public_invoice(invoice_uuid: str, db: Session = Depends(get_db)):
             status = "overdue"
         else:
             status = "pending"
+
+    # Build site settings for receipt rendering
+    site_data = None
+    if site:
+        site_data = {
+            "name": site.site_name,
+            "logo_url": rewrite_url(site.logo_url),
+            "dark_logo_url": rewrite_url(site.dark_logo_url),
+            "favicon_url": rewrite_url(site.favicon_url),
+            "founder_name": site.founder_name,
+            "founder_designation": site.founder_designation,
+            "founder_signature_url": rewrite_url(site.founder_signature_url),
+        }
+
+    contact_data = None
+    if contact_settings:
+        contact_data = {
+            "phone1": contact_settings.phone1,
+            "phone2": contact_settings.phone2,
+            "email1": contact_settings.email1,
+            "email2": contact_settings.email2,
+            "address_line1": contact_settings.address_line1,
+            "address_line2": contact_settings.address_line2,
+            "city": contact_settings.city,
+            "state": contact_settings.state,
+            "pin_code": contact_settings.pin_code,
+        }
+
+    # UPI QR settings
+    upi_data = None
+    if pay_settings and pay_settings.upi_enabled:
+        upi_data = {
+            "enabled": True,
+            "qr_url": rewrite_url(pay_settings.upi_qr_url) if pay_settings.upi_qr_url else None,
+            "upi_id": pay_settings.upi_id,
+            "payee_name": pay_settings.upi_payee_name,
+        }
 
     return {
         "invoice_no": f"INV-{purchase.id:05d}",
@@ -106,12 +201,20 @@ def get_public_invoice(invoice_uuid: str, db: Session = Depends(get_db)):
             "name": f"{student.first_name} {student.last_name or ''}".strip(),
             "email": student.email,
             "phone": student.phone,
+            "city": student.city,
+            "state": student.state,
         },
         "course": {
             "title": course.title,
             "net_fee": purchase.net_fee,
             "item_title": item_title,
-        }
+        },
+        "site": site_data,
+        "contact": contact_data,
+        "upi": upi_data,
+        "installments": installments,
+        "transactions": transactions,
+        "invoice_uuid": purchase.invoice_uuid,
     }
 
 
@@ -172,13 +275,19 @@ def verify_razorpay_payment(req: VerifyPaymentRequest, request: Request, db: Ses
 
     # Fetch secret for signature verification
     pay_settings = db.query(models.PaymentSettings).first()
-    if not pay_settings or not pay_settings.razorpay_key_secret:
+    if not pay_settings:
+        raise HTTPException(status_code=503, detail="Razorpay not configured")
+    if pay_settings.is_test_mode:
+        secret = pay_settings.razorpay_test_key_secret or pay_settings.razorpay_key_secret
+    else:
+        secret = pay_settings.razorpay_live_key_secret or pay_settings.razorpay_key_secret
+    if not secret:
         raise HTTPException(status_code=503, detail="Razorpay not configured")
 
     # Verify HMAC signature
     body = f"{req.razorpay_order_id}|{req.razorpay_payment_id}"
     expected = hmac.new(
-        pay_settings.razorpay_key_secret.encode("utf-8"),
+        secret.encode("utf-8"),
         body.encode("utf-8"),
         hashlib.sha256
     ).hexdigest()
@@ -229,4 +338,76 @@ def verify_razorpay_payment(req: VerifyPaymentRequest, request: Request, db: Ses
         "message": "Payment recorded successfully!",
         "purchase_status": purchase.status,
         "due_amount": purchase.due_amount,
+    }
+
+
+class UPIScreenshotSubmit(BaseModel):
+    invoice_uuid: str
+    amount: float
+    notes: Optional[str] = None
+
+
+@router.post("/upload-upi-screenshot")
+async def upload_upi_screenshot(
+    invoice_uuid: str = Form(...),
+    amount: float = Form(...),
+    notes: Optional[str] = Form(None),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Student uploads UPI payment screenshot as proof. Creates a pending transaction for admin approval."""
+    purchase = db.query(models.CoursePurchase).filter(
+        models.CoursePurchase.invoice_uuid == invoice_uuid
+    ).first()
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive")
+    if amount > purchase.due_amount + 0.01:
+        raise HTTPException(status_code=400, detail=f"Amount exceeds due amount ₹{purchase.due_amount:.2f}")
+
+    # Validate and save screenshot
+    ext = validate_upload(file, ALLOWED_IMAGE_EXTENSIONS, max_size=MAX_IMAGE_SIZE_BYTES)
+    content = await file.read()
+    unique_name = f"images/upi-screenshot-{uuid.uuid4().hex}{ext}"
+
+    # Try R2 upload
+    r2 = db.query(models.R2Settings).first()
+    screenshot_url = None
+    if r2 and r2.secret_access_key:
+        try:
+            from helpers import upload_to_r2 as r2_upload
+            r2_upload(r2, unique_name, content)
+            pub = (r2.public_url or "").rstrip("/")
+            if pub:
+                screenshot_url = f"{pub}/{unique_name}"
+        except Exception:
+            pass
+
+    if not screenshot_url:
+        os.makedirs("uploads/images", exist_ok=True)
+        filename = unique_name.split("/")[-1]
+        filepath = os.path.join("uploads", "images", filename)
+        with open(filepath, "wb") as buffer:
+            buffer.write(content)
+        screenshot_url = f"/uploads/images/{filename}"
+
+    # Create pending transaction (admin will approve/reject)
+    txn = models.PaymentTransaction(
+        purchase_id=purchase.id,
+        amount=amount,
+        payment_method="UPI QR",
+        reference_no=f"UPI-PENDING-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+        notes=notes or "UPI payment screenshot uploaded by student",
+        status="pending",
+        screenshot_url=screenshot_url,
+    )
+    db.add(txn)
+    db.commit()
+
+    return {
+        "message": "Screenshot uploaded successfully. Payment is pending admin approval.",
+        "transaction_id": txn.id,
+        "status": "pending",
     }

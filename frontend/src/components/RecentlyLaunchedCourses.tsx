@@ -65,10 +65,16 @@ const EMPTY_CARD: Partial<CourseCardData> = {
   has_certificate: true, rating: undefined, order_position: 0, is_active: true,
 };
 
-export default function RecentlyLaunchedCourses() {
-  const [cards, setCards] = useState<CourseCardData[]>([]);
-  const [section, setSection] = useState<SectionConfig | null>(null);
-  const [loading, setLoading] = useState(true);
+export default function RecentlyLaunchedCourses({
+  initialSection,
+  initialCards,
+}: {
+  initialSection?: any;
+  initialCards?: CourseCardData[];
+} = {}) {
+  const [cards, setCards] = useState<CourseCardData[]>(initialCards ?? []);
+  const [section, setSection] = useState<SectionConfig | null>(initialSection ?? null);
+  const [loading, setLoading] = useState(!initialCards);
   const [activeTag, setActiveTag] = useState<string>("All");
   const [isAdmin, setIsAdmin] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -85,14 +91,16 @@ export default function RecentlyLaunchedCourses() {
   const [uploadingThumb, setUploadingThumb] = useState(false);
   const thumbInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchSection = async () => {
+  const fetchSection = async (force = false) => {
+    if (initialSection && !force) return; // skip client fetch when server data exists
     try {
       const res = await apiFetch("/api/settings/home-recent-courses");
       if (res.ok) { const data = await res.json(); setSection(data.section); }
     } catch { /* ignore */ }
   };
 
-  const fetchCards = async () => {
+  const fetchCards = async (force = false) => {
+    if (initialCards && !force) return; // skip client fetch when server data exists
     try {
       setLoading(true);
       const res = await apiFetch("/api/settings/home-recent-course-cards");
@@ -120,7 +128,7 @@ export default function RecentlyLaunchedCourses() {
       const res = await apiFetch("/api/settings/home-recent-courses", {
         method: "PUT", body: JSON.stringify(editSection),
       });
-      if (res.ok) { setIsEditingSection(false); fetchSection(); }
+      if (res.ok) { setIsEditingSection(false); fetchSection(true); }
     } catch { /* ignore */ } finally { setIsSavingSection(false); }
   };
 
@@ -147,7 +155,7 @@ export default function RecentlyLaunchedCourses() {
       const isNew = !editCard.id;
       const endpoint = isNew ? "/api/settings/home-recent-course-cards" : `/api/settings/home-recent-course-cards/${editCard.id}`;
       const res = await apiFetch(endpoint, { method: isNew ? "POST" : "PUT", body: JSON.stringify(editCard) });
-      if (res.ok) { setIsEditingCard(false); fetchCards(); }
+      if (res.ok) { setIsEditingCard(false); fetchCards(true); }
     } catch { /* ignore */ } finally { setIsSavingCard(false); }
   };
 
@@ -155,7 +163,7 @@ export default function RecentlyLaunchedCourses() {
     if (!confirm("Delete this course card?")) return;
     try {
       const res = await apiFetch(`/api/settings/home-recent-course-cards/${id}`, { method: "DELETE" });
-      if (res.ok) fetchCards();
+      if (res.ok) fetchCards(true);
     } catch { /* ignore */ }
   };
 

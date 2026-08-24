@@ -1,7 +1,10 @@
 from fastapi import FastAPI, Depends, HTTPException, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import OperationalError, DBAPIError
+from sqlalchemy import text
 from pydantic import BaseModel
 import bcrypt
 import httpx
@@ -15,7 +18,7 @@ from typing import Optional
 
 from database import engine, SessionLocal, Base, get_db
 from models import AdminUser, DeviceSession, DeviceAdminUser
-from routers import courses, materials, questions, question_types, settings, comprehensions, topics, difficulty, batches, student, academic, progress, exams, dashboard, blogs, testimonials, contact, about, faq, leadership, invoice
+from routers import courses, materials, questions, question_types, settings, comprehensions, topics, difficulty, batches, student, academic, progress, exams, dashboard, blogs, testimonials, contact, about, faq, leadership, invoice, slot_booking, seo
 from security import check_public_rate_limit, get_client_ip
 
 # ── Database Setup ──────────────────────────────────────────────────────────
@@ -57,6 +60,8 @@ app.include_router(about.router)
 app.include_router(faq.router)
 app.include_router(leadership.router)
 app.include_router(invoice.router)
+app.include_router(slot_booking.router)
+app.include_router(seo.router)
 # Ensure upload directories exist
 os.makedirs("uploads", exist_ok=True)
 os.makedirs("uploads/materials", exist_ok=True)
@@ -95,6 +100,42 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
+
+# ── Global DB Exception Handlers ─────────────────────────────────────────────
+# When the database is unreachable, return 503 instead of crashing the server.
+# The frontend middleware detects 503 and redirects to /maintenance.
+
+@app.exception_handler(OperationalError)
+async def db_operational_error_handler(request: Request, exc: OperationalError):
+    logging.error(f"DB OperationalError on {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Database temporarily unavailable", "error": "db_down"}
+    )
+
+@app.exception_handler(DBAPIError)
+async def db_api_error_handler(request: Request, exc: DBAPIError):
+    logging.error(f"DBAPIError on {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Database temporarily unavailable", "error": "db_down"}
+    )
+
+# ── Health Check Endpoint ────────────────────────────────────────────────────
+@app.get("/api/health")
+async def health_check():
+    """Public health check — verifies database connectivity."""
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        logging.error(f"Health check failed: {e}")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "database": "disconnected"}
+        )
 
 def _hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')

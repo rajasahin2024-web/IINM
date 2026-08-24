@@ -18,16 +18,17 @@ interface BlogPost {
   reading_time: number;
 }
 
-export default function BlogSection() {
+export default function BlogSection({ initialData }: { initialData?: BlogPost[] } = {}) {
   const router = useRouter();
-  const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [posts, setPosts] = useState<BlogPost[]>(initialData ?? []);
+  const [loading, setLoading] = useState(!initialData);
   const scrollRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sectionRef = useRef<HTMLDivElement>(null);
   const mouseRef = useRef({ x: -9999, y: -9999 });
 
   useEffect(() => {
+    if (initialData) return; // skip client fetch when server data exists
     fetch(`${API_BASE_URL}/blogs?status=published&limit=4`)
       .then((r) => r.json())
       .then((data) => {
@@ -35,7 +36,7 @@ export default function BlogSection() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, []);
+  }, [initialData]);
 
   const scroll = (dir: number) => {
     if (scrollRef.current) {
@@ -108,8 +109,13 @@ export default function BlogSection() {
     section.addEventListener("mousemove", handleMouseMove);
     section.addEventListener("mouseleave", handleMouseLeave);
 
-    let animId: number;
+    // ── Pause the animation when the section is off-screen or the tab is
+    // hidden, so the O(n²) rAF loop doesn't burn CPU in the background.
+    let isSectionVisible = true;
+    let animId: number | null = null;
+
     const animate = () => {
+      animId = null; // consumed by this frame
       const width = w();
       const height = h();
       ctx.clearRect(0, 0, width, height);
@@ -170,17 +176,59 @@ export default function BlogSection() {
         }
       }
 
-      animId = requestAnimationFrame(animate);
+      // Schedule next frame only if still visible; otherwise halt the loop.
+      if (isSectionVisible && document.visibilityState === "visible") {
+        animId = requestAnimationFrame(animate);
+      } else {
+        animId = null;
+      }
     };
-    animate();
+
+    const startAnimation = () => {
+      if (animId !== null) return;
+      animate();
+    };
+    const stopAnimation = () => {
+      if (animId !== null) {
+        cancelAnimationFrame(animId);
+        animId = null;
+      }
+    };
+
+    const sectionObserver = new IntersectionObserver(
+      ([entry]) => {
+        isSectionVisible = entry.isIntersecting;
+        if (isSectionVisible && document.visibilityState === "visible") {
+          startAnimation();
+        } else {
+          stopAnimation();
+        }
+      },
+      { threshold: 0 }
+    );
+    sectionObserver.observe(section);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && isSectionVisible) {
+        startAnimation();
+      } else {
+        stopAnimation();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Kick off — IntersectionObserver will also start/stop as needed.
+    startAnimation();
 
     const ro = new ResizeObserver(resize);
     ro.observe(section);
 
     return () => {
-      cancelAnimationFrame(animId);
+      stopAnimation();
       section.removeEventListener("mousemove", handleMouseMove);
       section.removeEventListener("mouseleave", handleMouseLeave);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      sectionObserver.disconnect();
       ro.disconnect();
     };
   }, []);
@@ -436,6 +484,7 @@ export default function BlogSection() {
                       <img
                         src={post.featured_image}
                         alt={post.title}
+                        loading="lazy"
                         style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.4s ease" }}
                         onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.06)"; }}
                         onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
@@ -509,7 +558,7 @@ export default function BlogSection() {
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 14, borderTop: "1px solid #f1f5f9" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                         {post.author_avatar ? (
-                          <img src={post.author_avatar} alt={post.author_name || ""} style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                          <img src={post.author_avatar} alt={post.author_name || ""} loading="lazy" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
                         ) : (
                           <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#0a1628", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
                             {(post.author_name || "A").charAt(0).toUpperCase()}

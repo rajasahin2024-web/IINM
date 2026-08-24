@@ -410,7 +410,7 @@ export default function ContactUsPage() {
               {reviewBadges.map((b: any) => (
                 <div key={b.name} style={{ background: "#fff", borderRadius: 6, border: "1px solid #e2e8f0", padding: "14px 20px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 4px 20px rgba(0,0,0,.04)" }}>
                   {b.icon ? (
-                    <img src={b.icon} alt={b.name} width={40} height={40} style={{ objectFit: "contain", flexShrink: 0 }} />
+                    <img src={b.icon} alt={b.name} width={40} height={40} loading="lazy" style={{ objectFit: "contain", flexShrink: 0 }} />
                   ) : (
                     <div style={{ width: 40, height: 40, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 14, fontWeight: 800, background: b.accent || "#0f172a" }}>{b.name.charAt(0)}</div>
                   )}

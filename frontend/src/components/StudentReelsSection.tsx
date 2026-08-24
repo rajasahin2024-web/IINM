@@ -40,10 +40,16 @@ function isAdminLoggedIn(): boolean {
   return true;
 }
 
-export default function StudentReelsSection() {
-  const [section, setSection] = useState<SectionConfig>(DEFAULT_SECTION);
-  const [reels, setReels] = useState<Reel[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function StudentReelsSection({
+  initialSection,
+  initialReels,
+}: {
+  initialSection?: any;
+  initialReels?: Reel[];
+} = {}) {
+  const [section, setSection] = useState<SectionConfig>(initialSection ? { ...DEFAULT_SECTION, ...initialSection } : DEFAULT_SECTION);
+  const [reels, setReels] = useState<Reel[]>(initialReels ?? []);
+  const [loading, setLoading] = useState(!initialReels);
   const [isAdmin, setIsAdmin] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [isEditingSection, setIsEditingSection] = useState(false);
@@ -53,7 +59,8 @@ export default function StudentReelsSection() {
   const [isSaving, setIsSaving] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const fetchData = async () => {
+  const fetchData = async (force = false) => {
+    if (initialReels && !force) return; // skip client fetch when server data exists
     try {
       setLoading(true);
       const res = await apiFetch("/api/settings/student-reels");
@@ -94,7 +101,7 @@ export default function StudentReelsSection() {
         is_active: editReel.is_active,
       } : { ...editReel };
       const res = await apiFetch(endpoint, { method: isNew ? "POST" : "PUT", body: JSON.stringify(body) });
-      if (res.ok) { setIsEditingReel(false); fetchData(); }
+      if (res.ok) { setIsEditingReel(false); fetchData(true); }
     } catch { /* ignore */ } finally { setIsSaving(false); }
   };
 
@@ -102,7 +109,7 @@ export default function StudentReelsSection() {
     if (!confirm("Delete this reel?")) return;
     try {
       const res = await apiFetch(`/api/settings/student-reels/${id}`, { method: "DELETE" });
-      if (res.ok) fetchData();
+      if (res.ok) fetchData(true);
     } catch { /* ignore */ }
   };
 
@@ -113,7 +120,7 @@ export default function StudentReelsSection() {
         method: "PUT",
         body: JSON.stringify(editSection),
       });
-      if (res.ok) { setIsEditingSection(false); fetchData(); }
+      if (res.ok) { setIsEditingSection(false); fetchData(true); }
     } catch { /* ignore */ } finally { setIsSaving(false); }
   };
 

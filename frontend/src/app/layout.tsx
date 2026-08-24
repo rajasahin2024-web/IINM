@@ -3,23 +3,86 @@ import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import AnalyticsScripts from "@/components/AnalyticsScripts";
 import MaintenanceGuard from "@/components/MaintenanceGuard";
-import SiteHeadUpdater from "@/components/SiteHeadUpdater";
 import FomoNotification from "@/components/FomoNotification";
+import { serverFetch, isDbDown } from "@/lib/serverFetch";
 
 const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], variable: "--font-inter" });
 const playfair = Playfair_Display({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-playfair" });
 
-export const metadata: Metadata = {
-  title: "IINM",
-  description: "IINM Learning Management System Admin Panel",
-};
+// ── SEO metadata from DB site settings (server-side, no client flash) ──
+export async function generateMetadata(): Promise<Metadata> {
+  const site = await serverFetch("/settings/site", 300);
+  if (isDbDown(site) || !site) {
+    return {
+      title: "IINM",
+      description: "AI-Powered Connected Learning Platform",
+    };
+  }
+  const faviconUrl = site.favicon_url
+    ? site.favicon_url.startsWith("http")
+      ? site.favicon_url
+      : undefined
+    : undefined;
+  const baseUrl = site.canonical_base_url
+    ? site.canonical_base_url.replace(/\/$/, "")
+    : "https://iinmedu.com";
+  const ogImage = site.og_image_url
+    ? site.og_image_url.startsWith("http")
+      ? site.og_image_url
+      : undefined
+    : undefined;
+  return {
+    metadataBase: new URL(baseUrl),
+    title: {
+      default: site.site_name || "IINM",
+      template: `%s | ${site.site_name || "IINM"}`,
+    },
+    description: site.meta_description || "AI-Powered Connected Learning Platform",
+    keywords: site.meta_description ? undefined : undefined,
+    icons: faviconUrl ? { icon: faviconUrl } : undefined,
+    verification: {
+      google: site.google_site_verification || undefined,
+      other: site.bing_webmaster_id
+        ? { "msvalidate.01": site.bing_webmaster_id }
+        : undefined,
+    },
+    openGraph: {
+      title: site.site_name || "IINM",
+      description: site.meta_description || "",
+      siteName: site.site_name || "IINM",
+      images: ogImage ? [{ url: ogImage }] : undefined,
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      site: site.twitter_handle || undefined,
+    },
+    robots: {
+      index: site.default_robots_index !== false,
+      follow: site.default_robots_index !== false,
+    },
+  };
+}
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+// ── Fetch analytics IDs server-side so AnalyticsScripts doesn't need a client fetch ──
+async function fetchAnalyticsSettings() {
+  const site = await serverFetch("/settings/site", 300);
+  if (isDbDown(site) || !site) {
+    return { analyticsId: null, bingWebmasterId: null };
+  }
+  return {
+    analyticsId: site.analytics_id || null,
+    bingWebmasterId: site.bing_webmaster_id || null,
+  };
+}
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const { analyticsId, bingWebmasterId } = await fetchAnalyticsSettings();
+
   return (
     <html lang="en">
       <body className={`${inter.variable} ${playfair.variable}`}>
-        <SiteHeadUpdater />
-        <AnalyticsScripts />
+        <AnalyticsScripts analyticsId={analyticsId} bingWebmasterId={bingWebmasterId} />
         <MaintenanceGuard>{children}</MaintenanceGuard>
         <FomoNotification />
       </body>

@@ -756,16 +756,92 @@ def approve_transaction(
     device: str = Depends(require_device),
     db: Session = Depends(get_db),
 ):
-    """Approve a pending payment transaction."""
+    """Approve a pending payment transaction and update purchase/installment balances."""
     txn = db.query(models.PaymentTransaction).filter(models.PaymentTransaction.id == txn_id).first()
     if not txn:
         raise HTTPException(status_code=404, detail="Transaction not found")
     if txn.status == "approved":
         raise HTTPException(status_code=400, detail="Transaction is already approved.")
-        
+
     txn.status = "approved"
+    purchase = txn.purchase
+
+    # Update installment if applicable
+    if purchase.is_installment:
+        next_inst = db.query(models.InstallmentSchedule).filter(
+            models.InstallmentSchedule.purchase_id == purchase.id,
+            models.InstallmentSchedule.paid_amount < models.InstallmentSchedule.amount
+        ).order_by(models.InstallmentSchedule.installment_no).first()
+        if next_inst:
+            next_inst.paid_amount = round(next_inst.paid_amount + txn.amount, 2)
+            next_inst.payment_method = txn.payment_method
+            next_inst.reference_no = txn.reference_no
+            if next_inst.paid_amount >= next_inst.amount:
+                next_inst.status = "paid"
+                next_inst.paid_at = datetime.utcnow()
+            elif next_inst.paid_amount > 0:
+                next_inst.status = "partial"
+
+    # Update purchase totals
+    purchase.paid_amount = round(purchase.paid_amount + txn.amount, 2)
+    purchase.due_amount = round(purchase.net_fee - purchase.paid_amount, 2)
+    if purchase.due_amount <= 0:
+        purchase.status = "completed"
+    elif purchase.status != "active":
+        purchase.status = "active"
+
     db.commit()
-    return {"message": "Transaction approved."}
+    return {"message": "Transaction approved.", "paid_amount": purchase.paid_amount, "due_amount": purchase.due_amount}
+
+@router.post("/transactions/{txn_id}/reject")
+def reject_transaction(
+    txn_id: int,
+    device: str = Depends(require_device),
+    db: Session = Depends(get_db),
+):
+    """Reject a pending payment transaction."""
+    txn = db.query(models.PaymentTransaction).filter(models.PaymentTransaction.id == txn_id).first()
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    if txn.status != "pending":
+        raise HTTPException(status_code=400, detail="Only pending transactions can be rejected.")
+
+    txn.status = "rejected"
+    db.commit()
+    return {"message": "Transaction rejected."}
+
+@router.get("/transactions/pending")
+def list_pending_transactions(
+    device: str = Depends(require_device),
+    db: Session = Depends(get_db),
+):
+    """List all pending payment transactions (e.g. UPI screenshot uploads awaiting approval)."""
+    txns = db.query(models.PaymentTransaction).filter(
+        models.PaymentTransaction.status == "pending"
+    ).order_by(models.PaymentTransaction.created_at.desc()).all()
+
+    result = []
+    for t in txns:
+        purchase = t.purchase
+        student = purchase.student
+        course = purchase.course
+        result.append({
+            "id": t.id,
+            "amount": t.amount,
+            "payment_method": t.payment_method,
+            "reference_no": t.reference_no,
+            "notes": t.notes,
+            "screenshot_url": t.screenshot_url,
+            "status": t.status,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "purchase_id": purchase.id,
+            "invoice_uuid": purchase.invoice_uuid,
+            "student_name": f"{student.first_name} {student.last_name or ''}".strip(),
+            "student_email": student.email,
+            "course_title": course.title,
+            "due_amount": purchase.due_amount,
+        })
+    return result
 
 @router.delete("/purchases/{purchase_id}")
 def delete_purchase(
@@ -957,6 +1033,7 @@ def list_payments(
         result.append({
             "id": t.id,
             "purchase_id": t.purchase_id,
+            "invoice_uuid": p.invoice_uuid if p else None,
             "amount": t.amount,
             "payment_method": t.payment_method,
             "reference_no": t.reference_no,

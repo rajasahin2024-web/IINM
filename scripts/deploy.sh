@@ -50,7 +50,7 @@ cd "$BACKEND_DIR"
 pkill -f "gunicorn.*main:app" || true
 sleep 2
 cd "$BACKEND_DIR"
-nohup "$GUNICORN_BIN" -w 4 -k uvicorn.workers.UvicornWorker main:app -b 0.0.0.0:2007 > /var/log/iinm-backend.log 2>&1 &
+nohup "$GUNICORN_BIN" -w 4 -k uvicorn.workers.UvicornWorker main:app -b 0.0.0.0:2007 --timeout 300 --timeout-keep-alive 300 > /var/log/iinm-backend.log 2>&1 &
 echo "Backend restarted (PID $!)"
 
 # ─── FRONTEND ──────────────────────────────

@@ -201,7 +201,7 @@ export default function AboutUsPage() {
           <div style={{ background: "#fff", borderRadius: 32, padding: "0", boxShadow: "0 20px 60px rgba(0,0,0,.05)", border: "1px solid #f1f5f9", marginBottom: 100, display: "flex", flexDirection: "row", overflow: "hidden", alignItems: "stretch" }}>
             {settings.director_image_url && (
               <div style={{ width: "40%", minWidth: 300, background: "#f8fafc", position: "relative" }}>
-                <img src={settings.director_image_url.startsWith("/uploads") ? `${API}${settings.director_image_url}` : settings.director_image_url} alt={settings.director_name} style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0 }} />
+                <img src={settings.director_image_url.startsWith("/uploads") ? `${API}${settings.director_image_url}` : settings.director_image_url} alt={settings.director_name} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0 }} />
               </div>
             )}
             <div style={{ padding: "64px 48px", flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>

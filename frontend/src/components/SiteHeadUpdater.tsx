@@ -1,6 +1,7 @@
 "use client";
 import { useEffect } from "react";
 import { BASE_URL } from "@/lib/config";
+import { getSiteSettings } from "@/lib/siteSettingsCache";
 
 function getOrigin() {
   if (typeof window !== "undefined") return window.location.origin;
@@ -29,8 +30,7 @@ export default function SiteHeadUpdater() {
 
     updateHead();
 
-    fetch(`${BASE_URL}/api/settings/site`)
-      .then((r) => r.json())
+    getSiteSettings()
       .then((d) => {
         try {
           localStorage.setItem("iinm_site_settings", JSON.stringify(d));

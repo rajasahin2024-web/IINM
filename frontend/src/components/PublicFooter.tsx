@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import "../app/home.css";
 
 import { BASE_URL } from "@/lib/config";
+import { getSiteSettings } from "@/lib/siteSettingsCache";
 
 interface FooterMenuItem {
   title: string;
@@ -20,95 +21,133 @@ interface FooterBottomLink {
   link: string;
 }
 
-export default function PublicFooter() {
-  const [siteName, setSiteName] = useState("IINM");
-  const [logoUrl, setLogoUrl] = useState("");
-  const [darkLogoUrl, setDarkLogoUrl] = useState("");
-  const [contactInfo, setContactInfo] = useState<any>(null);
-  const [footerGroups, setFooterGroups] = useState<FooterMenuGroup[]>([]);
-  const [footerBottomLinks, setFooterBottomLinks] = useState<FooterBottomLink[]>([]);
+interface PublicFooterProps {
+  initialSiteSettings?: any;
+  initialFooterMenu?: any;
+  initialContactSettings?: any;
+}
+
+export default function PublicFooter({
+  initialSiteSettings,
+  initialFooterMenu,
+  initialContactSettings,
+}: PublicFooterProps = {}) {
+  const [siteName, setSiteName] = useState(initialSiteSettings?.site_name || "IINM");
+  const [logoUrl, setLogoUrl] = useState(initialSiteSettings?.logo_url || "");
+  const [darkLogoUrl, setDarkLogoUrl] = useState(initialSiteSettings?.dark_logo_url || "");
+  const [contactInfo, setContactInfo] = useState<any>(initialContactSettings ?? null);
+  const [footerGroups, setFooterGroups] = useState<FooterMenuGroup[]>(
+    initialFooterMenu?.groups && initialFooterMenu.groups.length > 0 ? initialFooterMenu.groups : []
+  );
+  const [footerBottomLinks, setFooterBottomLinks] = useState<FooterBottomLink[]>(
+    initialFooterMenu?.bottom_links || []
+  );
 
   const [form, setForm] = useState({ name: "", email: "", phone: "", message: "" });
   const [formStatus, setFormStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
 
   useEffect(() => {
     const bUrl = BASE_URL;
-    try {
-      const cachedSite = localStorage.getItem("iinm_site_settings");
-      if (cachedSite) {
-        const d = JSON.parse(cachedSite);
+
+    // When server-provided data exists, update localStorage cache and skip client fetch
+    if (initialSiteSettings) {
+      try { localStorage.setItem("iinm_site_settings", JSON.stringify(initialSiteSettings)); } catch {}
+    }
+    if (initialContactSettings) {
+      try { localStorage.setItem("iinm_contact_settings", JSON.stringify(initialContactSettings)); } catch {}
+    }
+
+    // Only read from localStorage if we don't have server-provided data
+    if (!initialSiteSettings || !initialContactSettings) {
+      try {
+        if (!initialSiteSettings) {
+          const cachedSite = localStorage.getItem("iinm_site_settings");
+          if (cachedSite) {
+            const d = JSON.parse(cachedSite);
+            setSiteName(d.site_name || "IINM");
+            setLogoUrl(d.logo_url || "");
+            setDarkLogoUrl(d.dark_logo_url || "");
+          }
+        }
+        if (!initialContactSettings) {
+          const cachedContact = localStorage.getItem("iinm_contact_settings");
+          if (cachedContact) {
+            setContactInfo(JSON.parse(cachedContact));
+          }
+        }
+      } catch (e) {
+        console.error("Cache read error", e);
+      }
+    }
+
+    // Background refresh — keeps localStorage cache fresh
+    getSiteSettings().then(d => {
+      localStorage.setItem("iinm_site_settings", JSON.stringify(d));
+      if (!initialSiteSettings) {
         setSiteName(d.site_name || "IINM");
         setLogoUrl(d.logo_url || "");
         setDarkLogoUrl(d.dark_logo_url || "");
       }
-      const cachedContact = localStorage.getItem("iinm_contact_settings");
-      if (cachedContact) {
-        setContactInfo(JSON.parse(cachedContact));
-      }
-    } catch (e) {
-      console.error("Cache read error", e);
-    }
-
-    fetch(`${bUrl}/api/settings/site`).then(r => r.json()).then(d => {
-      localStorage.setItem("iinm_site_settings", JSON.stringify(d));
-      setSiteName(d.site_name || "IINM");
-      setLogoUrl(d.logo_url || "");
-      setDarkLogoUrl(d.dark_logo_url || "");
     }).catch(() => {});
 
     fetch(`${bUrl}/api/contact/settings`).then(r => r.json()).then(d => {
       localStorage.setItem("iinm_contact_settings", JSON.stringify(d));
-      setContactInfo(d);
+      if (!initialContactSettings) {
+        setContactInfo(d);
+      }
     }).catch(() => {});
 
-    fetch(`${bUrl}/api/settings/footer-menu`).then(r => r.json()).then(d => {
-      if (d.groups && d.groups.length > 0) {
-        setFooterGroups(d.groups);
-        setFooterBottomLinks(d.bottom_links || []);
-      }
-    }).catch(() => {
-      // Fallback: use hardcoded groups if API fails
-      setFooterGroups([
-        { title: "Company", items: [
-          { title: "About", link: "/about-us" },
-          { title: "Careers", link: "/courses" },
-          { title: "Contact", link: "/contact-us" },
-          { title: "Blog", link: "/" },
-        ]},
-        { title: "Resources", items: [
-          { title: "Courses", link: "/courses" },
-          { title: "Curriculum", link: "/courses" },
-          { title: "Labs", link: "/about-us" },
-          { title: "Projects", link: "/courses" },
-        ]},
-        { title: "Plans", items: [
-          { title: "For Individuals", link: "/courses" },
-          { title: "For Students", link: "/courses" },
-          { title: "For Business", link: "/contact-us" },
-          { title: "Discounts", link: "/courses" },
-        ]},
-        { title: "Subjects", items: [
-          { title: "AI", link: "/courses" },
-          { title: "Machine Learning", link: "/courses" },
-          { title: "Data Science", link: "/courses" },
-          { title: "Robotics", link: "/courses" },
-          { title: "Python", link: "/courses" },
-          { title: "Cloud Computing", link: "/courses" },
-        ]},
-        { title: "Career Building", items: [
-          { title: "Career Paths", link: "/courses" },
-          { title: "Interview Prep", link: "/contact-us" },
-          { title: "Certifications", link: "/courses" },
-          { title: "Placements", link: "/contact-us" },
-        ]},
-      ]);
-      setFooterBottomLinks([
-        { title: "Privacy Policy", link: "/" },
-        { title: "Cookie Policy", link: "/" },
-        { title: "Terms", link: "/" },
-      ]);
-    });
-  }, []);
+    // Only fetch footer-menu if we don't have server-provided data
+    if (!initialFooterMenu) {
+      fetch(`${bUrl}/api/settings/footer-menu`).then(r => r.json()).then(d => {
+        if (d.groups && d.groups.length > 0) {
+          setFooterGroups(d.groups);
+          setFooterBottomLinks(d.bottom_links || []);
+        }
+      }).catch(() => {
+        // Fallback: use hardcoded groups if API fails
+        setFooterGroups([
+          { title: "Company", items: [
+            { title: "About", link: "/about-us" },
+            { title: "Careers", link: "/courses" },
+            { title: "Contact", link: "/contact-us" },
+            { title: "Blog", link: "/" },
+          ]},
+          { title: "Resources", items: [
+            { title: "Courses", link: "/courses" },
+            { title: "Curriculum", link: "/courses" },
+            { title: "Labs", link: "/about-us" },
+            { title: "Projects", link: "/courses" },
+          ]},
+          { title: "Plans", items: [
+            { title: "For Individuals", link: "/courses" },
+            { title: "For Students", link: "/courses" },
+            { title: "For Business", link: "/contact-us" },
+            { title: "Discounts", link: "/courses" },
+          ]},
+          { title: "Subjects", items: [
+            { title: "AI", link: "/courses" },
+            { title: "Machine Learning", link: "/courses" },
+            { title: "Data Science", link: "/courses" },
+            { title: "Robotics", link: "/courses" },
+            { title: "Python", link: "/courses" },
+            { title: "Cloud Computing", link: "/courses" },
+          ]},
+          { title: "Career Building", items: [
+            { title: "Career Paths", link: "/courses" },
+            { title: "Interview Prep", link: "/contact-us" },
+            { title: "Certifications", link: "/courses" },
+            { title: "Placements", link: "/contact-us" },
+          ]},
+        ]);
+        setFooterBottomLinks([
+          { title: "Privacy Policy", link: "/" },
+          { title: "Cookie Policy", link: "/" },
+          { title: "Terms", link: "/" },
+        ]);
+      });
+    }
+  }, [initialSiteSettings, initialFooterMenu, initialContactSettings]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

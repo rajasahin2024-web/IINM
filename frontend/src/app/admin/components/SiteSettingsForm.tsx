@@ -16,6 +16,9 @@ interface SiteSettingsData {
   analytics_id: string;
   bing_webmaster_id: string;
   notification_bar_items: { text: string; icon_url?: string; link?: string }[];
+  founder_name: string;
+  founder_designation: string;
+  founder_signature_url: string;
 }
 
 function FloatingInput({ label, type = "text", value, onChange, required, isTextArea = false }: any) {
@@ -101,6 +104,7 @@ export default function SiteSettingsForm() {
   const [settings, setSettings] = useState<SiteSettingsData>({
     site_name: "", logo_url: "", dark_logo_url: "", favicon_url: "", meta_description: "",
     promo_video_url: "", analytics_id: "", bing_webmaster_id: "", notification_bar_items: [],
+    founder_name: "", founder_designation: "", founder_signature_url: "",
   });
 
   const handleFileUpload = async (file: File): Promise<string | null> => {
@@ -113,6 +117,18 @@ export default function SiteSettingsForm() {
       if (res.ok) { const data = await res.json(); return data.url; } // return relative path like /uploads/...
       throw new Error("Upload failed");
     } catch { toast.error("Failed to upload image."); return null; }
+  };
+
+  const handleFounderSignatureUpload = async (file: File): Promise<string | null> => {
+    const validTypes = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
+    if (!validTypes.includes(file.type)) { toast.error("Only PNG, JPG, JPEG, WEBP images are allowed for signature."); return null; }
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const res = await apiFetch(`${baseUrl}/api/settings/site/upload-founder-signature`, { method: "POST", body: formData });
+      if (res.ok) { const data = await res.json(); return data.url; }
+      throw new Error("Upload failed");
+    } catch { toast.error("Failed to upload founder signature."); return null; }
   };
 
   useEffect(() => { fetchSettings(); }, []);
@@ -135,6 +151,9 @@ export default function SiteSettingsForm() {
               return parsed.map((it: any) => typeof it === "string" ? { text: it } : { text: it.text || "", icon_url: it.icon_url, link: it.link }).filter((it: any) => it.text.trim());
             } catch { return []; }
           })(),
+          founder_name: data.founder_name || "",
+          founder_designation: data.founder_designation || "",
+          founder_signature_url: data.founder_signature_url || "",
         });
       } else {
         toast.error("Failed to load site settings. Please refresh.");
@@ -292,6 +311,22 @@ export default function SiteSettingsForm() {
               >
                 + Add News Item
               </button>
+            </div>
+
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid #e2e8f0', marginTop: 32 }}>6. Founder Signature (for Receipts)</h3>
+            <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
+              This signature appears on slot booking receipts. Upload a transparent PNG for best results.
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 16 }}>
+              <FloatingInput label="Founder Name" value={settings.founder_name}
+                onChange={(e: any) => setSettings({ ...settings, founder_name: e.target.value })} />
+              <FloatingInput label="Founder Designation" value={settings.founder_designation}
+                onChange={(e: any) => setSettings({ ...settings, founder_designation: e.target.value })} />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <ImageDropzone label="Founder Signature Image (Transparent PNG recommended)" iconName="image"
+                previews={settings.founder_signature_url ? [settings.founder_signature_url.startsWith('/') ? `${BASE_URL}${settings.founder_signature_url}` : settings.founder_signature_url] : []}
+                onUpload={async (files) => { const url = await handleFounderSignatureUpload(files[0]); if (url) setSettings({ ...settings, founder_signature_url: url }); }} />
             </div>
 
           </div>

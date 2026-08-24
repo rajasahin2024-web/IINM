@@ -143,7 +143,7 @@ async def upload_banner(file: UploadFile = File(...), device: str = Depends(requ
     """Admin: upload a banner image and save as a new ContactBanner record."""
     ext = validate_upload(file, ALLOWED_IMAGE_EXTENSIONS)
     os.makedirs("uploads/contact", exist_ok=True)
-    filename = f"{uuid.uuid4().hex}.{ext}"
+    filename = f"{uuid.uuid4().hex}{ext}"
     filepath = os.path.join("uploads/contact", filename)
     with open(filepath, "wb") as buf:
         shutil.copyfileobj(file.file, buf)
@@ -238,6 +238,7 @@ class GoogleApiSchema(BaseModel):
     google_client_id: Optional[str] = None
     google_client_secret: Optional[str] = None
     google_redirect_uri: Optional[str] = None
+    enable_google_login: Optional[bool] = None
 
 @router.get("/google-api")
 async def get_google_api_settings(db: Session = Depends(get_db)):
@@ -247,6 +248,7 @@ async def get_google_api_settings(db: Session = Depends(get_db)):
         return {}
     return {
         "google_map_api_key": s.google_map_api_key or "",
+        "enable_google_login": bool(s.enable_google_login) if s.enable_google_login is not None else False,
     }
 
 @router.get("/google-api/admin")
@@ -260,6 +262,7 @@ async def get_google_api_settings_admin(device: str = Depends(require_device), d
         "google_client_id": s.google_client_id or "",
         "google_client_secret": s.google_client_secret or "",
         "google_redirect_uri": s.google_redirect_uri or "",
+        "enable_google_login": bool(s.enable_google_login) if s.enable_google_login is not None else False,
     }
 
 @router.put("/google-api")

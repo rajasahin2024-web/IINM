@@ -71,6 +71,9 @@ const map: Record<string, React.ReactNode> = {
   play: <svg {...s}><polygon points="5 3 19 12 5 21 5 3"/></svg>,
   "play-circle": <svg {...s}><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>,
   "external-link": <svg {...s}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>,
+  map: <svg {...s}><polygon points="1 6 1 22 8 18 16 22 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="23" y2="9"/><line x1="1" y1="6" x2="8" y2="2"/></svg>,
+  code: <svg {...s}><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>,
+  "trending-up": <svg {...s}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
 };
 
 export function Icon({ name, size, color }: { name: string; size?: number; color?: string }) {

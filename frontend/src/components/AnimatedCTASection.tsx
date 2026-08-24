@@ -76,23 +76,24 @@ function InlineEdit({
   return <input type="text" value={value} onChange={(e) => onChange(e.target.value)} style={inputStyle} />;
 }
 
-export default function AnimatedCTASection() {
+export default function AnimatedCTASection({ initialData }: { initialData?: SectionData } = {}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [mouse, setMouse] = useState<{ x: number; y: number } | null>(null);
   const [isHovered, setIsHovered] = useState(false);
-  
+
   // Track mouse position and swipe speed for fluid flow field physics
   const mouseVelocityRef = useRef({ vx: 0, vy: 0, lastX: 0, lastY: 0, hasMoved: false });
 
-  const [section, setSection] = useState<SectionData>(DEFAULT_SECTION);
-  const [editSection, setEditSection] = useState<SectionData>(DEFAULT_SECTION);
+  const [section, setSection] = useState<SectionData>(initialData || DEFAULT_SECTION);
+  const [editSection, setEditSection] = useState<SectionData>(initialData || DEFAULT_SECTION);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialData);
 
   const loadData = useCallback(async () => {
+    if (initialData) return; // skip client fetch when server data exists
     try {
       const res = await apiFetch("/api/settings/cta-section");
       if (res.ok) {
@@ -105,7 +106,7 @@ export default function AnimatedCTASection() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [initialData]);
 
   useEffect(() => {
     loadData();

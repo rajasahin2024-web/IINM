@@ -7,6 +7,7 @@ import "../app/home.css";
 
 import { BASE_URL } from "@/lib/config";
 import { apiFetch } from "@/lib/apiFetch";
+import { getSiteSettings } from "@/lib/siteSettingsCache";
 
 function isAdminLoggedIn(): boolean {
   if (typeof window === "undefined") return false;
@@ -30,21 +31,31 @@ interface NavbarItem {
   sub_items: NavbarItem[];
 }
 
-export default function PublicNavbar() {
-  const [siteName, setSiteName] = useState("IINM");
-  const [logoUrl, setLogoUrl] = useState("/logo.png");
-  const [darkLogoUrl, setDarkLogoUrl] = useState("/logo.png");
+interface PublicNavbarProps {
+  initialSiteSettings?: any;
+  initialNavbarItems?: NavbarItem[];
+  initialContactSettings?: any;
+}
+
+export default function PublicNavbar({
+  initialSiteSettings,
+  initialNavbarItems,
+  initialContactSettings,
+}: PublicNavbarProps = {}) {
+  const [siteName, setSiteName] = useState(initialSiteSettings?.site_name || "IINM");
+  const [logoUrl, setLogoUrl] = useState(initialSiteSettings?.logo_url || "/logo.png");
+  const [darkLogoUrl, setDarkLogoUrl] = useState(initialSiteSettings?.dark_logo_url || initialSiteSettings?.logo_url || "/logo.png");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [contactInfo, setContactInfo] = useState<any>(null);
+  const [contactInfo, setContactInfo] = useState<any>(initialContactSettings ?? null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   // Dynamic submenu expand states (both mobile and desktop contexts)
   const [expandedItems, setExpandedItems] = useState<Record<number, boolean>>({});
   const [activeSidebarId, setActiveSidebarId] = useState<number | null>(null);
-  const [navbarItems, setNavbarItems] = useState<NavbarItem[]>([]);
-  const [navbarLoading, setNavbarLoading] = useState(true);
+  const [navbarItems, setNavbarItems] = useState<NavbarItem[]>(initialNavbarItems ?? []);
+  const [navbarLoading, setNavbarLoading] = useState(!initialNavbarItems);
   const [isAdmin, setIsAdmin] = useState(false);
 
   const pathname = usePathname();
@@ -78,48 +89,85 @@ export default function PublicNavbar() {
 
   useEffect(() => {
     const bUrl = BASE_URL;
-    
-    // Synchronously load from cache for instant zero-latency rendering
-    try {
-      const cachedSite = localStorage.getItem("iinm_site_settings");
-      if (cachedSite) {
-        const d = JSON.parse(cachedSite);
+
+    // When server-provided initialData exists, use it directly and skip
+    // the localStorage cache read (we already have fresh data).
+    // Still do a background refresh to keep localStorage cache updated for
+    // other pages that don't have server-fetched data.
+    if (initialSiteSettings) {
+      try {
+        localStorage.setItem("iinm_site_settings", JSON.stringify(initialSiteSettings));
+      } catch {}
+    }
+    if (initialContactSettings) {
+      try {
+        localStorage.setItem("iinm_contact_settings", JSON.stringify(initialContactSettings));
+      } catch {}
+    }
+    if (initialNavbarItems) {
+      try {
+        localStorage.setItem("iinm_navbar_items", JSON.stringify(initialNavbarItems));
+      } catch {}
+    }
+
+    // Only read from localStorage if we don't have server-provided data
+    if (!initialSiteSettings || !initialContactSettings || !initialNavbarItems) {
+      try {
+        if (!initialSiteSettings) {
+          const cachedSite = localStorage.getItem("iinm_site_settings");
+          if (cachedSite) {
+            const d = JSON.parse(cachedSite);
+            setSiteName(d.site_name || "IINM");
+            setLogoUrl(d.logo_url || "/logo.png");
+            setDarkLogoUrl(d.dark_logo_url || d.logo_url || "/logo.png");
+          }
+        }
+        if (!initialContactSettings) {
+          const cachedContact = localStorage.getItem("iinm_contact_settings");
+          if (cachedContact) {
+            setContactInfo(JSON.parse(cachedContact));
+          }
+        }
+        if (!initialNavbarItems) {
+          const cachedNavbar = localStorage.getItem("iinm_navbar_items");
+          if (cachedNavbar) {
+            setNavbarItems(JSON.parse(cachedNavbar));
+            setNavbarLoading(false);
+          }
+        }
+      } catch (e) {
+        console.error("Cache read error", e);
+      }
+    }
+
+    // Background refresh — keeps localStorage cache fresh for other pages
+    getSiteSettings().then(d => {
+      localStorage.setItem("iinm_site_settings", JSON.stringify(d));
+      // Only update state if we didn't have server data (avoid overriding fresh SSR data)
+      if (!initialSiteSettings) {
         setSiteName(d.site_name || "IINM");
         setLogoUrl(d.logo_url || "/logo.png");
         setDarkLogoUrl(d.dark_logo_url || d.logo_url || "/logo.png");
       }
-      const cachedContact = localStorage.getItem("iinm_contact_settings");
-      if (cachedContact) {
-        setContactInfo(JSON.parse(cachedContact));
-      }
-      const cachedNavbar = localStorage.getItem("iinm_navbar_items");
-      if (cachedNavbar) {
-        setNavbarItems(JSON.parse(cachedNavbar));
-        setNavbarLoading(false);
-      }
-    } catch (e) {
-      console.error("Cache read error", e);
-    }
-
-    // Refresh in background
-    fetch(`${bUrl}/api/settings/site`).then(r => r.json()).then(d => {
-      localStorage.setItem("iinm_site_settings", JSON.stringify(d));
-      setSiteName(d.site_name || "IINM");
-      setLogoUrl(d.logo_url || "/logo.png");
-      setDarkLogoUrl(d.dark_logo_url || d.logo_url || "/logo.png");
     }).catch(() => {});
 
     fetch(`${bUrl}/api/contact/settings`).then(r => r.json()).then(d => {
       localStorage.setItem("iinm_contact_settings", JSON.stringify(d));
-      setContactInfo(d);
+      if (!initialContactSettings) {
+        setContactInfo(d);
+      }
     }).catch(() => {});
 
     fetch(`${bUrl}/api/settings/navbar`).then(r => r.json()).then(d => {
       localStorage.setItem("iinm_navbar_items", JSON.stringify(d));
-      setNavbarItems(d);
-      setNavbarLoading(false);
+      if (!initialNavbarItems) {
+        setNavbarItems(d);
+        setNavbarLoading(false);
+      }
     }).catch(() => {
-      setNavbarLoading(false);
+      if (!initialNavbarItems) {
+        setNavbarLoading(false);
+      }
     });
 
     setIsAdmin(isAdminLoggedIn());
@@ -134,6 +182,7 @@ export default function PublicNavbar() {
         // Clear stale session
         localStorage.removeItem("iinm_is_logged_in");
         localStorage.removeItem("iinm_login_expiry");
+        document.cookie = "iinm_admin=; path=/; max-age=0";
         setIsLoggedIn(false);
       }
     };
@@ -211,7 +260,7 @@ export default function PublicNavbar() {
   return (
     <>
       <div style={{ position: "sticky", top: 0, zIndex: 100, width: "100%" }}>
-        <NotificationBar />
+        <NotificationBar initialSiteSettings={initialSiteSettings} />
         <nav className="hp-nav" style={{ background: "#ffffff", borderBottom: "1px solid #f1f5f9", width: "100%", boxShadow: "0 2px 10px rgba(0,0,0,0.01)" }}>
         {/* Outer full-width container for logo on far-left and login on far-right */}
         <div style={{ padding: "0 48px", width: "100%", boxSizing: "border-box", position: "relative" }} className="hp-nav-full-container">
@@ -615,14 +664,15 @@ export default function PublicNavbar() {
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
                           Dashboard
                         </Link>
-                        <button 
+                        <button
                           onClick={() => {
                             localStorage.removeItem("iinm_is_logged_in");
                             localStorage.removeItem("iinm_device_token");
                             localStorage.removeItem("iinm_login_expiry");
+                            document.cookie = "iinm_admin=; path=/; max-age=0";
                             setIsLoggedIn(false);
                             setIsUserMenuOpen(false);
-                          }} 
+                          }}
                           style={{ padding: "8px 12px", fontSize: 14, color: "#ef4444", textDecoration: "none", borderRadius: 6, transition: "background 0.2s", display: "flex", alignItems: "center", gap: 8, width: "100%", background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}
                           onMouseEnter={e => e.currentTarget.style.background = "#fef2f2"}
                           onMouseLeave={e => e.currentTarget.style.background = "transparent"}
@@ -1044,6 +1094,7 @@ export default function PublicNavbar() {
                   localStorage.removeItem("iinm_is_logged_in");
                   localStorage.removeItem("iinm_device_token");
                   localStorage.removeItem("iinm_login_expiry");
+                  document.cookie = "iinm_admin=; path=/; max-age=0";
                   setIsLoggedIn(false);
                   setIsSidebarOpen(false);
                 }}

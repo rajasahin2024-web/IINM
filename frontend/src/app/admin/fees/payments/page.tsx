@@ -6,10 +6,12 @@ import { API_BASE_URL } from "@/lib/config";
 import { apiFetch } from "@/lib/apiFetch";
 import { useToast } from "../../components/ToastProvider";
 import { AdminProvider } from "../../components/ProtectedAdmin";
+import { downloadReceiptPdf, ReceiptData } from "@/lib/receipt";
 
 interface PaymentTransaction {
   id: number;
   purchase_id: number;
+  invoice_uuid?: string | null;
   amount: number;
   payment_method: string;
   reference_no: string | null;
@@ -38,106 +40,27 @@ function fmtRs(num: number) {
 }
 
 const handleDownloadPaymentReceipt = async (t: PaymentTransaction) => {
-  try {
-    const html2pdf = (await import('html2pdf.js')).default;
-    const recId = t.reference_no && t.reference_no.startsWith("IINM-TXN") ? t.reference_no : `REC-${new Date(t.created_at).getFullYear()}-${String(t.id).padStart(5, '0')}`;
-    
-    const htmlString = `
-      <div style="font-family: Arial, sans-serif; color: #1e293b; background: #fff; padding: 40px; width: 794px; min-height: 1123px; box-sizing: border-box; margin: 0 auto; position: relative;">
-        <!-- Watermark -->
-        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 100px; color: rgba(148, 163, 184, 0.05); font-weight: 900; z-index: 0; pointer-events: none; white-space: nowrap;">PAID</div>
-        
-        <div style="position: relative; z-index: 1;">
-          <!-- Header -->
-          <div style="display: flex; justify-content: space-between; margin-bottom: 40px; border-bottom: 2px solid #f1f5f9; padding-bottom: 24px;">
-            <div>
-              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
-                <img src="${window.location.origin}/logo.png" style="width: 50px; height: auto;" alt="Logo" onerror="this.style.display='none'" />
-                <div style="font-size: 28px; font-weight: 800; color: #0f172a; letter-spacing: -1px;">IINM</div>
-              </div>
-              <div style="font-size: 13px; color: #64748b; line-height: 1.6;">
-                Connecting The Dots Of AI<br/>
-                contact@iinm.com<br/>
-                +91 9876543210
-              </div>
-            </div>
-            <div style="text-align: right;">
-              <div style="font-size: 32px; font-weight: 800; color: #10b981; margin-bottom: 12px; letter-spacing: 1px; text-transform: uppercase;">Payment Receipt</div>
-              <div style="font-size: 13px; color: #475569;">
-                <div style="margin-bottom: 6px;">Receipt No: <strong style="color: #0f172a; margin-left: 8px;">${recId}</strong></div>
-                <div style="margin-bottom: 6px;">Date: <strong style="color: #0f172a; margin-left: 8px;">${new Date(t.created_at).toLocaleDateString('en-GB')}</strong></div>
-                <div>Status: <strong style="margin-left: 8px; color: #10b981;">SUCCESS</strong></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Received From -->
-          <div style="margin-bottom: 40px; padding: 24px; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <div style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 8px;">Received From</div>
-              <div style="font-size: 18px; color: #0f172a; font-weight: 800; margin-bottom: 4px;">${t.student_name}</div>
-              <div style="font-size: 14px; color: #475569;">${t.student_contact || "No Contact Provided"}</div>
-            </div>
-            <div style="text-align: right;">
-              <div style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 8px;">Amount Received</div>
-              <div style="font-size: 28px; color: #10b981; font-weight: 900;">₹${t.amount.toFixed(2)}</div>
-            </div>
-          </div>
-
-          <!-- Payment Details -->
-          <div style="margin-bottom: 40px;">
-            <div style="font-size: 14px; font-weight: 800; color: #0f172a; margin-bottom: 16px; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px;">Payment Information</div>
-            <table style="width: 100%; border-collapse: collapse;">
-              <tbody>
-                <tr>
-                  <td style="padding: 12px 0; border-bottom: 1px solid #f1f5f9; color: #64748b; font-size: 14px; width: 40%;">Payment For</td>
-                  <td style="padding: 12px 0; border-bottom: 1px solid #f1f5f9; color: #0f172a; font-size: 14px; font-weight: 600;">Course Enrollment - ${t.course_title}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 12px 0; border-bottom: 1px solid #f1f5f9; color: #64748b; font-size: 14px;">Payment Method</td>
-                  <td style="padding: 12px 0; border-bottom: 1px solid #f1f5f9; color: #0f172a; font-size: 14px; font-weight: 600;">${t.payment_method}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 12px 0; border-bottom: 1px solid #f1f5f9; color: #64748b; font-size: 14px;">Reference No</td>
-                  <td style="padding: 12px 0; border-bottom: 1px solid #f1f5f9; color: #0f172a; font-size: 14px; font-weight: 600;">${t.reference_no || "N/A"}</td>
-                </tr>
-                ${t.notes ? `
-                <tr>
-                  <td style="padding: 12px 0; border-bottom: 1px solid #f1f5f9; color: #64748b; font-size: 14px;">Notes</td>
-                  <td style="padding: 12px 0; border-bottom: 1px solid #f1f5f9; color: #0f172a; font-size: 14px; font-weight: 600;">${t.notes}</td>
-                </tr>` : ''}
-              </tbody>
-            </table>
-          </div>
-
-          <!-- Footer -->
-          <div style="margin-top: 60px;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-              <div>
-                <div style="font-weight: 600; color: #64748b; font-size: 14px; margin-bottom: 6px;">Thank you for your payment!</div>
-                <div style="font-size: 12px; color: #94a3b8;">This is a computer-generated receipt and does not require a physical signature.</div>
-              </div>
-              <div style="text-align: center;">
-                <div style="border-bottom: 1px solid #0f172a; width: 150px; margin-bottom: 8px;"></div>
-                <div style="font-size: 12px; color: #475569; font-weight: 600;">Authorized Signatory</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-
-    const opt: any = {
-      margin: 0,
-      filename: `Receipt_${recId}.pdf`,
-      image: { type: 'jpeg', quality: 1 },
-      html2canvas: { scale: 2, useCORS: true, windowWidth: 794 },
-      jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' }
-    };
-    html2pdf().set(opt).from(htmlString).save();
-  } catch (error) {
-    console.error("PDF generation failed", error);
+  if (!t.invoice_uuid) {
+    alert("Receipt not available for this transaction.");
+    return;
   }
+  try {
+    const res = await apiFetch(`${API_BASE_URL}/public/slot-booking/receipt/${t.invoice_uuid}`);
+    if (!res.ok) throw new Error("Failed to fetch receipt data");
+    const receiptData: ReceiptData = await res.json();
+    await downloadReceiptPdf(receiptData);
+  } catch (error: any) {
+    console.error("PDF generation failed", error);
+    alert("Could not download receipt: " + (error.message || "Unknown error"));
+  }
+};
+
+const handleViewPaymentReceipt = (t: PaymentTransaction) => {
+  if (!t.invoice_uuid) {
+    alert("Receipt not available for this transaction.");
+    return;
+  }
+  window.open(`/receipt/${t.invoice_uuid}`, "_blank");
 };
 
 function PaymentsLedgerView() {
@@ -259,17 +182,17 @@ function PaymentsLedgerView() {
           <div style={{ padding: 60, textAlign: "center", color: "#94a3b8", fontSize: 15, fontWeight: 600 }}>No transactions found.</div>
         ) : (
           <div style={{ overflowX: "auto" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr 2fr 1fr 1fr 1fr 80px", padding: "14px 24px", background: "#f1f5f9", fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr 2fr 1fr 1fr 1fr 100px", padding: "14px 24px", background: "#f1f5f9", fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase" }}>
               <div>Date & ID</div>
               <div>Student</div>
               <div>Course</div>
               <div>Method & Ref</div>
               <div style={{ textAlign: "right" }}>Amount</div>
               <div style={{ textAlign: "center" }}>Status</div>
-              <div style={{ textAlign: "center" }}>Action</div>
+              <div style={{ textAlign: "center" }}>Receipt</div>
             </div>
             {filteredTxns.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((t, idx) => (
-              <div key={t.id} style={{ display: "grid", gridTemplateColumns: "1fr 2fr 2fr 1fr 1fr 1fr 80px", padding: "16px 24px", borderBottom: "1px solid #f1f5f9", alignItems: "center", fontSize: 13, background: "#fff", transition: "background 0.2s" }} onMouseOver={e => e.currentTarget.style.background="#f8fafc"} onMouseOut={e => e.currentTarget.style.background="#fff"}>
+              <div key={t.id} style={{ display: "grid", gridTemplateColumns: "1fr 2fr 2fr 1fr 1fr 1fr 100px", padding: "16px 24px", borderBottom: "1px solid #f1f5f9", alignItems: "center", fontSize: 13, background: "#fff", transition: "background 0.2s" }} onMouseOver={e => e.currentTarget.style.background="#f8fafc"} onMouseOut={e => e.currentTarget.style.background="#fff"}>
                 <div>
                   <div style={{ fontWeight: 600, color: "#0f172a" }}>{new Date(t.created_at).toLocaleDateString("en-IN", { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                   <div style={{ color: "#94a3b8", fontSize: 11, fontFamily: "monospace" }}>TXN-{t.id}</div>
@@ -303,8 +226,11 @@ function PaymentsLedgerView() {
                     {t.status}
                   </span>
                 </div>
-                <div style={{ textAlign: "center" }}>
-                  <button onClick={() => setShowConfirm(t)} title="Download Receipt" style={{ background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", padding: "6px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto", transition: "background 0.2s" }} onMouseOver={e=>e.currentTarget.style.background="#dbeafe"} onMouseOut={e=>e.currentTarget.style.background="#eff6ff"}>
+                <div style={{ textAlign: "center", display: "flex", gap: 4, justifyContent: "center" }}>
+                  <button onClick={() => handleViewPaymentReceipt(t)} title="View Receipt" style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#15803d", padding: "6px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.2s" }} onMouseOver={e=>e.currentTarget.style.background="#dcfce7"} onMouseOut={e=>e.currentTarget.style.background="#f0fdf4"}>
+                    <Icon name="eye" size={14} />
+                  </button>
+                  <button onClick={() => setShowConfirm(t)} title="Download Receipt" style={{ background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", padding: "6px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.2s" }} onMouseOver={e=>e.currentTarget.style.background="#dbeafe"} onMouseOut={e=>e.currentTarget.style.background="#eff6ff"}>
                     <Icon name="download" size={14} />
                   </button>
                 </div>

@@ -158,22 +158,31 @@ function InlineEdit({
 }
 
 /* ─── Main Section ─── */
-export default function AIEcosystemSection() {
+interface AIEcosystemSectionProps {
+  initialSection?: SectionData;
+  initialCards?: CardData[];
+}
+
+export default function AIEcosystemSection({
+  initialSection,
+  initialCards,
+}: AIEcosystemSectionProps = {}) {
   const trackRef = useRef<HTMLDivElement>(null);
   const cardsRef = useRef<HTMLDivElement>(null);
   const [activeAccordion, setActiveAccordion] = useState<number | null>(0);
 
-  const [section, setSection] = useState<SectionData>(DEFAULT_SECTION);
-  const [cards, setCards] = useState<CardData[]>(DEFAULT_CARDS);
-  const [loading, setLoading] = useState(true);
+  const [section, setSection] = useState<SectionData>(initialSection || DEFAULT_SECTION);
+  const [cards, setCards] = useState<CardData[]>(initialCards || DEFAULT_CARDS);
+  const [loading, setLoading] = useState(!initialSection && !initialCards);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  const [editSection, setEditSection] = useState<SectionData>(DEFAULT_SECTION);
-  const [editCards, setEditCards] = useState<CardData[]>(DEFAULT_CARDS);
+  const [editSection, setEditSection] = useState<SectionData>(initialSection || DEFAULT_SECTION);
+  const [editCards, setEditCards] = useState<CardData[]>(initialCards || DEFAULT_CARDS);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const loadData = useCallback(async () => {
+    if (initialSection && initialCards) return; // skip client fetch when server data exists
     try {
       const [secRes, cardRes] = await Promise.all([
         apiFetch("/api/settings/ai-ecosystem-section"),
@@ -194,7 +203,7 @@ export default function AIEcosystemSection() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [initialSection, initialCards]);
 
   useEffect(() => {
     loadData();

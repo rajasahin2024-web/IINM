@@ -166,6 +166,9 @@ interface Course {
   seo_description?: string;
   seo_keywords?: string;
   upload_syllabus?: string;
+  full_payment_discount_type?: string | null;
+  full_payment_discount_value?: number | null;
+  full_payment_discount_valid_till?: string | null;
   created_at: string;
 }
 
@@ -552,6 +555,9 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
   const [saving, setSaving] = useState(false);
   const [formMinPayType, setFormMinPayType] = useState<string>("");
   const [formMinPayValue, setFormMinPayValue] = useState<number | "">("");
+  const [formFullPayDiscType, setFormFullPayDiscType] = useState<string>("");
+  const [formFullPayDiscValue, setFormFullPayDiscValue] = useState<number | "">("");
+  const [formFullPayDiscValidTill, setFormFullPayDiscValidTill] = useState<string>("");
   const [formShowInstructorPublicly, setFormShowInstructorPublicly] = useState(true);
   const [aiAgentOpen, setAiAgentOpen] = useState(false);
 
@@ -939,6 +945,19 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
       setFormChapterIds(course.chapter_ids || []);
       setFormMinPayType((course as any).min_payment_type || "");
       setFormMinPayValue((course as any).min_payment_value ?? "");
+      setFormFullPayDiscType((course as any).full_payment_discount_type || "");
+      setFormFullPayDiscValue((course as any).full_payment_discount_value ?? "");
+      // Convert ISO datetime to datetime-local format (YYYY-MM-DDTHH:MM)
+      const validTill = (course as any).full_payment_discount_valid_till;
+      if (validTill) {
+        try {
+          const d = new Date(validTill);
+          const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+          setFormFullPayDiscValidTill(local.toISOString().slice(0, 16));
+        } catch { setFormFullPayDiscValidTill(""); }
+      } else {
+        setFormFullPayDiscValidTill("");
+      }
       setFormShowInstructorPublicly((course as any).show_instructor_publicly ?? true);
       setWizardStep(1);
     } else {
@@ -973,6 +992,9 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
       setFormChapterIds([]);
       setFormMinPayType("");
       setFormMinPayValue("");
+      setFormFullPayDiscType("");
+      setFormFullPayDiscValue("");
+      setFormFullPayDiscValidTill("");
       setFormShowInstructorPublicly(true);
       setWizardStep(1);
     }
@@ -1027,8 +1049,11 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
         seo_title: formSeoTitle.trim() || null,
         seo_description: formSeoDesc.trim() || null,
         seo_keywords: formSeoKeywords.trim() || null,
-        min_payment_type: formMinPayValue === "" ? null : "amount",
+        min_payment_type: formMinPayValue === "" ? null : (formMinPayType || "amount"),
         min_payment_value: formMinPayValue === "" ? null : Number(formMinPayValue),
+        full_payment_discount_type: formFullPayDiscType || null,
+        full_payment_discount_value: formFullPayDiscValue === "" ? null : Number(formFullPayDiscValue),
+        full_payment_discount_valid_till: formFullPayDiscValidTill || null,
         show_instructor_publicly: formShowInstructorPublicly,
       };
 
@@ -1806,12 +1831,51 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                               <div style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8, paddingLeft: 2 }}>Initial Booking</div>
                               <FieldRow>
                                 <div style={{ flex: 1 }}>
-                                  <FloatingField label="Min. Initial Payment (INR)" type="number" min="0" value={formMinPayValue} onChange={(v: any) => setFormMinPayValue(v ? Number(v) : "")} placeholder="Optional" />
+                                  <div style={{ position: "relative" }}>
+                                    <label style={{ position: "absolute", top: -7, left: 10, background: "#fff", padding: "0 4px", fontSize: 10, fontWeight: 700, color: "#64748b", zIndex: 1 }}>Payment Type</label>
+                                    <select
+                                      value={formMinPayType}
+                                      onChange={e => setFormMinPayType(e.target.value)}
+                                      style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", background: "#f8fafc", fontSize: 14, fontWeight: 500, color: "#0f172a", outline: "none", boxSizing: "border-box", fontFamily: "Inter, system-ui, sans-serif", appearance: "none", cursor: "pointer" }}
+                                    >
+                                      <option value="">None</option>
+                                      <option value="percentage">Percentage (%)</option>
+                                      <option value="amount">Fixed Amount (₹)</option>
+                                    </select>
+                                  </div>
                                 </div>
-                                <div style={{ flex: 1, display: "flex", alignItems: "center", background: "#f8fafc", padding: "10px 14px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 11, color: "#64748b", fontWeight: 500, lineHeight: 1.4 }}>
-                                  Mandatory initial payment for installments.
+                                <div style={{ flex: 1 }}>
+                                  <FloatingField label={formMinPayType === "percentage" ? "Min. Initial Payment (%)" : "Min. Initial Payment (₹)"} type="number" min="0" value={formMinPayValue} onChange={(v: any) => setFormMinPayValue(v ? Number(v) : "")} placeholder="Optional" />
                                 </div>
                               </FieldRow>
+
+                              {/* Full Payment Discount */}
+                              <div style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8, paddingLeft: 2, marginTop: 16 }}>Full Payment Discount</div>
+                              <FieldRow>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ position: "relative" }}>
+                                    <label style={{ position: "absolute", top: -7, left: 10, background: "#fff", padding: "0 4px", fontSize: 10, fontWeight: 700, color: "#64748b", zIndex: 1 }}>Discount Type</label>
+                                    <select
+                                      value={formFullPayDiscType}
+                                      onChange={e => setFormFullPayDiscType(e.target.value)}
+                                      style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", background: "#f8fafc", fontSize: 14, fontWeight: 500, color: "#0f172a", outline: "none", boxSizing: "border-box", fontFamily: "Inter, system-ui, sans-serif", appearance: "none", cursor: "pointer" }}
+                                    >
+                                      <option value="">None</option>
+                                      <option value="percentage">Percentage (%)</option>
+                                      <option value="amount">Fixed Amount (₹)</option>
+                                    </select>
+                                  </div>
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <FloatingField label={formFullPayDiscType === "percentage" ? "Discount (%)" : "Discount (₹)"} type="number" min="0" value={formFullPayDiscValue} onChange={(v: any) => setFormFullPayDiscValue(v ? Number(v) : "")} placeholder="0" />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <FloatingField label="Valid Till" type="datetime-local" value={formFullPayDiscValidTill} onChange={setFormFullPayDiscValidTill} placeholder="" />
+                                </div>
+                              </FieldRow>
+                              <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500, lineHeight: 1.5, paddingLeft: 2, marginTop: 6 }}>
+                                Shown on the booking page with a live countdown timer to create urgency. Card hides after expiry.
+                              </div>
                             </div>
                           )}
                         </SectionPanel>

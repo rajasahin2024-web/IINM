@@ -1,54 +1,72 @@
 "use client";
 import React, { useEffect, useState, useCallback } from "react";
 import { BASE_URL } from "@/lib/config";
+import { getSiteSettings } from "@/lib/siteSettingsCache";
 import TickerEditModal, { TickerItem, TickerSettings } from "./TickerEditModal";
 
 const DISMISS_KEY = "iinm_topbar_dismissed";
 
-export default function NotificationBar() {
+interface NotificationBarProps {
+  initialSiteSettings?: any;
+}
+
+export default function NotificationBar({ initialSiteSettings }: NotificationBarProps = {}) {
   const [items, setItems] = useState<TickerItem[]>([]);
-  const [fallbackText, setFallbackText] = useState("");
+  const [fallbackText, setFallbackText] = useState(initialSiteSettings?.notification_bar_text || "");
   const [isAdmin, setIsAdmin] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(!!initialSiteSettings);
 
   // Ticker visual settings
-  const [speed, setSpeed] = useState(30);
-  const [animationType, setAnimationType] = useState("scroll");
-  const [bgColor, setBgColor] = useState("#01081b");
-  const [textColor, setTextColor] = useState("#ffffff");
-  const [labelBgColor, setLabelBgColor] = useState("#e63946");
-  const [labelTextColor, setLabelTextColor] = useState("#ffffff");
+  const [speed, setSpeed] = useState(initialSiteSettings?.ticker_speed || 30);
+  const [animationType, setAnimationType] = useState(initialSiteSettings?.ticker_animation_type || "scroll");
+  const [bgColor, setBgColor] = useState(initialSiteSettings?.ticker_bg_color || "#01081b");
+  const [textColor, setTextColor] = useState(initialSiteSettings?.ticker_text_color || "#ffffff");
+  const [labelBgColor, setLabelBgColor] = useState(initialSiteSettings?.ticker_label_bg_color || "#e63946");
+  const [labelTextColor, setLabelTextColor] = useState(initialSiteSettings?.ticker_label_text_color || "#ffffff");
 
   const bUrl = BASE_URL;
 
+  // Apply initial server-provided site settings to items
+  useEffect(() => {
+    if (initialSiteSettings) {
+      try {
+        const parsed = JSON.parse(initialSiteSettings.notification_bar_items || "[]");
+        if (Array.isArray(parsed)) {
+          const normalized: TickerItem[] = parsed
+            .map((it: any) => typeof it === "string" ? { text: it } : { text: it.text || "", icon_url: it.icon_url, link: it.link })
+            .filter((it: TickerItem) => it.text.trim());
+          setItems(normalized);
+        }
+      } catch { /* ignore */ }
+    }
+  }, [initialSiteSettings]);
+
   const fetchSettings = useCallback(async () => {
+    if (initialSiteSettings) return; // skip client fetch when server data exists
     try {
-      const res = await fetch(`${bUrl}/api/settings/site`);
-      if (res.ok) {
-        const data = await res.json();
-        setFallbackText(data.notification_bar_text || "");
-        setSpeed(data.ticker_speed || 30);
-        setAnimationType(data.ticker_animation_type || "scroll");
-        setBgColor(data.ticker_bg_color || "#01081b");
-        setTextColor(data.ticker_text_color || "#ffffff");
-        setLabelBgColor(data.ticker_label_bg_color || "#e63946");
-        setLabelTextColor(data.ticker_label_text_color || "#ffffff");
-        try {
-          const parsed = JSON.parse(data.notification_bar_items || "[]");
-          if (Array.isArray(parsed)) {
-            // Support both string[] (old format) and {text, icon_url}[] (new format)
-            const normalized: TickerItem[] = parsed
-              .map((it: any) => typeof it === "string" ? { text: it } : { text: it.text || "", icon_url: it.icon_url, link: it.link })
-              .filter((it: TickerItem) => it.text.trim());
-            setItems(normalized);
-          }
-        } catch { /* ignore */ }
-      }
+      const data = await getSiteSettings();
+      setFallbackText(data.notification_bar_text || "");
+      setSpeed(data.ticker_speed || 30);
+      setAnimationType(data.ticker_animation_type || "scroll");
+      setBgColor(data.ticker_bg_color || "#01081b");
+      setTextColor(data.ticker_text_color || "#ffffff");
+      setLabelBgColor(data.ticker_label_bg_color || "#e63946");
+      setLabelTextColor(data.ticker_label_text_color || "#ffffff");
+      try {
+        const parsed = JSON.parse((data.notification_bar_items as string) || "[]");
+        if (Array.isArray(parsed)) {
+          // Support both string[] (old format) and {text, icon_url}[] (new format)
+          const normalized: TickerItem[] = parsed
+            .map((it: any) => typeof it === "string" ? { text: it } : { text: it.text || "", icon_url: it.icon_url, link: it.link })
+            .filter((it: TickerItem) => it.text.trim());
+          setItems(normalized);
+        }
+      } catch { /* ignore */ }
     } catch { /* ignore */ }
     finally { setLoaded(true); }
-  }, [bUrl]);
+  }, [initialSiteSettings]);
 
   useEffect(() => {
     fetchSettings();

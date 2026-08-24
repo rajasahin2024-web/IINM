@@ -139,6 +139,27 @@ export const adminMenuData: MenuItem[] = [
     ],
   },
 
+  // ─── 5.6 SEO / AEO ───────────────────────
+  {
+    label: "SEO / AEO",
+    href: "/admin/seo",
+    icon: "search",
+    type: "dropdown",
+    children: [
+      { label: "Dashboard",       href: "/admin/seo",              icon: "bar-chart" },
+      { label: "Site SEO",        href: "/admin/seo/site",         icon: "globe" },
+      { label: "Pages SEO",       href: "/admin/seo/pages",        icon: "file-text" },
+      { label: "Course SEO",      href: "/admin/seo/courses",      icon: "book" },
+      { label: "Blog SEO",        href: "/admin/seo/blogs",        icon: "edit" },
+      { label: "Sitemap",         href: "/admin/seo/sitemap",      icon: "map" },
+      { label: "Schema.org",      href: "/admin/seo/schema",       icon: "code" },
+      { label: "FAQs (AEO)",      href: "/admin/seo/faqs",         icon: "help-circle" },
+      { label: "llms.txt (AEO)",  href: "/admin/seo/llms",         icon: "cpu" },
+      { label: "Redirects",       href: "/admin/seo/redirects",    icon: "link" },
+      { label: "Analytics (GSC)", href: "/admin/seo/analytics",    icon: "trending-up" },
+    ],
+  },
+
   // ─── 6. Settings ────────────────────────
   {
     label: "Settings",
@@ -157,6 +178,7 @@ export const adminMenuData: MenuItem[] = [
       { label: "R2 Bucket Setup",  href: "/admin/settings/r2",      icon: "database" },
       { label: "AI Settings",      href: "/admin/settings/ai",      icon: "cpu" },
       { label: "Google API",        href: "/admin/settings/google",   icon: "globe" },
+      { label: "Push Notifications", href: "/admin/settings/pusher",  icon: "bell" },
       {
         label: "Site Settings",
         href: "/admin/settings/site",

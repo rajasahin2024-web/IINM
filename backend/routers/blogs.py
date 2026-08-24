@@ -5,19 +5,73 @@ All write operations are protected with require_device.
 """
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Literal
 from datetime import datetime, timezone
 import re
 import math
+import hashlib
+
+try:
+    import nh3
+    _HAS_NH3 = True
+except ImportError:
+    _HAS_NH3 = False
 
 from database import get_db, SessionLocal
 from models import BlogPost, BlogCategory, BlogSubCategory, DeviceSession, BlogAuthor, BlogRevision, BlogComment, BlogRating, BlogReaction
 from fastapi import Header
-from security import check_public_rate_limit, get_client_ip
+from security import check_public_rate_limit, get_client_ip, verify_turnstile, hash_ip, should_count_view
 
 router = APIRouter(prefix="/api/blogs", tags=["blogs"])
+
+
+# ─────────────────────────────────────────────────────────────────
+# HTML sanitization (defense-in-depth against stored XSS)
+# ─────────────────────────────────────────────────────────────────
+
+# Allowlist mirrors what react-simple-wysiwyg + the editor toolbar produce.
+_BLOG_ALLOWED_TAGS = {
+    "p", "br", "hr", "span", "div",
+    "h1", "h2", "h3", "h4", "h5", "h6",
+    "strong", "b", "em", "i", "u", "s", "sub", "sup", "small",
+    "ul", "ol", "li",
+    "blockquote", "pre", "code",
+    "a", "img",
+    "table", "thead", "tbody", "tr", "th", "td",
+    "figure", "figcaption",
+}
+_BLOG_ALLOWED_ATTRS = {
+    "a": {"href", "title", "target", "rel"},
+    "img": {"src", "alt", "title", "width", "height", "loading", "fetchpriority"},
+    "span": {"style", "class"},
+    "div": {"style", "class"},
+    "p": {"style", "class"},
+    "td": {"colspan", "rowspan", "style"},
+    "th": {"colspan", "rowspan", "style"},
+    "pre": {"class"},
+    "code": {"class"},
+    "figure": {"class"},
+    "blockquote": {"style", "class"},
+}
+
+
+def _sanitize_html(raw: Optional[str]) -> Optional[str]:
+    """Sanitize blog HTML content to strip XSS vectors (scripts, on* handlers, etc.).
+    Returns None if input is None. If nh3 is not installed, returns input unchanged
+    (frontend DOMPurify is the primary defense)."""
+    if raw is None:
+        return None
+    if not _HAS_NH3:
+        return raw
+    return nh3.clean(
+        raw,
+        tags=_BLOG_ALLOWED_TAGS,
+        attributes=_BLOG_ALLOWED_ATTRS,
+        url_schemes={"http", "https", "mailto", "tel", "data"},
+        clean_content_tags={"script", "style", "iframe", "object", "embed", "form"},
+    )
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -349,6 +403,7 @@ class PostIn(BaseModel):
 
 @router.get("")
 def list_posts(
+    request: Request,
     status: Optional[str] = None,
     category_id: Optional[int] = None,
     subcategory_id: Optional[int] = None,
@@ -358,9 +413,21 @@ def list_posts(
     limit: int = 50,
     db: Session = Depends(get_db),
 ):
+    # ── Authorization: only authenticated devices may filter by non-published status.
+    # Public (unauthenticated) callers are forced to published-only so drafts/archived
+    # posts are never leaked.
+    token = request.headers.get("X-Device-Token")
+    is_admin = False
+    if token:
+        is_admin = db.query(DeviceSession).filter(
+            DeviceSession.device_token == token,
+            DeviceSession.is_approved == True,
+        ).first() is not None
+    effective_status = status if is_admin else "published"
+
     q = db.query(BlogPost)
-    if status:
-        q = q.filter(BlogPost.status == status)
+    if effective_status:
+        q = q.filter(BlogPost.status == effective_status)
     if category_id:
         q = q.filter(BlogPost.category_id == category_id)
     if subcategory_id:
@@ -388,8 +455,8 @@ def post_stats(db: Session = Depends(get_db)):
     drafts     = db.query(BlogPost).filter(BlogPost.status == "draft").count()
     archived   = db.query(BlogPost).filter(BlogPost.status == "archived").count()
     featured   = db.query(BlogPost).filter(BlogPost.is_featured == True).count()
-    total_views = db.query(BlogPost).all()
-    views      = sum(p.views for p in total_views)
+    # SQL aggregation instead of loading every row into Python.
+    views = db.query(func.sum(BlogPost.views)).scalar() or 0
     return {
         "total": total,
         "published": published,
@@ -401,10 +468,18 @@ def post_stats(db: Session = Depends(get_db)):
 
 
 @router.get("/{post_id}")
-def get_post(post_id: int, db: Session = Depends(get_db)):
+def get_post(post_id: int, request: Request, db: Session = Depends(get_db)):
     p = db.query(BlogPost).filter(BlogPost.id == post_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Post not found")
+    # Non-published posts are only visible to authenticated devices (admin).
+    if p.status != "published":
+        token = request.headers.get("X-Device-Token")
+        if not token or not db.query(DeviceSession).filter(
+            DeviceSession.device_token == token,
+            DeviceSession.is_approved == True,
+        ).first():
+            raise HTTPException(status_code=404, detail="Post not found")
     return _post_out(p, full=True)
 
 
@@ -425,7 +500,7 @@ def create_post(payload: PostIn, db: Session = Depends(get_db)):
         title=payload.title,
         slug=slug,
         excerpt=payload.excerpt,
-        content=payload.content,
+        content=_sanitize_html(payload.content),
         featured_image=payload.featured_image,
         category_id=payload.category_id,
         subcategory_id=payload.subcategory_id,
@@ -463,7 +538,7 @@ def update_post(post_id: int, payload: PostIn, db: Session = Depends(get_db)):
     p.title = payload.title
     p.slug = _unique_slug(payload.title, BlogPost, db, exclude_id=post_id)
     p.excerpt = payload.excerpt
-    p.content = payload.content
+    p.content = _sanitize_html(payload.content)
     p.featured_image = payload.featured_image
     p.category_id = payload.category_id
     p.subcategory_id = payload.subcategory_id
@@ -603,23 +678,34 @@ def restore_revision(post_id: int, rev_id: int, db: Session = Depends(get_db)):
 # ═══════════════════════════════════════════════════════════════
 
 @router.get("/slug/{slug}")
-def get_post_by_slug(slug: str, db: Session = Depends(get_db)):
+def get_post_by_slug(slug: str, request: Request, db: Session = Depends(get_db)):
     p = db.query(BlogPost).filter(BlogPost.slug == slug).first()
     if not p or p.status != "published":
         raise HTTPException(status_code=404, detail="Post not found")
-    # increment views
-    p.views = (p.views or 0) + 1
-    db.commit()
-    # rating stats
-    ratings = db.query(BlogRating).filter(BlogRating.post_id == p.id).all()
-    avg_rating = round(sum(r.rating for r in ratings) / len(ratings), 1) if ratings else 0
-    rating_counts = {i: len([r for r in ratings if r.rating == i]) for i in range(1, 6)}
-    # reaction stats
-    reactions = db.query(BlogReaction).filter(BlogReaction.post_id == p.id).all()
+    # Increment views only if this (IP, slug) pair hasn't been seen recently,
+    # so refreshes/bots/crawlers don't inflate the count. Avoids turning every
+    # read into a write when the same user revisits within the TTL window.
+    client_ip = get_client_ip(request)
+    if should_count_view(client_ip, slug):
+        p.views = (p.views or 0) + 1
+        db.commit()
+    # Rating stats via SQL aggregation (avoid loading all rows into Python).
+    avg_rating = db.query(func.avg(BlogRating.rating)).filter(BlogRating.post_id == p.id).scalar()
+    rating_count = db.query(func.count(BlogRating.id)).filter(BlogRating.post_id == p.id).scalar()
+    avg_rating = round(avg_rating, 1) if avg_rating else 0
+    rating_counts = {i: 0 for i in range(1, 6)}
+    for r_val, c_val in db.query(BlogRating.rating, func.count(BlogRating.id)).filter(
+        BlogRating.post_id == p.id
+    ).group_by(BlogRating.rating).all():
+        if r_val in rating_counts:
+            rating_counts[r_val] = c_val
+    # Reaction stats via SQL aggregation.
     reaction_summary = {}
-    for r in reactions:
-        reaction_summary[r.reaction_type] = reaction_summary.get(r.reaction_type, 0) + 1
-    # comment count
+    for rtype, c_val in db.query(BlogReaction.reaction_type, func.count(BlogReaction.id)).filter(
+        BlogReaction.post_id == p.id
+    ).group_by(BlogReaction.reaction_type).all():
+        reaction_summary[rtype] = c_val
+    # Comment count.
     comment_count = db.query(BlogComment).filter(BlogComment.post_id == p.id, BlogComment.is_approved == True).count()
     return {
         "post": _post_out(p, full=True),
@@ -630,7 +716,7 @@ def get_post_by_slug(slug: str, db: Session = Depends(get_db)):
             "profile_image": p.author.profile_image if p.author else p.author_avatar,
             "post_count": len([pp for pp in (p.author.posts if p.author else []) if pp.status == "published"]),
         } if p.author else {"name": p.author_name, "bio": None, "profile_image": p.author_avatar, "post_count": 0},
-        "rating": {"average": avg_rating, "count": len(ratings), "distribution": rating_counts},
+        "rating": {"average": avg_rating, "count": rating_count or 0, "distribution": rating_counts},
         "reactions": reaction_summary,
         "comment_count": comment_count,
     }
@@ -643,6 +729,7 @@ class CommentIn(BaseModel):
     email: Optional[str] = None
     content: str
     parent_id: Optional[int] = None
+    turnstile_token: Optional[str] = None
 
 
 def _comment_out(c: BlogComment) -> dict:
@@ -671,9 +758,12 @@ def list_comments(post_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{post_id}/comments")
-def create_comment(post_id: int, payload: CommentIn, request: Request, db: Session = Depends(get_db)):
+async def create_comment(post_id: int, payload: CommentIn, request: Request, db: Session = Depends(get_db)):
     client_ip = get_client_ip(request)
     check_public_rate_limit(client_ip, limit=10, window=300)  # 10 per 5 min
+    # Cloudflare Turnstile captcha verification (fails open if not configured).
+    if not await verify_turnstile(payload.turnstile_token, client_ip):
+        raise HTTPException(status_code=400, detail="Captcha verification failed. Please try again.")
     post = db.query(BlogPost).filter(BlogPost.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
@@ -710,9 +800,10 @@ def get_ratings(post_id: int, db: Session = Depends(get_db)):
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     ratings = db.query(BlogRating).filter(BlogRating.post_id == post_id).order_by(BlogRating.created_at.desc()).all()
-    avg = round(sum(r.rating for r in ratings) / len(ratings), 1) if ratings else 0
+    # Average via SQL aggregation (avoid Python loop over all rows).
+    avg = db.query(func.avg(BlogRating.rating)).filter(BlogRating.post_id == post_id).scalar()
     return {
-        "average": avg,
+        "average": round(avg, 1) if avg else 0,
         "count": len(ratings),
         "items": [
             {"id": r.id, "name": r.name, "rating": r.rating, "review": r.review, "created_at": r.created_at.isoformat() if r.created_at else None}
@@ -730,22 +821,43 @@ def submit_rating(post_id: int, payload: RatingIn, request: Request, db: Session
         raise HTTPException(status_code=404, detail="Post not found")
     if payload.rating < 1 or payload.rating > 5:
         raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
-    rating = BlogRating(
-        post_id=post_id,
-        name=payload.name.strip() if payload.name else None,
-        email=payload.email.strip() if payload.email else None,
-        rating=payload.rating,
-        review=payload.review.strip() if payload.review else None,
-    )
-    db.add(rating)
-    db.commit()
-    db.refresh(rating)
-    ratings = db.query(BlogRating).filter(BlogRating.post_id == post_id).all()
-    avg = round(sum(r.rating for r in ratings) / len(ratings), 1) if ratings else 0
-    return {"average": avg, "count": len(ratings), "id": rating.id}
+    # Dedup: one rating per IP per post. If already rated, update the existing
+    # rating instead of inserting a duplicate (so the average can't be spammed).
+    ip_h = hash_ip(client_ip)
+    existing = db.query(BlogRating).filter(
+        BlogRating.post_id == post_id,
+        BlogRating.ip_hash == ip_h,
+    ).first()
+    if existing:
+        existing.rating = payload.rating
+        existing.name = payload.name.strip() if payload.name else existing.name
+        existing.email = payload.email.strip() if payload.email else existing.email
+        existing.review = payload.review.strip() if payload.review else existing.review
+        db.commit()
+        db.refresh(existing)
+        rating_id = existing.id
+    else:
+        rating = BlogRating(
+            post_id=post_id,
+            name=payload.name.strip() if payload.name else None,
+            email=payload.email.strip() if payload.email else None,
+            rating=payload.rating,
+            review=payload.review.strip() if payload.review else None,
+            ip_hash=ip_h,
+        )
+        db.add(rating)
+        db.commit()
+        db.refresh(rating)
+        rating_id = rating.id
+    avg = db.query(func.avg(BlogRating.rating)).filter(BlogRating.post_id == post_id).scalar()
+    count = db.query(func.count(BlogRating.id)).filter(BlogRating.post_id == post_id).scalar()
+    return {"average": round(avg or 0, 1), "count": count or 0, "id": rating_id}
 
 
 # ── Reactions ──
+
+_ALLOWED_REACTIONS = {"clap", "like", "love", "fire", "rocket"}
+
 
 class ReactionIn(BaseModel):
     reaction_type: str = "clap"  # clap, like, love, fire, rocket
@@ -767,15 +879,38 @@ def get_reactions(post_id: int, db: Session = Depends(get_db)):
 def add_reaction(post_id: int, payload: ReactionIn, request: Request, db: Session = Depends(get_db)):
     client_ip = get_client_ip(request)
     check_public_rate_limit(client_ip, limit=10, window=300)
+    # Validate reaction_type against an allowlist to prevent DB pollution.
+    if payload.reaction_type not in _ALLOWED_REACTIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid reaction_type. Allowed: {', '.join(sorted(_ALLOWED_REACTIONS))}",
+        )
     post = db.query(BlogPost).filter(BlogPost.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    reaction = BlogReaction(
-        post_id=post_id,
-        reaction_type=payload.reaction_type,
-    )
-    db.add(reaction)
-    db.commit()
+    # Dedup: one reaction per IP per post. If already reacted, update the
+    # existing reaction_type (toggle) instead of inserting duplicates.
+    ip_h = hash_ip(client_ip)
+    existing = db.query(BlogReaction).filter(
+        BlogReaction.post_id == post_id,
+        BlogReaction.ip_hash == ip_h,
+    ).first()
+    if existing:
+        if existing.reaction_type == payload.reaction_type:
+            # Same reaction again → remove (toggle off).
+            db.delete(existing)
+            db.commit()
+        else:
+            existing.reaction_type = payload.reaction_type
+            db.commit()
+    else:
+        reaction = BlogReaction(
+            post_id=post_id,
+            reaction_type=payload.reaction_type,
+            ip_hash=ip_h,
+        )
+        db.add(reaction)
+        db.commit()
     reactions = db.query(BlogReaction).filter(BlogReaction.post_id == post_id).all()
     summary = {}
     for r in reactions:

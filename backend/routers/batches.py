@@ -82,6 +82,7 @@ class BatchBase(BaseModel):
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     max_capacity: int = 50
+    starting_count: int = 0
     enable_waitlist: bool = False
     discount_amount: Optional[float] = None
     enable_installments: bool = False
@@ -99,6 +100,7 @@ class BatchUpdate(BaseModel):
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     max_capacity: Optional[int] = None
+    starting_count: Optional[int] = None
     enable_waitlist: Optional[bool] = None
     discount_amount: Optional[float] = None
     enable_installments: Optional[bool] = None
@@ -258,6 +260,7 @@ def create_batch(req: BatchCreate, device: str = Depends(require_device), db: Se
         start_date=req.start_date,
         end_date=req.end_date,
         max_capacity=req.max_capacity,
+        starting_count=req.starting_count,
         enable_waitlist=req.enable_waitlist,
         discount_amount=req.discount_amount,
         enable_installments=req.enable_installments
@@ -314,7 +317,7 @@ def update_batch(batch_id: int, req: BatchUpdate, device: str = Depends(require_
     update_data = req.dict(exclude_unset=True)
     
     # Handle simple fields
-    for field in ["name", "mode", "meeting_url", "status", "start_date", "end_date", "max_capacity", "enable_waitlist", "discount_amount", "enable_installments"]:
+    for field in ["name", "mode", "meeting_url", "status", "start_date", "end_date", "max_capacity", "starting_count", "enable_waitlist", "discount_amount", "enable_installments"]:
         if field in update_data and update_data[field] is not None:
             setattr(db_batch, field, update_data[field])
 

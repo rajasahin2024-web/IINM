@@ -1,0 +1,198 @@
+.receipt-page {
+  min-height: 100vh;
+  background: #f1f5f9;
+  color: #0f172a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px 60px;
+  font-family: 'Segoe UI', Arial, sans-serif;
+}
+
+.receipt-page-toolbar {
+  width: 100%;
+  max-width: 794px;
+  background: #ffffff;
+  border: 1px solid #0f172a;
+  padding: 10px 16px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  box-sizing: border-box;
+}
+
+.receipt-toolbar-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.receipt-toolbar-title code {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+}
+
+.receipt-page-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.receipt-page-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #0f172a;
+  padding: 7px 14px;
+  border-radius: 0;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.receipt-page-btn:hover {
+  background: #f1f5f9;
+}
+
+.receipt-page-btn.primary {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.receipt-page-btn.primary:hover {
+  background: #1e293b;
+}
+
+.receipt-document-container {
+  width: 100%;
+  max-width: 794px;
+  display: flex;
+  justify-content: center;
+}
+
+.receipt-paper-wrap {
+  width: 100%;
+}
+
+.receipt-paper-wrap .receipt-document {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.receipt-page-loader,
+.receipt-page-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+  text-align: center;
+}
+
+.receipt-page-error h2 {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0 0 8px;
+  color: #0f172a;
+}
+
+.receipt-page-error p {
+  color: #64748b;
+  margin: 0;
+  font-size: 13px;
+}
+
+.receipt-page-spinner {
+  width: 32px;
+  height: 32px;
+  border: 2px solid #cbd5e1;
+  border-top-color: #0f172a;
+  border-radius: 50%;
+  animation: receipt-spin 0.8s linear infinite;
+  margin-bottom: 12px;
+}
+
+@keyframes receipt-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 640px) {
+  .receipt-page {
+    padding: 12px 8px 30px;
+  }
+  .receipt-page-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .receipt-page-actions {
+    width: 100%;
+  }
+  .receipt-page-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   PRINT STYLES FOR DIRECT LASER PRINTING
+   ───────────────────────────────────────────────────────────── */
+@media print {
+  body, html {
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .no-print,
+  .receipt-page-toolbar,
+  header,
+  footer,
+  nav {
+    display: none !important;
+  }
+
+  .receipt-page {
+    background: #ffffff !important;
+    padding: 0 !important;
+    min-height: auto !important;
+    display: block !important;
+  }
+
+  .receipt-document-container {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .receipt-paper-wrap {
+    width: 100% !important;
+  }
+
+  .receipt-paper-wrap .receipt-document {
+    box-shadow: none !important;
+    border: 1px solid #000000 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    page-break-inside: avoid !important;
+    padding: 24px 28px !important;
+  }
+}
+

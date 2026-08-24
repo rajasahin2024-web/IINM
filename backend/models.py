@@ -153,6 +153,11 @@ class Course(Base):
     # ── Minimum Payment Requirement
     min_payment_type  = Column(String(20), nullable=True)   # 'percentage' | 'amount' | None
     min_payment_value = Column(Float, nullable=True)         # e.g. 30 (%) or 500 (fixed amount)
+
+    # ── Full Payment Discount (shown on slot booking with countdown)
+    full_payment_discount_type       = Column(String(20), nullable=True)   # 'percentage' | 'amount' | None
+    full_payment_discount_value      = Column(Float, nullable=True)         # e.g. 10 (%) or 500 (₹)
+    full_payment_discount_valid_till = Column(DateTime(timezone=True), nullable=True)  # deadline
     
     # ── Media & Assets
     thumbnail_url    = Column(Text, nullable=True)
@@ -400,8 +405,24 @@ class SiteSettings(Base):
     maintenance_message   = Column(Text, nullable=True)
     maintenance_video_url = Column(Text, nullable=True)
     maintenance_bg_image_url = Column(Text, nullable=True)
+    # Founder signature for receipts
+    founder_name           = Column(String(255), nullable=True)
+    founder_designation    = Column(String(255), nullable=True)
+    founder_signature_url  = Column(Text, nullable=True)
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
     updated_at      = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # ── SEO / AEO global settings (additive) ──
+    og_image_url             = Column(Text, nullable=True)
+    twitter_handle           = Column(String(255), nullable=True)
+    canonical_base_url       = Column(String(255), nullable=True)   # e.g. https://iinmedu.com
+    google_site_verification = Column(String(255), nullable=True)
+    default_robots_index     = Column(Boolean, default=True)
+    organization_schema      = Column(Text, nullable=True)          # JSON: Organization schema.org
+    llms_txt                 = Column(Text, nullable=True)           # manual override of llms.txt
+    llms_full_enabled        = Column(Boolean, default=True)
+    ai_bot_allow             = Column(Text, nullable=True)           # JSON: {GPTBot:true, ClaudeBot:true, ...}
+    gsc_refresh_token        = Column(Text, nullable=True)           # Google Search Console OAuth refresh token
 
 
 class PaymentSettings(Base):
@@ -411,6 +432,18 @@ class PaymentSettings(Base):
     razorpay_key_secret = Column(String(255), nullable=True)
     is_test_mode        = Column(Boolean, default=True)
     currency            = Column(String(10), default="INR")
+    # Separate test & live keys (used based on is_test_mode flag)
+    razorpay_test_key_id     = Column(String(255), nullable=True)
+    razorpay_test_key_secret = Column(String(255), nullable=True)
+    razorpay_live_key_id     = Column(String(255), nullable=True)
+    razorpay_live_key_secret = Column(String(255), nullable=True)
+
+    # UPI / QR Direct Payment
+    upi_enabled           = Column(Boolean, default=False)
+    upi_qr_url            = Column(String(500), nullable=True)
+    upi_id                = Column(String(255), nullable=True)
+    upi_payee_name        = Column(String(255), nullable=True)
+
     created_at          = Column(DateTime(timezone=True), server_default=func.now())
     updated_at          = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -495,6 +528,7 @@ class Batch(Base):
     start_date          = Column(Date, nullable=True)
     end_date            = Column(Date, nullable=True)
     max_capacity        = Column(Integer, default=50)
+    starting_count      = Column(Integer, default=0)   # fake head-start for public booking display
     enable_waitlist     = Column(Boolean, default=False)
     discount_amount     = Column(Float, nullable=True)
     enable_installments = Column(Boolean, default=False)
@@ -552,6 +586,7 @@ class Student(Base):
     city              = Column(String(100), nullable=True)
     state             = Column(String(100), nullable=True)
     pin_code          = Column(String(20), nullable=True)
+    address           = Column(Text, nullable=True)
 
     # Educational Qualification
     highest_qualification = Column(String(100), nullable=True)
@@ -567,6 +602,7 @@ class Student(Base):
     graduation_year       = Column(String(10), nullable=True)
     graduation_cgpa       = Column(String(20), nullable=True)
     current_occupation    = Column(String(100), nullable=True)
+    student_category      = Column(String(100), nullable=True)  # Business Owner | Working Professional | Students after 12th | Student After Graduation | Others (custom)
 
     # Identity & Documents
     aadhaar_number    = Column(String(20), nullable=True)
@@ -702,6 +738,7 @@ class PaymentTransaction(Base):
     reference_no  = Column(String(255), nullable=True)     # cheque/txn reference
     notes         = Column(Text, nullable=True)
     status        = Column(String(50), default="approved") # pending | approved | rejected
+    screenshot_url = Column(String(500), nullable=True)    # UPI payment screenshot proof
 
     created_at    = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -961,6 +998,7 @@ class BlogRating(Base):
     email       = Column(String(255), nullable=True)
     rating      = Column(Integer, nullable=False)  # 1-5
     review      = Column(Text, nullable=True)
+    ip_hash     = Column(String(64), nullable=True)  # deduplication (one rating per IP per post)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
     post        = relationship("BlogPost", back_populates="ratings")
 
@@ -1078,8 +1116,21 @@ class GoogleApiSettings(Base):
     google_client_id        = Column(String(500), nullable=True)
     google_client_secret    = Column(String(500), nullable=True)
     google_redirect_uri     = Column(String(500), nullable=True)
+    enable_google_login     = Column(Boolean, default=False)
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
     updated_at      = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class PusherSettings(Base):
+    __tablename__ = "pusher_settings"
+    id            = Column(Integer, primary_key=True, index=True)
+    app_id        = Column(String(255), nullable=True)
+    key           = Column(String(255), nullable=True)
+    secret        = Column(String(255), nullable=True)
+    cluster       = Column(String(50), nullable=True)
+    is_active     = Column(Boolean, default=False)
+    created_at    = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at    = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 # ══════════════════════════════════════════════════════
@@ -1486,10 +1537,72 @@ class CourseExtendedContent(Base):
     certificates_json   = Column(Text, nullable=True) # JSON: industry-recognized certificate images/titles
     faqs_json           = Column(Text, nullable=True) # JSON: course specific FAQs
     video_playlist_json = Column(Text, nullable=True) # JSON: video player with playlist section
+    tools_covered_json  = Column(Text, nullable=True) # JSON: tools covered marquee section
     created_at          = Column(DateTime(timezone=True), server_default=func.now())
     updated_at          = Column(DateTime(timezone=True), onupdate=func.now())
 
     course              = relationship("Course", back_populates="extended_content")
 
 
+# ══════════════════════════════════════════════════════
+#  SEO / AEO TABLES (additive — no existing tables touched)
+# ══════════════════════════════════════════════════════
+
+class SeoPageMeta(Base):
+    """Per-page SEO overrides for static pages (home, about_us, contact_us, blog_list, courses_list)."""
+    __tablename__ = "seo_page_meta"
+    id              = Column(Integer, primary_key=True, index=True)
+    page_key        = Column(String(100), unique=True, index=True)  # "home", "about_us", "contact_us", "blog_list", "courses_list"
+    seo_title       = Column(String(255), nullable=True)
+    seo_description = Column(Text, nullable=True)
+    seo_keywords    = Column(Text, nullable=True)
+    canonical_path  = Column(String(255), nullable=True)
+    og_image_url    = Column(Text, nullable=True)
+    schema_json     = Column(Text, nullable=True)   # extra JSON-LD for this page
+    updated_at      = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class Redirect(Base):
+    """URL redirect rules (301/302) for SEO link-juice preservation."""
+    __tablename__ = "redirects"
+    id          = Column(Integer, primary_key=True, index=True)
+    from_path   = Column(String(500), unique=True, index=True, nullable=False)
+    to_path     = Column(String(500), nullable=False)
+    status_code = Column(Integer, default=301)   # 301 | 302
+    is_active   = Column(Boolean, default=True)
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class CourseFaq(Base):
+    """Course-specific FAQs for AEO + FAQPage schema (separate from global FAQ table)."""
+    __tablename__ = "course_faqs"
+    id          = Column(Integer, primary_key=True, index=True)
+    course_id   = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, index=True)
+    question    = Column(Text, nullable=False)
+    answer      = Column(Text, nullable=False)
+    order_index = Column(Integer, default=0)
+    is_active   = Column(Boolean, default=True)
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class GscProperty(Base):
+    """Google Search Console property (site URL)."""
+    __tablename__ = "gsc_properties"
+    id          = Column(Integer, primary_key=True, index=True)
+    site_url    = Column(String(500), unique=True, nullable=False)  # e.g. https://iinmedu.com/
+    is_default  = Column(Boolean, default=False)
+
+
+class GscQueryStat(Base):
+    """Cached Google Search Console query stats (synced via API)."""
+    __tablename__ = "gsc_query_stats"
+    id          = Column(Integer, primary_key=True, index=True)
+    property_id = Column(Integer, ForeignKey("gsc_properties.id", ondelete="CASCADE"), index=True)
+    query       = Column(String(500), index=True)
+    page        = Column(String(500), nullable=True)
+    impressions = Column(Integer, default=0)
+    clicks      = Column(Integer, default=0)
+    ctr         = Column(Float, default=0)
+    position    = Column(Float, default=0)
+    date        = Column(Date, index=True)
 

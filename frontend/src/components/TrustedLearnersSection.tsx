@@ -63,10 +63,16 @@ function StarRow({ count }: { count: number }) {
   );
 }
 
-export default function TrustedLearnersSection() {
-  const [section, setSection] = useState<SectionConfig>(DEFAULT_SECTION);
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function TrustedLearnersSection({
+  initialSection,
+  initialReviews,
+}: {
+  initialSection?: any;
+  initialReviews?: Review[];
+} = {}) {
+  const [section, setSection] = useState<SectionConfig>(initialSection ? { ...DEFAULT_SECTION, ...initialSection } : DEFAULT_SECTION);
+  const [reviews, setReviews] = useState<Review[]>(initialReviews ?? []);
+  const [loading, setLoading] = useState(!initialReviews);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isEditingSection, setIsEditingSection] = useState(false);
   const [isEditingReview, setIsEditingReview] = useState(false);
@@ -78,7 +84,8 @@ export default function TrustedLearnersSection() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const marqueeRef = useRef<HTMLDivElement>(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (force = false) => {
+    if (initialReviews && !force) return; // skip client fetch when server data exists
     try {
       setLoading(true);
       const res = await apiFetch("/api/settings/learner-reviews");
@@ -88,7 +95,7 @@ export default function TrustedLearnersSection() {
         if (json.reviews) setReviews(json.reviews);
       }
     } catch { /* ignore */ } finally { setLoading(false); }
-  }, []);
+  }, [initialReviews]);
 
   useEffect(() => {
     fetchData();
@@ -113,7 +120,7 @@ export default function TrustedLearnersSection() {
       const endpoint = isNew ? "/api/settings/learner-reviews" : `/api/settings/learner-reviews/${editReview.id}`;
       const body = isNew ? { ...editReview } : { ...editReview };
       const res = await apiFetch(endpoint, { method: isNew ? "POST" : "PUT", body: JSON.stringify(body) });
-      if (res.ok) { setIsEditingReview(false); fetchData(); }
+      if (res.ok) { setIsEditingReview(false); fetchData(true); }
     } catch { /* ignore */ } finally { setIsSaving(false); }
   };
 
@@ -121,7 +128,7 @@ export default function TrustedLearnersSection() {
     if (!confirm("Delete this review?")) return;
     try {
       const res = await apiFetch(`/api/settings/learner-reviews/${id}`, { method: "DELETE" });
-      if (res.ok) fetchData();
+      if (res.ok) fetchData(true);
     } catch { /* ignore */ }
   };
 
@@ -129,7 +136,7 @@ export default function TrustedLearnersSection() {
     setIsSaving(true);
     try {
       const res = await apiFetch("/api/settings/learner-reviews/section", { method: "PUT", body: JSON.stringify(editSection) });
-      if (res.ok) { setIsEditingSection(false); fetchData(); }
+      if (res.ok) { setIsEditingSection(false); fetchData(true); }
     } catch { /* ignore */ } finally { setIsSaving(false); }
   };
 

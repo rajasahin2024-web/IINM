@@ -1,7 +1,22 @@
 import os
 import re
+from fastapi import HTTPException
 
 BASE_URL = os.getenv("BASE_URL", "http://localhost:2007")
+
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+def validate_upload(file: "UploadFile", allowed_exts: set[str] = ALLOWED_IMAGE_EXTENSIONS, max_size: int = MAX_IMAGE_SIZE_BYTES) -> str:
+    """Validate uploaded file extension and size. Returns the file extension (e.g. '.jpg')."""
+    filename = file.filename or ""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in allowed_exts:
+        raise HTTPException(status_code=400, detail=f"File type '{ext}' not allowed. Allowed: {', '.join(sorted(allowed_exts))}")
+    if file.size and file.size > max_size:
+        raise HTTPException(status_code=400, detail=f"File too large. Max size: {max_size // (1024*1024)} MB")
+    return ext
 
 
 def rewrite_url(url: str | None) -> str | None:

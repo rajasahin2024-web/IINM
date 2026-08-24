@@ -4,8 +4,15 @@ Provides file upload validation and rate limiting helpers.
 """
 import os
 import time
+import hashlib
 from typing import Optional
 from fastapi import HTTPException, UploadFile
+
+try:
+    import httpx
+    _HAS_HTTPX = True
+except ImportError:
+    _HAS_HTTPX = False
 
 # ─── File Upload Security ────────────────────────────────────────────────────
 
@@ -105,3 +112,64 @@ def get_client_ip(request) -> str:
     if forwarded_for:
         return forwarded_for.split(",")[0].strip()
     return request.client.host if request.client else "0.0.0.0"
+
+
+# ─── Cloudflare Turnstile verification ────────────────────────────────────────
+
+_TURNSTILE_SECRET = os.getenv("TURNSTILE_SECRET_KEY", "")
+_TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+
+
+async def verify_turnstile(token: Optional[str], remote_ip: Optional[str] = None) -> bool:
+    """Verify a Cloudflare Turnstile token server-side.
+
+    Returns True if verification succeeds OR if Turnstile is not configured
+    (no secret key set) — in which case we fall back to rate-limit-only protection
+    so the app keeps working in dev / before keys are provisioned.
+    """
+    if not _TURNSTILE_SECRET:
+        # Not configured: fail open (rate limit still applies).
+        return True
+    if not token:
+        return False
+    if not _HAS_HTTPX:
+        # httpx missing: fail open to avoid blocking writes, but log nothing here.
+        return True
+    data = {"secret": _TURNSTILE_SECRET, "response": token}
+    if remote_ip:
+        data["remoteip"] = remote_ip
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(_TURNSTILE_VERIFY_URL, data=data)
+            r.raise_for_status()
+            return bool(r.json().get("success"))
+    except Exception:
+        # Network/CF error: fail open (don't block legit users on infra issues).
+        return True
+
+
+def hash_ip(ip: str) -> str:
+    """One-way hash of an IP for dedup storage (don't store raw IPs long-term)."""
+    return hashlib.sha256(ip.encode("utf-8")).hexdigest()[:64]
+
+
+# ─── View-count dedup (in-memory, per IP+key) ────────────────────────────────
+
+_view_buckets: dict[tuple[str, str], float] = {}
+VIEW_DEDUP_TTL = 600  # 10 minutes
+
+
+def should_count_view(ip: str, key: str, ttl: int = VIEW_DEDUP_TTL) -> bool:
+    """Return True if this (ip, key) pair hasn't been seen within the TTL window.
+    Used to dedup blog view increments so refreshes/bots don't inflate counts."""
+    now = time.time()
+    k = (ip, key)
+    last = _view_buckets.get(k)
+    # Opportunistic cleanup of expired entries (bounded scan).
+    if len(_view_buckets) > 10000:
+        for bk in [bk for bk, t in _view_buckets.items() if now - t > ttl]:
+            _view_buckets.pop(bk, None)
+    if last and now - last < ttl:
+        return False
+    _view_buckets[k] = now
+    return True

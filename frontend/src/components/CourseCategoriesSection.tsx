@@ -23,6 +23,19 @@ function isAdminLoggedIn(): boolean {
   return loggedIn && !!expiry && Date.now() < Number(expiry);
 }
 
+// Resolve image URLs: absolute CDN URLs (https://cdn.iinmedu.com/...) pass through
+// unchanged; relative paths (/uploads/...) get prefixed with the backend BASE_URL
+// so they load from the backend (port 2007) instead of the frontend (port 2021).
+function resolveImgUrl(url: string | null | undefined): string {
+  if (!url) return "";
+  // Emoji short strings are kept as-is (length <= 4)
+  if (url.length <= 4) return url;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  // Relative path -> prefix with backend BASE_URL
+  if (url.startsWith("/")) return `${BASE_URL}${url}`;
+  return url;
+}
+
 // PREMIUM SHIMMERING SKELETON LOADER COMPONENT
 const SkeletonLoader = () => (
   <div className="categories-grid">
@@ -130,10 +143,10 @@ const SkeletonLoader = () => (
 );
 
 
-export default function CourseCategoriesSection() {
-  const [categories, setCategories] = useState<HomeCourseCategory[]>([]);
+export default function CourseCategoriesSection({ initialData }: { initialData?: HomeCourseCategory[] } = {}) {
+  const [categories, setCategories] = useState<HomeCourseCategory[]>(initialData ?? []);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialData);
 
   // Modal Editing State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -144,7 +157,8 @@ export default function CourseCategoriesSection() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchCategories = useCallback(async () => {
+  const fetchCategories = useCallback(async (force = false) => {
+    if (initialData && !force) return; // skip client fetch when server data exists
     try {
       setLoading(true);
       const endpoint = isAdminLoggedIn()
@@ -160,7 +174,7 @@ export default function CourseCategoriesSection() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [initialData]);
 
   useEffect(() => {
     fetchCategories();
@@ -284,7 +298,7 @@ export default function CourseCategoriesSection() {
       if (res.ok) {
         setIsModalOpen(false);
         setEditCategory(null);
-        fetchCategories();
+        fetchCategories(true);
       } else {
         const err = await res.json().catch(() => ({}));
         setErrorMessage(err.detail || "Failed to save category card");
@@ -313,7 +327,7 @@ export default function CourseCategoriesSection() {
       if (res.ok) {
         setIsModalOpen(false);
         setEditCategory(null);
-        fetchCategories();
+        fetchCategories(true);
       } else {
         const err = await res.json().catch(() => ({}));
         setErrorMessage(err.detail || "Failed to delete category");
@@ -398,6 +412,9 @@ export default function CourseCategoriesSection() {
             {categories.map((cat, idx) => {
               const isEmoji = cat.icon_url && cat.icon_url.length <= 4;
               const cardStyle = getPremiumCardStyles(idx);
+              const resolvedIcon = resolveImgUrl(cat.icon_url);
+              const resolvedBg = resolveImgUrl(cat.bg_image_url);
+              const resolvedToolIcons = (cat.tool_icons || []).map(resolveImgUrl);
 
               return (
                 <div key={cat.id || idx} className={`category-card-wrapper ${!cat.is_active ? "inactive-card" : ""}`}>
@@ -412,10 +429,10 @@ export default function CourseCategoriesSection() {
                       }}
                     >
                       {/* Abstract Background Overlay */}
-                      {cat.bg_image_url && (
-                        <div 
-                          className="card-abstract-bg" 
-                          style={{ backgroundImage: `url(${cat.bg_image_url})` }} 
+                      {resolvedBg && (
+                        <div
+                          className="card-abstract-bg"
+                          style={{ backgroundImage: `url(${resolvedBg})` }}
                         />
                       )}
 
@@ -423,9 +440,9 @@ export default function CourseCategoriesSection() {
                       <div className="category-card-top" style={{ position: "relative", zIndex: 1 }}>
                         <div className="category-main-icon-wrap">
                           {isEmoji ? (
-                            <span className="category-emoji-icon">{cat.icon_url}</span>
+                            <span className="category-emoji-icon">{resolvedIcon}</span>
                           ) : (
-                            <img src={cat.icon_url} alt={cat.title} className="category-img-icon" />
+                            <img src={resolvedIcon} alt={cat.title} className="category-img-icon" />
                           )}
                         </div>
 
@@ -462,9 +479,9 @@ export default function CourseCategoriesSection() {
                         </span>
 
                         {/* HIGH-END OVERLAPPING FANNING ICON DECK */}
-                        {cat.tool_icons && cat.tool_icons.length > 0 && (
+                        {resolvedToolIcons.length > 0 && (
                           <div className="corner-icon-deck">
-                            {cat.tool_icons.slice(0, 3).map((iconUrl, iconIdx) => (
+                            {resolvedToolIcons.slice(0, 3).map((iconUrl, iconIdx) => (
                               <div
                                 key={iconIdx}
                                 className={`deck-tool-icon deck-icon-${iconIdx + 1}`}
@@ -575,7 +592,7 @@ export default function CourseCategoriesSection() {
                         {editCategory.icon_url && editCategory.icon_url.length <= 4 ? (
                           <span style={{ fontSize: 32 }}>{editCategory.icon_url}</span>
                         ) : editCategory.icon_url ? (
-                          <img src={editCategory.icon_url} alt="Main Icon" style={{ width: 48, height: 48, objectFit: "contain" }} />
+                          <img src={resolveImgUrl(editCategory.icon_url)} alt="Main Icon" style={{ width: 48, height: 48, objectFit: "contain" }} />
                         ) : (
                           <span style={{ fontSize: 12, color: "#475569" }}>No Icon</span>
                         )}
@@ -608,7 +625,7 @@ export default function CourseCategoriesSection() {
                       <div className="tool-icons-list">
                         {(editCategory.tool_icons || []).map((iconUrl, idx) => (
                           <div key={idx} className="tool-icon-edit-item">
-                            <img src={iconUrl} alt="Tool Icon" />
+                            <img src={resolveImgUrl(iconUrl)} alt="Tool Icon" />
                             <button
                               type="button"
                               onClick={() => handleDeleteToolIcon(idx)}
@@ -642,7 +659,7 @@ export default function CourseCategoriesSection() {
                     <div className="main-icon-edit-panel">
                       <div className="main-icon-preview">
                         {editCategory.bg_image_url ? (
-                          <img src={editCategory.bg_image_url} alt="Background Abstract" style={{ width: 48, height: 48, objectFit: "cover", opacity: 0.5 }} />
+                          <img src={resolveImgUrl(editCategory.bg_image_url)} alt="Background Abstract" style={{ width: 48, height: 48, objectFit: "cover", opacity: 0.5 }} />
                         ) : (
                           <span style={{ fontSize: 12, color: "#475569" }}>None</span>
                         )}

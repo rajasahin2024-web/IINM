@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useDeferredValue, useCallback, useRef } from "react";
 import Link from "next/link";
 import PublicNavbar from "@/components/PublicNavbar";
 import PublicFooter from "@/components/PublicFooter";
@@ -18,6 +18,8 @@ interface Post {
   views: number;
 }
 
+const PAGE_SIZE = 12;
+
 const fmt = (iso?: string | null) => {
   if (!iso) return "";
   const d = new Date(iso);
@@ -32,23 +34,51 @@ export default function BlogListingPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [load, setLoad] = useState(true);
   const [search, setSearch] = useState("");
+  // useDeferredValue lets the search input stay responsive while the filtered
+  // list recomputes at a lower priority — avoids jank on every keystroke.
+  const deferredSearch = useDeferredValue(search);
 
-  useEffect(() => {
-    fetch(`${API}/blogs?status=published&limit=100`)
-      .then((r) => r.json())
-      .then((d) => {
-        setPosts(d.items || []);
-        setLoad(false);
-      })
-      .catch(() => setLoad(false));
+  // Pagination state.
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const skipRef = useRef(0);
+
+  const loadPage = useCallback(async (skip: number, append: boolean) => {
+    if (append) setLoadingMore(true);
+    try {
+      const res = await fetch(`${API}/blogs?status=published&limit=${PAGE_SIZE}&skip=${skip}`);
+      const d = await res.json();
+      const items: Post[] = d.items || [];
+      setPosts((prev) => (append ? [...prev, ...items] : items));
+      skipRef.current = skip + items.length;
+      // If we got fewer than PAGE_SIZE, there are no more posts.
+      setHasMore(items.length === PAGE_SIZE);
+    } catch {
+      /* ignore */
+    } finally {
+      setLoad(false);
+      setLoadingMore(false);
+    }
   }, []);
 
+  useEffect(() => {
+    loadPage(0, false);
+  }, [loadPage]);
+
+  const handleLoadMore = () => {
+    if (loadingMore || !hasMore) return;
+    loadPage(skipRef.current, true);
+  };
+
+  // Filter on the deferred value so typing stays smooth.
   const filtered = posts.filter((p) =>
-    p.title.toLowerCase().includes(search.toLowerCase()) ||
-    (p.excerpt || "").toLowerCase().includes(search.toLowerCase())
+    p.title.toLowerCase().includes(deferredSearch.toLowerCase()) ||
+    (p.excerpt || "").toLowerCase().includes(deferredSearch.toLowerCase())
   );
 
   const heroPost = filtered[0];
+  const showHero = heroPost && deferredSearch === "";
+  const gridPosts = filtered.slice(showHero ? 1 : 0);
 
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "'Inter','Segoe UI',system-ui,sans-serif" }}>
@@ -109,7 +139,7 @@ export default function BlogListingPage() {
         ) : (
           <>
             {/* Featured Hero Card */}
-            {heroPost && search === "" && (
+            {showHero && (
               <Link href={`/blog/${heroPost.slug}`} style={{ textDecoration: "none", color: "inherit", display: "block", marginBottom: 40 }}>
                 <article
                   style={{
@@ -128,7 +158,7 @@ export default function BlogListingPage() {
                 >
                   <div style={{ height: "100%", minHeight: 320, background: heroPost.featured_image ? "none" : "#f1f5f9", overflow: "hidden" }}>
                     {heroPost.featured_image ? (
-                      <img src={heroPost.featured_image} alt={heroPost.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      <img src={heroPost.featured_image} alt={heroPost.title} loading="eager" fetchPriority="high" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     ) : (
                       <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <span style={{ fontSize: 40, opacity: 0.12 }}>📝</span>
@@ -157,7 +187,7 @@ export default function BlogListingPage() {
 
             {/* Grid */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 24 }}>
-              {filtered.slice(search === "" ? 1 : 0).map((p) => (
+              {gridPosts.map((p) => (
                 <Link key={p.id} href={`/blog/${p.slug}`} style={{ textDecoration: "none", color: "inherit" }}>
                   <article
                     style={{
@@ -176,7 +206,7 @@ export default function BlogListingPage() {
                   >
                     <div style={{ height: 180, background: p.featured_image ? "none" : "#f1f5f9", overflow: "hidden" }}>
                       {p.featured_image ? (
-                        <img src={p.featured_image} alt={p.title} style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.4s ease" }} onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.05)"; }} onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }} />
+                        <img src={p.featured_image} alt={p.title} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.4s ease" }} onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.05)"; }} onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }} />
                       ) : (
                         <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
                           <span style={{ fontSize: 28, opacity: 0.12 }}>📝</span>
@@ -202,8 +232,35 @@ export default function BlogListingPage() {
               ))}
             </div>
 
+            {/* Load More (only when not searching and more posts exist) */}
+            {deferredSearch === "" && hasMore && (
+              <div style={{ textAlign: "center", marginTop: 40 }}>
+                <button
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  style={{
+                    background: "#0a1628",
+                    color: "#fff",
+                    fontSize: 14,
+                    fontWeight: 700,
+                    padding: "12px 28px",
+                    borderRadius: 999,
+                    border: "none",
+                    cursor: loadingMore ? "wait" : "pointer",
+                    opacity: loadingMore ? 0.7 : 1,
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => { if (!loadingMore) e.currentTarget.style.background = "#e63946"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "#0a1628"; }}
+                >
+                  {loadingMore ? "Loading…" : "Load more articles"}
+                </button>
+              </div>
+            )}
+
             <div style={{ textAlign: "center", marginTop: 48, fontSize: 13, color: "#94a3b8" }}>
-              Showing {filtered.length} article{filtered.length !== 1 ? "s" : ""}
+              Showing {gridPosts.length + (showHero ? 1 : 0)} article{(gridPosts.length + (showHero ? 1 : 0)) !== 1 ? "s" : ""}
+              {deferredSearch !== "" && " (filtered)"}
             </div>
           </>
         )}

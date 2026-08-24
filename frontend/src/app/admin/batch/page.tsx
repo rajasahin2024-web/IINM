@@ -161,7 +161,7 @@ function BatchManagerInner() {
 
   const defaultForm = {
     course_id: "", name: "", mode: "live_class", meeting_url: "", status: "Upcoming",
-    start_date: "", end_date: "", max_capacity: 50,
+    start_date: "", end_date: "", max_capacity: 50, starting_count: 0,
     enable_waitlist: false, discount_amount: 0, enable_installments: false,
     instructor_ids: [] as number[], routines: [] as any[],
   };
@@ -377,6 +377,7 @@ function BatchManagerInner() {
       start_date:         batch.start_date ?? "",
       end_date:           batch.end_date ?? "",
       max_capacity:       batch.max_capacity ?? 50,
+      starting_count:     batch.starting_count ?? 0,
       enable_waitlist:    batch.enable_waitlist ?? false,
       discount_amount:    batch.discount_amount ?? 0,
       enable_installments: batch.enable_installments ?? false,
@@ -849,12 +850,13 @@ function BatchManagerInner() {
                   ))}
                 </div>
 
-                {/* Capacity & Discount row */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                {/* Capacity, Starting Count & Discount row */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
                   {([
                     { label: "Max Capacity",       key: "max_capacity"    as const },
+                    { label: "Starting Count",     key: "starting_count"  as const },
                     { label: "Batch Discount (\u20b9)", key: "discount_amount" as const },
-                  ] as { label: string; key: "max_capacity" | "discount_amount" }[]).map(({ label, key }) => (
+                  ] as { label: string; key: "max_capacity" | "starting_count" | "discount_amount" }[]).map(({ label, key }) => (
                     <div key={key} className="bi-sel-wrap">
                       <span className="bi-sel-label">{label}</span>
                       <input
@@ -875,6 +877,14 @@ function BatchManagerInner() {
                     </div>
                   ))}
                 </div>
+
+                {/* Starting Count helper text */}
+                <p style={{ fontSize: 11, color: "#94a3b8", margin: "0 0 12px", lineHeight: 1.5 }}>
+                  <strong style={{ color: "#64748b" }}>Starting Count</strong> — Fake head-start shown on the public booking page.
+                  As real students enroll, this count decreases by 1 per enrollment until real enrollments overtake it.
+                  Example: Starting Count = 12, Max Capacity = 20 → shows "12/20 enrolled" initially;
+                  after 8 real enrollments shows "12/20" (12 = max(12-8,0)+8); after 13 real enrollments shows "13/20" (real count takes over).
+                </p>
 
                 {/* Toggles */}
                 <div style={{ display: "flex", gap: 24 }}>

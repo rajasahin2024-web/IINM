@@ -1,13 +1,15 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
+import DOMPurify from "dompurify";
 import Link from "next/link";
 import PublicNavbar from "@/components/PublicNavbar";
 import PublicFooter from "@/components/PublicFooter";
+import Turnstile from "@/components/Turnstile";
 import { API_BASE_URL as API } from "@/lib/config";
 
 interface C { id:number; name:string; content:string; parent_id:number|null; created_at:string; replies:C[]; }
 
-interface BlogDetailClientProps { slug: string; }
+interface BlogDetailClientProps { slug: string; initialData?: any; }
 
 const fmt=(iso?:string|null)=>{if(!iso)return"";const d=new Date(iso);return d.toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});};
 const A=({n,s=40}:{n:string;s?:number})=><div style={{width:s,height:s,borderRadius:"50%",background:"#0a1628",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:s>36?16:12,fontWeight:700,flexShrink:0}}>{(n||"A").charAt(0).toUpperCase()}</div>;
@@ -18,18 +20,32 @@ const In=({p,v,onChange,t="text",r=1}:{p:string;v:string;onChange:(v:string)=>vo
   <input type={t} placeholder={p} value={v} onChange={e=>onChange(e.target.value)} style={base as any}/>;
 };
 
-export default function BlogDetailClient({ slug }: BlogDetailClientProps){
-  const [data,setData]=useState<any>(null);const [load,setLoad]=useState(true);
+export default function BlogDetailClient({ slug, initialData }: BlogDetailClientProps){
+  const [data,setData]=useState<any>(initialData||null);const [load,setLoad]=useState(!initialData);
   const [comments,setComments]=useState<C[]>([]);const [ratings,setRatings]=useState<any>(null);const [related,setRelated]=useState<any[]>([]);
   const [name,setName]=useState("");const [email,setEmail]=useState("");const [body,setBody]=useState("");const [replyTo,setReplyTo]=useState<number|null>(null);
   const [rVal,setRVal]=useState(0);const [rHover,setRHover]=useState(0);const [rName,setRName]=useState("");const [rReview,setRReview]=useState("");
   const [toast,setToast]=useState<{msg:string;type:string}|null>(null);
+  const [turnstileToken,setTurnstileToken]=useState<string>("");
 
-  useEffect(()=>{if(!slug)return;fetch(`${API}/blogs/slug/${slug}`).then(r=>r.json()).then(d=>{if(d.detail){window.location.href="/";return;}setData(d);setLoad(false);fetch(`${API}/blogs/${d.post.id}/comments`).then(r=>r.json()).then(c=>setComments(c.items||[]));fetch(`${API}/blogs/${d.post.id}/ratings`).then(r=>r.json()).then(rt=>setRatings(rt));fetch(`${API}/blogs?status=published&category_id=${d.post.category_id}&limit=4`).then(r=>r.json()).then(rel=>setRelated((rel.items||[]).filter((p:any)=>p.id!==d.post.id).slice(0,3)));}).catch(()=>{setLoad(false);window.location.href="/";});},[slug]);
+  useEffect(()=>{
+    if(!slug)return;
+    // If we already have server-fetched initialData, skip the duplicate post
+    // fetch and only load the secondary data (comments, ratings, related).
+    if(initialData){
+      if(initialData.detail){window.location.href="/";return;}
+      const d=initialData;
+      fetch(`${API}/blogs/${d.post.id}/comments`).then(r=>r.json()).then(c=>setComments(c.items||[]));
+      fetch(`${API}/blogs/${d.post.id}/ratings`).then(r=>r.json()).then(rt=>setRatings(rt));
+      fetch(`${API}/blogs?status=published&category_id=${d.post.category_id}&limit=4`).then(r=>r.json()).then(rel=>setRelated((rel.items||[]).filter((p:any)=>p.id!==d.post.id).slice(0,3)));
+      return;
+    }
+    fetch(`${API}/blogs/slug/${slug}`).then(r=>r.json()).then(d=>{if(d.detail){window.location.href="/";return;}setData(d);setLoad(false);fetch(`${API}/blogs/${d.post.id}/comments`).then(r=>r.json()).then(c=>setComments(c.items||[]));fetch(`${API}/blogs/${d.post.id}/ratings`).then(r=>r.json()).then(rt=>setRatings(rt));fetch(`${API}/blogs?status=published&category_id=${d.post.category_id}&limit=4`).then(r=>r.json()).then(rel=>setRelated((rel.items||[]).filter((p:any)=>p.id!==d.post.id).slice(0,3)));}).catch(()=>{setLoad(false);window.location.href="/";});
+  },[slug,initialData]);
 
   const T=(msg:string,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),3000);};
 
-  const postCmt=async(parentId:number|null=null)=>{if(!data)return;if(!name.trim()||!body.trim()){T("Please fill name and comment.","error");return;}const res=await fetch(`${API}/blogs/${data.post.id}/comments`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:name.trim(),email:email.trim()||null,content:body.trim(),parent_id:parentId})});if(res.ok){setBody("");setReplyTo(null);T("Comment posted!");const c=await fetch(`${API}/blogs/${data.post.id}/comments`).then(r=>r.json());setComments(c.items||[]);}else T("Failed to post comment.","error");};
+  const postCmt=async(parentId:number|null=null)=>{if(!data)return;if(!name.trim()||!body.trim()){T("Please fill name and comment.","error");return;}if(!turnstileToken){T("Please complete the captcha.","error");return;}const res=await fetch(`${API}/blogs/${data.post.id}/comments`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:name.trim(),email:email.trim()||null,content:body.trim(),parent_id:parentId,turnstile_token:turnstileToken})});if(res.ok){setBody("");setReplyTo(null);T("Comment posted!");const c=await fetch(`${API}/blogs/${data.post.id}/comments`).then(r=>r.json());setComments(c.items||[]);}else T("Failed to post comment.","error");};
   const postRate=async()=>{if(!data||rVal<1){T("Select a star rating.","error");return;}const res=await fetch(`${API}/blogs/${data.post.id}/ratings`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:rName.trim()||null,rating:rVal,review:rReview.trim()||null})});if(res.ok){const rt=await res.json();setRatings((p:any)=>({...p,average:rt.average,count:rt.count}));setRVal(0);setRReview("");setRName("");T("Thank you!");}else T("Failed.","error");};
   const react=async(type:string)=>{if(!data)return;const res=await fetch(`${API}/blogs/${data.post.id}/reactions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reaction_type:type})});if(res.ok){const d2=await res.json();setData((p:any)=>p?{...p,reactions:d2.breakdown}:null);}};
 
@@ -37,6 +53,7 @@ export default function BlogDetailClient({ slug }: BlogDetailClientProps){
   if(!data)return null;
 
   const post=data.post;const author=data.author;const avg=data.rating.average;
+  const safeContent=useMemo(()=>DOMPurify.sanitize(post.content||"",{ALLOWED_TAGS:["p","br","hr","span","div","h1","h2","h3","h4","h5","h6","strong","b","em","i","u","s","sub","sup","small","ul","ol","li","blockquote","pre","code","a","img","table","thead","tbody","tr","th","td","figure","figcaption"],ALLOWED_ATTR:["href","title","target","rel","src","alt","width","height","loading","fetchpriority","style","class","colspan","rowspan"],ALLOW_DATA_ATTR:false}),[post.content]);
   const reacts=[{k:"clap",l:"Clap",i:"👏"},{k:"like",l:"Like",i:"👍"},{k:"love",l:"Love",i:"❤️"},{k:"fire",l:"Fire",i:"🔥"},{k:"rocket",l:"Rocket",i:"🚀"}];
   const S=({f,s=20}:{f:boolean;s?:number})=><svg width={s} height={s} viewBox="0 0 24 24" fill={f?"#f59e0b":"#e2e8f0"}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
   const btn={background:"#0a1628",color:"#fff",fontSize:14,fontWeight:700,padding:"12px 28px",borderRadius:999,border:"none",cursor:"pointer",transition:"all 0.2s ease"};
@@ -49,7 +66,7 @@ export default function BlogDetailClient({ slug }: BlogDetailClientProps){
       {/* HERO */}
       <div className="blog-hero" style={{position:"relative",width:"100%",height:"clamp(360px,50vw,560px)",overflow:"hidden",background:"#0a1628"}}>
         {post.featured_image?(
-          <img src={post.featured_image} alt={post.title} style={{width:"100%",height:"100%",objectFit:"cover",opacity:0.3}}/>
+          <img src={post.featured_image} alt={post.title} loading="eager" fetchPriority="high" style={{width:"100%",height:"100%",objectFit:"cover",opacity:0.3}}/>
         ):null}
         <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom, rgba(10,22,40,0.7) 0%, rgba(10,22,40,0.88) 50%, rgba(10,22,40,0.97) 100%)"}}/>
         <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",justifyContent:"flex-end",padding:"0 24px clamp(32px,6vw,64px)",maxWidth:900,margin:"0 auto",width:"100%",boxSizing:"border-box"}}>
@@ -80,12 +97,12 @@ export default function BlogDetailClient({ slug }: BlogDetailClientProps){
       <div className="blog-layout" style={{maxWidth:1200,margin:"0 auto",padding:"40px 24px 60px",display:"grid",gridTemplateColumns:"1fr 340px",gap:40}}>
         {/* LEFT */}
         <div>
-          <article className="blog-content" dangerouslySetInnerHTML={{__html:post.content||""}} style={{marginBottom:32}}/>
+          <article className="blog-content" dangerouslySetInnerHTML={{__html:safeContent}} style={{marginBottom:32}}/>
 
           {post.tags&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:32}}>{post.tags.split(",").map((t:string)=><span key={t} style={{background:"rgba(10,22,40,0.05)",color:"#475569",fontSize:13,fontWeight:600,padding:"6px 14px",borderRadius:999,border:"1px solid rgba(10,22,40,0.08)"}}>#{t.trim()}</span>)}</div>}
 
           <div style={{display:"flex",gap:16,alignItems:"center",padding:20,borderRadius:14,background:"#fff",border:"1px solid #e2e8f0",marginBottom:32,boxShadow:"0 2px 8px rgba(10,22,40,0.04)"}}>
-            {author?.profile_image?<img src={author.profile_image} alt={author.name} style={{width:60,height:60,borderRadius:"50%",objectFit:"cover",border:"2px solid #e2e8f0",flexShrink:0}}/>:<A n={author?.name||"A"} s={60}/>}
+            {author?.profile_image?<img src={author.profile_image} alt={author.name} loading="lazy" style={{width:60,height:60,borderRadius:"50%",objectFit:"cover",border:"2px solid #e2e8f0",flexShrink:0}}/>:<A n={author?.name||"A"} s={60}/>}
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:16,fontWeight:700,color:"#0a1628",marginBottom:4}}>{author?.name||"Team IINM"}</div>
               <div style={{fontSize:13,color:"#64748b",lineHeight:1.5}}>{author?.bio||"Passionate educator and tech writer sharing insights on AI, programming, and the future of learning."}</div>
@@ -99,7 +116,7 @@ export default function BlogDetailClient({ slug }: BlogDetailClientProps){
               {related.map((p:any)=>(<Link key={p.id} href={`/blog/${p.slug}`} style={{textDecoration:"none",color:"inherit"}}>
                 <article style={{borderRadius:12,overflow:"hidden",border:"1px solid #e2e8f0",background:"#fff",boxShadow:"0 2px 8px rgba(10,22,40,0.04)",transition:"transform 0.25s ease,box-shadow 0.25s ease"}} onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-4px)";e.currentTarget.style.boxShadow="0 10px 24px rgba(10,22,40,0.08)";}} onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="0 2px 8px rgba(10,22,40,0.04)";}}>
                   <div style={{height:120,background:p.featured_image?"none":"#f1f5f9",overflow:"hidden"}}>
-                    {p.featured_image?<img src={p.featured_image} alt={p.title} style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:24,opacity:0.12}}>📝</span></div>}
+                    {p.featured_image?<img src={p.featured_image} alt={p.title} loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:24,opacity:0.12}}>📝</span></div>}
                   </div>
                   <div style={{padding:14}}>
                     <h4 style={{fontSize:14,fontWeight:700,color:"#0a1628",lineHeight:1.35,marginBottom:6,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{p.title}</h4>
@@ -192,6 +209,7 @@ export default function BlogDetailClient({ slug }: BlogDetailClientProps){
               <In p="Name *" v={name} onChange={setName}/>
               <In p="Email (optional)" v={email} onChange={setEmail} t="email"/>
               <In p="Your thoughts..." v={body} onChange={setBody} t="textarea" r={3}/>
+              <Turnstile onToken={setTurnstileToken} style={{marginBottom:10}}/>
               <button onClick={()=>postCmt(null)} style={{...btn,padding:"10px 20px",fontSize:13}} onMouseEnter={e=>e.currentTarget.style.background="#e63946"} onMouseLeave={e=>e.currentTarget.style.background="#0a1628"}>Post</button>
             </div>
           </div>

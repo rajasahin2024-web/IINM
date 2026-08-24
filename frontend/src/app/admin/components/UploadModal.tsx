@@ -1,5 +1,6 @@
 import React, { useState, useRef } from "react";
 import { apiFetch } from "@/lib/apiFetch";
+import { uploadWithProgress } from "@/lib/uploadWithProgress";
 import { API_BASE_URL } from "@/lib/config";
 import { useToast } from "./ToastProvider";
 
@@ -16,7 +17,7 @@ function formatBytes(bytes: number | null) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-type UploadMode = "file" | "youtube";
+type UploadMode = "file" | "youtube" | "banner";
 
 export default function UploadModal({ onClose, onSuccess, existingTags }: UploadModalProps) {
   const { showToast } = useToast();
@@ -34,6 +35,7 @@ export default function UploadModal({ onClose, onSuccess, existingTags }: Upload
   
   const [dragOver, setDragOver] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
   
   const [titleFocused, setTitleFocused] = useState(false);
@@ -69,13 +71,15 @@ export default function UploadModal({ onClose, onSuccess, existingTags }: Upload
 
   const validate = () => {
     const errs: Record<string, string> = {};
-    if (!title.trim()) errs.title = "Title is required";
-    
+    if (mode !== "banner" && !title.trim()) errs.title = "Title is required";
+
     if (mode === "file") {
       if (!selectedFile) errs.file = "Please select a file to upload";
-    } else {
+    } else if (mode === "youtube") {
       if (!youtubeUrl.trim()) errs.youtube_url = "YouTube URL is required";
       else if (!getYouTubeId(youtubeUrl)) errs.youtube_url = "Invalid YouTube URL";
+    } else if (mode === "banner") {
+      if (!selectedFile) errs.file = "Please select a banner image to upload";
     }
 
     setErrors(errs);
@@ -85,6 +89,37 @@ export default function UploadModal({ onClose, onSuccess, existingTags }: Upload
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
+
+    // Banner mode — upload to About banners endpoint
+    if (mode === "banner") {
+      if (!selectedFile) return;
+      const fd = new FormData();
+      fd.append("file", selectedFile);
+      setLoading(true);
+      setUploadProgress(0);
+      try {
+        const result = await uploadWithProgress(
+          `${API_BASE_URL}/about/banners/upload`,
+          fd,
+          (pct) => setUploadProgress(pct)
+        );
+        if (result.ok) {
+          showToast("Banner uploaded successfully!");
+          onSuccess(result.data);
+          onClose();
+        } else {
+          showToast(result.error || "Banner upload failed", "error");
+          setErrors({ submit: result.error || "Banner upload failed" });
+        }
+      } catch {
+        showToast("Network error. Please try again.", "error");
+        setErrors({ submit: "Network error. Please try again." });
+      } finally {
+        setLoading(false);
+        setUploadProgress(0);
+      }
+      return;
+    }
 
     // Add any pending tag input before submitting
     let finalTags = [...tags];
@@ -114,26 +149,27 @@ export default function UploadModal({ onClose, onSuccess, existingTags }: Upload
     }
 
     setLoading(true);
+    setUploadProgress(0);
     try {
-      const res = await apiFetch(`${API_BASE_URL}/materials`, {
-        method: "POST",
-        body: fd,
-      });
-      if (res.ok) {
-        const material = await res.json();
+      const result = await uploadWithProgress(
+        `${API_BASE_URL}/materials`,
+        fd,
+        (pct) => setUploadProgress(pct)
+      );
+      if (result.ok) {
         showToast("Upload successful!");
-        onSuccess(material);
+        onSuccess(result.data);
         onClose();
       } else {
-        const data = await res.json();
-        showToast(data.detail || "Upload failed", "error");
-        setErrors({ submit: data.detail || "Upload failed" });
+        showToast(result.error || "Upload failed", "error");
+        setErrors({ submit: result.error || "Upload failed" });
       }
     } catch {
       showToast("Network error. Please try again.", "error");
       setErrors({ submit: "Network error. Please try again." });
     } finally {
       setLoading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -180,6 +216,7 @@ export default function UploadModal({ onClose, onSuccess, existingTags }: Upload
       <style>{`
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .mode-tab { padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; transition: all 0.18s; }
         .mode-tab.active { background: #6366f1; color: #fff; box-shadow: 0 2px 8px rgba(99,102,241,0.35); }
         .mode-tab.inactive { background: #f1f5f9; color: #64748b; }
@@ -213,13 +250,15 @@ export default function UploadModal({ onClose, onSuccess, existingTags }: Upload
         <div style={{ padding: "16px 28px 16px", borderBottom: "1px solid #e2e8f0", background: "#f8fafc", display: "flex", gap: 12, flexShrink: 0 }}>
           <button type="button" className={`mode-tab ${mode === "file" ? "active" : "inactive"}`} onClick={() => { setMode("file"); setErrors({}); }}>File Upload</button>
           <button type="button" className={`mode-tab ${mode === "youtube" ? "active" : "inactive"}`} onClick={() => { setMode("youtube"); setErrors({}); }}>YouTube Link</button>
+          <button type="button" className={`mode-tab ${mode === "banner" ? "active" : "inactive"}`} onClick={() => { setMode("banner"); setErrors({}); setSelectedFile(null); }}>Banner</button>
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
           
           {/* Scrollable Form Body */}
           <div className="custom-scroll" style={{ flex: 1, padding: "28px 36px", overflowY: "auto", background: "#fff" }}>
-          
+
+          {mode !== "banner" && (
           <div style={inputWrap}>
             <label style={floatLabel(titleFocused, !!title)}>Material Title</label>
             <input
@@ -229,7 +268,9 @@ export default function UploadModal({ onClose, onSuccess, existingTags }: Upload
             />
             {errors.title && <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "#ef4444" }}>{errors.title}</p>}
           </div>
+          )}
 
+          {mode !== "banner" && (
           <div style={inputWrap}>
             <label style={floatLabel(descFocused, !!description)}>Description (optional)</label>
             <textarea
@@ -238,8 +279,10 @@ export default function UploadModal({ onClose, onSuccess, existingTags }: Upload
               onFocus={() => setDescFocused(true)} onBlur={() => setDescFocused(false)}
             />
           </div>
+          )}
 
           {/* Tagging System */}
+          {mode !== "banner" && (
           <div style={{ marginBottom: 28, position: "relative" }}>
             <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 600, color: "#64748b", textTransform: "uppercase" }}>Tags</p>
             <div style={{
@@ -303,6 +346,7 @@ export default function UploadModal({ onClose, onSuccess, existingTags }: Upload
             )}
             <p style={{ margin: "6px 0 0", fontSize: 11, color: "#94a3b8" }}>Press Enter or comma to create a tag. Use hyphens instead of spaces.</p>
           </div>
+          )}
 
           {mode === "file" ? (
             <>
@@ -332,6 +376,39 @@ export default function UploadModal({ onClose, onSuccess, existingTags }: Upload
           {errors.file && <p style={{ margin: "-12px 0 14px", fontSize: 11.5, color: "#ef4444" }}>{errors.file}</p>}
 
 
+            </>
+          ) : mode === "banner" ? (
+            <>
+              <div
+                onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}
+              style={{
+                border: `2px dashed ${dragOver ? "#6366f1" : errors.file ? "#ef4444" : "#c7d2fe"}`, borderRadius: 14, padding: "28px 20px", textAlign: "center", cursor: "pointer",
+                background: dragOver ? "#eef2ff" : "#fafbff", transition: "all 0.2s", marginBottom: 20,
+              }}
+            >
+              <input ref={fileInputRef} type="file" style={{ display: "none" }} accept="image/*" onChange={e => { const f = e.target.files?.[0] || null; setSelectedFile(f); setErrors(p => ({ ...p, file: "" })); }} />
+              {selectedFile ? (
+                <div>
+                  <div style={{ width: 48, height: 48, borderRadius: 12, margin: "0 auto 10px", background: "#eef2ff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {selectedFile.type.startsWith("image/") ? (
+                      <img src={URL.createObjectURL(selectedFile)} alt="preview" style={{ maxWidth: "100%", maxHeight: 200, borderRadius: 8, objectFit: "contain" }} />
+                    ) : (
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2"><polyline points="20,6 9,17 4,12" /></svg>
+                    )}
+                  </div>
+                  <p style={{ margin: "0 0 2px", fontSize: 13.5, fontWeight: 700, color: "#0f172a" }}>{selectedFile.name}</p>
+                  <p style={{ margin: 0, fontSize: 12, color: "#64748b" }}>IMAGE • {formatBytes(selectedFile.size)}</p>
+                  <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "#94a3b8" }}>Click to change</p>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ width: 52, height: 52, borderRadius: 14, margin: "0 auto 12px", background: "#eef2ff", display: "flex", alignItems: "center", justifyContent: "center" }}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21,15 16,10 5,21" /></svg></div>
+                  <p style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 600, color: "#1e293b" }}>Drag & drop your banner image here</p>
+                  <p style={{ margin: 0, fontSize: 12, color: "#94a3b8" }}>or click to browse — JPG, PNG, WebP, GIF</p>
+                </div>
+              )}
+            </div>
+          {errors.file && <p style={{ margin: "-12px 0 14px", fontSize: 11.5, color: "#ef4444" }}>{errors.file}</p>}
             </>
           ) : (
             <div style={inputWrap}>
@@ -369,12 +446,29 @@ export default function UploadModal({ onClose, onSuccess, existingTags }: Upload
             </div>
           )}
 
+          {/* Upload Progress Bar */}
+          {loading && uploadProgress > 0 && (
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "#6366f1" }}>Uploading... {uploadProgress}%</span>
+                <span style={{ fontSize: 11, color: "#94a3b8" }}>{mode === "banner" ? "Banner" : "File"}</span>
+              </div>
+              <div style={{ width: "100%", height: 8, background: "#e2e8f0", borderRadius: 4, overflow: "hidden" }}>
+                <div style={{
+                  width: `${uploadProgress}%`, height: "100%",
+                  background: "linear-gradient(90deg, #6366f1 0%, #818cf8 100%)",
+                  borderRadius: 4, transition: "width 0.2s ease",
+                }} />
+              </div>
+            </div>
+          )}
+
           </div>
 
           <div style={{ padding: "16px 28px", borderTop: "1px solid #e2e8f0", background: "#f8fafc", display: "flex", justifyContent: "flex-end", gap: 10, flexShrink: 0 }}>
             <button type="button" onClick={onClose} style={{ padding: "11px 22px", borderRadius: 10, border: "1px solid #e2e8f0", background: "#fff", fontSize: 13, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>Cancel</button>
             <button type="submit" className="cm-submit-btn" disabled={loading} style={{ padding: "11px 28px", borderRadius: 10, border: "none", background: loading ? "#a5b4fc" : "#0ea5e9", fontSize: 13, fontWeight: 700, color: "#fff", cursor: loading ? "not-allowed" : "pointer", transition: "all 0.18s", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 2px 8px rgba(14,165,233,0.3)" }}>
-              {loading ? ( <><span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite", display: "inline-block" }} />Uploading...</> ) : ( <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17,8 12,3 7,8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>Upload to Library</> )}
+              {loading ? ( <><span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite", display: "inline-block" }} />{uploadProgress > 0 ? `${uploadProgress}%` : "Uploading..."}</> ) : ( <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17,8 12,3 7,8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>{mode === "banner" ? "Upload Banner" : "Upload to Library"}</> )}
             </button>
           </div>
         </form>
