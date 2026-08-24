@@ -318,10 +318,9 @@ async function fetchImageAsDataUrl(url: string): Promise<string | null> {
 }
 
 export async function downloadReceiptPdf(data: ReceiptData) {
-  const html2canvas = (await import("html2canvas")).default;
-  const { jsPDF } = await import("jspdf");
+  const html2pdf = (await import("html2pdf.js")).default;
 
-  // Pre-fetch logo and signature images as data URLs to avoid CORS issues with html2canvas
+  // Pre-fetch logo and signature images as data URLs to avoid CORS issues
   const logoUrl = cleanUploadUrl(data.logo_url || data.site?.logo_url || data.site?.dark_logo_url || data.favicon_url || data.site?.favicon_url);
   const sigUrl = cleanUploadUrl(data.founder_signature_url || data.site?.founder_signature_url);
 
@@ -359,45 +358,13 @@ export async function downloadReceiptPdf(data: ReceiptData) {
   }
 
   try {
-    const canvas = await html2canvas(receipt, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: false,
-      backgroundColor: "#ffffff",
-      width: 794,
-      windowWidth: 794,
-    });
-
-    const pdf = new jsPDF({
-      unit: "pt",
-      format: "a4",
-      orientation: "portrait",
-    });
-
-    const a4Width = 595.28;
-    const a4Height = 841.89;
-    const margin = 20;
-    const printWidth = a4Width - margin * 2;
-    const printHeight = (canvas.height * printWidth) / canvas.width;
-
-    const imgData = canvas.toDataURL("image/jpeg", 0.98);
-
-    if (printHeight <= a4Height - margin * 2) {
-      // Single page centered vertically or aligned to top
-      pdf.addImage(imgData, "JPEG", margin, margin, printWidth, printHeight);
-    } else {
-      // Dynamic height if it exceeds standard single page
-      const customPdf = new jsPDF({
-        unit: "pt",
-        format: [a4Width, printHeight + margin * 2],
-        orientation: "portrait",
-      });
-      customPdf.addImage(imgData, "JPEG", margin, margin, printWidth, printHeight);
-      customPdf.save(`slot-booking-${data.invoice_uuid.slice(0, 8)}.pdf`);
-      return;
-    }
-
-    pdf.save(`slot-booking-${data.invoice_uuid.slice(0, 8)}.pdf`);
+    await html2pdf().set({
+      margin: [20, 20, 20, 20],
+      filename: `slot-booking-${data.invoice_uuid.slice(0, 8)}.pdf`,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, allowTaint: false, backgroundColor: "#ffffff", width: 794, windowWidth: 794 },
+      jsPDF: { unit: "pt", format: "a4", orientation: "portrait" },
+    }).from(receipt).save();
   } finally {
     if (div.parentNode) div.parentNode.removeChild(div);
   }
