@@ -4,6 +4,7 @@ import { useToast } from "../../../components/ToastProvider";
 import { Icon } from "../../../icons";
 import { apiFetch } from "@/lib/apiFetch";
 import { BASE_URL } from "@/lib/config";
+import { invalidateCache } from "@/lib/apiCache";
 
 const BASE = BASE_URL;
 
@@ -188,6 +189,7 @@ export function ContactUsSettingsInner({ forceFullScreen = false, onFullScreenCl
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error("Save failed");
+      invalidateCache(`${BASE}/api/contact/settings`);
       toast.success("Contact settings saved!");
     } catch { toast.error("Failed to save settings."); }
     finally { setSaving(false); }

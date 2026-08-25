@@ -4,6 +4,7 @@ import { AdminProvider } from "../../components/ProtectedAdmin";
 import { useToast } from "../../components/ToastProvider";
 import { apiFetch } from "@/lib/apiFetch";
 import { BASE_URL } from "@/lib/config";
+import { invalidateCache } from "@/lib/apiCache";
 import { Icon } from "../../icons";
 
 interface MaintenanceSettings {
@@ -105,6 +106,7 @@ function MaintenanceForm() {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error("Failed to save settings");
+      invalidateCache(`${baseUrl}/api/settings/site`);
       toast.success("Maintenance settings updated successfully.");
     } catch {
       toast.error("Failed to save maintenance settings.");

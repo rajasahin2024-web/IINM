@@ -16,6 +16,7 @@ import httpx
 import os
 
 from database import get_db
+from cache import cache
 from models import (
     SiteSettings, SeoPageMeta, Redirect, CourseFaq, Course,
     GscProperty, GscQueryStat, BlogPost, FAQ, CourseExtendedContent,
@@ -130,9 +131,12 @@ def _get_base_url(db: Session) -> str:
 @router.get("/site")
 def get_seo_site_settings(db: Session = Depends(get_db)):
     """Public: return global SEO/AEO settings (gsc_refresh_token excluded)."""
+    cached_val = cache.get("seo_site")
+    if cached_val is not None:
+        return cached_val
     s = db.query(SiteSettings).first()
     if not s:
-        return {
+        result = {
             "og_image_url": None,
             "twitter_handle": None,
             "canonical_base_url": None,
@@ -143,17 +147,20 @@ def get_seo_site_settings(db: Session = Depends(get_db)):
             "llms_full_enabled": True,
             "ai_bot_allow": json.dumps(DEFAULT_AI_BOTS),
         }
-    return {
-        "og_image_url": rewrite_url(s.og_image_url),
-        "twitter_handle": s.twitter_handle,
-        "canonical_base_url": s.canonical_base_url,
-        "google_site_verification": s.google_site_verification,
-        "default_robots_index": s.default_robots_index if s.default_robots_index is not None else True,
-        "organization_schema": s.organization_schema,
-        "llms_txt": s.llms_txt,
-        "llms_full_enabled": s.llms_full_enabled if s.llms_full_enabled is not None else True,
-        "ai_bot_allow": s.ai_bot_allow or json.dumps(DEFAULT_AI_BOTS),
-    }
+    else:
+        result = {
+            "og_image_url": rewrite_url(s.og_image_url),
+            "twitter_handle": s.twitter_handle,
+            "canonical_base_url": s.canonical_base_url,
+            "google_site_verification": s.google_site_verification,
+            "default_robots_index": s.default_robots_index if s.default_robots_index is not None else True,
+            "organization_schema": s.organization_schema,
+            "llms_txt": s.llms_txt,
+            "llms_full_enabled": s.llms_full_enabled if s.llms_full_enabled is not None else True,
+            "ai_bot_allow": s.ai_bot_allow or json.dumps(DEFAULT_AI_BOTS),
+        }
+    cache.set("seo_site", result)
+    return result
 
 
 @router.put("/site")
@@ -174,6 +181,7 @@ def update_seo_site_settings(
             else:
                 setattr(s, field, value)
     db.commit()
+    cache.invalidate_many(["seo_site", "site_settings"])
     return {"status": "success"}
 
 
@@ -184,8 +192,13 @@ def update_seo_site_settings(
 @router.get("/pages")
 def list_seo_pages(db: Session = Depends(get_db)):
     """Public: list all static page SEO meta."""
+    cached_val = cache.get("seo_pages")
+    if cached_val is not None:
+        return cached_val
     pages = db.query(SeoPageMeta).all()
-    return [_page_out(p) for p in pages]
+    result = [_page_out(p) for p in pages]
+    cache.set("seo_pages", result)
+    return result
 
 
 @router.get("/pages/{page_key}")
@@ -221,6 +234,7 @@ def upsert_seo_page(
                 setattr(p, field, value)
     db.commit()
     db.refresh(p)
+    cache.invalidate("seo_pages")
     return _page_out(p)
 
 
@@ -489,10 +503,16 @@ def ping_sitemap(engine: str = "google", device: str = Depends(require_device), 
 @router.get("/llms-txt")
 def get_llms_txt(db: Session = Depends(get_db)):
     """Public: return llms.txt content. Manual override if set, else auto-generated."""
+    cached_val = cache.get("seo_llms_txt")
+    if cached_val is not None:
+        return cached_val
     s = db.query(SiteSettings).first()
     if s and s.llms_txt and s.llms_txt.strip():
-        return {"content": s.llms_txt, "source": "manual"}
-    return {"content": _auto_generate_llms_txt(db), "source": "auto"}
+        result = {"content": s.llms_txt, "source": "manual"}
+    else:
+        result = {"content": _auto_generate_llms_txt(db), "source": "auto"}
+    cache.set("seo_llms_txt", result)
+    return result
 
 
 @router.put("/llms-txt")
@@ -508,6 +528,7 @@ def update_llms_txt(
     content = payload.get("content", "")
     s.llms_txt = content.strip() if content and content.strip() else None
     db.commit()
+    cache.invalidate("seo_llms_txt")
     return {"status": "success"}
 
 

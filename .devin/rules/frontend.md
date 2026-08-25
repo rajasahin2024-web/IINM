@@ -62,6 +62,22 @@ description: When Doing frontend code
 - `React.memo()` use korun jodi component unnecessary re-render hoy.
 - Kobhu `useEffect` e API call korben na — data fetching library use korun.
 
+## 7a. Request Deduplication & Caching (MANDATORY for all new frontend code)
+
+- **Duplicate API requests avoid korun.** Multiple components jodi eki endpoint fetch kore, `frontend/src/lib/apiCache.ts` er `cachedFetch()` use korun — in-flight promise dedup + short TTL cache auto handle korbe.
+- **Site settings access er jonno** `frontend/src/lib/siteSettingsCache.ts` use korun (`getSiteSettings()`, `invalidateSiteSettings()`). Navbar, Footer, NotificationBar, SiteHeadUpdater — sob eki shared helper use korbe, alada fetch korben na.
+- **`useEffect` e direct `fetch()` korben na** jodi cachedFetch() applicable hoy.
+- **Admin save/mutation er por cache invalidate MANDATORY:**
+  - Site settings save → `invalidateSiteSettings()` + related keys
+  - Navbar CMS save → `invalidateCache('/api/settings/navbar')`
+  - Footer CMS save → `invalidateCache('/api/settings/footer-menu')`
+  - Contact settings save → `invalidateCache('/api/contact/settings')`
+  - Maintenance toggle → `invalidateCache('/api/settings/maintenance')`
+  - Failed save e cache invalidate korben na — stale data overwrite hobe.
+- **Mutation (POST/PUT/DELETE) cache korben na** — shudhu GET cache.
+- **Failed fetch e in-flight marker clear hoy** jate retry possible thake (apiCache.ts already handle kore).
+- **`apiFetch.ts` wrapper use korun** — hardcoded `http://localhost:8000` ba `:2007` use korben na, `BASE_URL` env respect korun.
+
 ## 8. Brand Colors
 
 - Colors **always** logo er sathe match korbe:

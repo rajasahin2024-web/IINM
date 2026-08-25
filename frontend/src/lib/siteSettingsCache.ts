@@ -1,16 +1,11 @@
 /**
- * siteSettingsCache – deduplicates concurrent GET /api/settings/site requests
- * and caches the result briefly so that the many public components
- * (Navbar, Footer, NotificationBar, CourseSections, …) don't each fire their
- * own request on every page mount.
- *
- * Without this, a single page load can produce 8–10 simultaneous hits to
- * /api/settings/site, which exhausts the backend SQLAlchemy QueuePool
- * (size 5 + overflow 10 = 15) and causes 500 errors.
+ * siteSettingsCache – typed wrapper around the generic apiCache helper for
+ * /api/settings/site. Keeps the SiteSettings interface and a convenience
+ * function so callers don't need to know the URL.
  */
 
-import { apiFetch } from "./apiFetch";
 import { BASE_URL } from "./config";
+import { cachedFetch, invalidateCache } from "./apiCache";
 
 export interface SiteSettings {
   site_name?: string;
@@ -45,44 +40,19 @@ export interface SiteSettings {
   [key: string]: unknown;
 }
 
-const CACHE_TTL_MS = 60_000; // 1 minute in-memory cache
-let cached: { data: SiteSettings; ts: number } | null = null;
-let inFlight: Promise<SiteSettings> | null = null;
+const SITE_SETTINGS_URL = `${BASE_URL}/api/settings/site`;
 
 /**
  * Fetch site settings once, sharing the in-flight promise across all callers
  * and returning a short-lived cached result on subsequent calls.
  */
 export async function getSiteSettings(): Promise<SiteSettings> {
-  // Return fresh cache if available
-  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
-    return cached.data;
-  }
-
-  // Dedupe concurrent requests: if a fetch is already running, await it
-  if (inFlight) {
-    return inFlight;
-  }
-
-  inFlight = (async () => {
-    try {
-      const res = await apiFetch(`${BASE_URL}/api/settings/site`, {
-        headers: { "Content-Type": "application/json" },
-      });
-      if (!res.ok) throw new Error(`site settings ${res.status}`);
-      const data = (await res.json()) as SiteSettings;
-      cached = { data, ts: Date.now() };
-      return data;
-    } finally {
-      // Clear the in-flight marker so a later call can retry after failure
-      inFlight = null;
-    }
-  })();
-
-  return inFlight;
+  return cachedFetch<SiteSettings>(SITE_SETTINGS_URL, 60_000, {
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 /** Force a fresh fetch on next call (e.g. after admin saves settings). */
 export function invalidateSiteSettings(): void {
-  cached = null;
+  invalidateCache(SITE_SETTINGS_URL);
 }

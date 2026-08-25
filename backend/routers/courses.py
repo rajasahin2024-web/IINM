@@ -1,16 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import text
 from typing import List, Optional
 from datetime import datetime
 import re
 import json
+import os
 from pydantic import BaseModel
 
 from database import get_db
 import models
 from routers.auth import require_device
-from helpers import rewrite_url
+from helpers import rewrite_url, BASE_URL
+from security import check_public_rate_limit, get_client_ip
 
 router = APIRouter(prefix="/api", tags=["courses"])
 
@@ -627,8 +630,9 @@ def get_public_course_details(slug: str, db: Session = Depends(get_db)):
 class BrochureLeadCreate(BaseModel):
     course_id: Optional[int] = None
     name: str
-    email: str
-    phone: Optional[str] = None
+    phone: str
+    email: Optional[str] = None
+    lead_type: Optional[str] = None  # Student, Business Owner, Working Professional, Others
     source: Optional[str] = "brochure_download"
 
 class CourseExtendedUpdate(BaseModel):
@@ -952,19 +956,167 @@ def update_course_extended_details(
 
 
 @router.post("/public/courses/brochure-lead")
-def submit_brochure_lead(payload: BrochureLeadCreate, db: Session = Depends(get_db)):
-    # Log lead / brochure request
+def submit_brochure_lead(payload: BrochureLeadCreate, request: Request, db: Session = Depends(get_db)):
+    """Public: submit a brochure download lead. Saves to DB and returns syllabus URL for preview."""
+    client_ip = get_client_ip(request)
+    check_public_rate_limit(client_ip, limit=5, window=300)  # 5 per 5 min
+
+    # Resolve syllabus URL
     syllabus_url = None
     if payload.course_id:
         c = db.query(models.Course).filter(models.Course.id == payload.course_id).first()
         if c and c.upload_syllabus:
             syllabus_url = rewrite_url(c.upload_syllabus)
 
+    # Save lead to DB
+    lead = models.BrochureLead(
+        course_id=payload.course_id,
+        name=payload.name,
+        phone=payload.phone,
+        email=payload.email,
+        lead_type=payload.lead_type,
+        source=payload.source or "brochure_download",
+    )
+    db.add(lead)
+    db.commit()
+    db.refresh(lead)
+
     return {
         "status": "success",
         "message": "Brochure request submitted successfully",
-        "syllabus_url": syllabus_url
+        "syllabus_url": syllabus_url,
+        "lead_id": lead.id,
     }
+
+
+@router.get("/public/courses/{course_id}/brochure-check")
+def check_brochure_lead(course_id: int, phone: str, db: Session = Depends(get_db)):
+    """Public: check if a phone already submitted a brochure lead for this course.
+    Returns already_submitted + syllabus_url so frontend can skip the form."""
+    if not phone or not phone.strip():
+        raise HTTPException(status_code=400, detail="phone is required")
+    existing = db.query(models.BrochureLead).filter(
+        models.BrochureLead.course_id == course_id,
+        models.BrochureLead.phone == phone.strip(),
+    ).first()
+    syllabus_url = None
+    if existing:
+        c = db.query(models.Course).filter(models.Course.id == course_id).first()
+        if c and c.upload_syllabus:
+            syllabus_url = rewrite_url(c.upload_syllabus)
+    return {
+        "already_submitted": existing is not None,
+        "syllabus_url": syllabus_url,
+    }
+
+
+@router.get("/public/courses/{course_id}/brochure-pdf")
+def serve_brochure_pdf(course_id: int, db: Session = Depends(get_db)):
+    """Public: stream the course syllabus PDF for in-browser preview (no download).
+    Returns PDF bytes with Content-Disposition: inline."""
+    c = db.query(models.Course).filter(models.Course.id == course_id).first()
+    if not c or not c.upload_syllabus:
+        raise HTTPException(status_code=404, detail="Brochure PDF not available for this course")
+
+    raw_url = c.upload_syllabus
+    # Resolve to a fetchable URL
+    if raw_url.startswith("/uploads/"):
+        # Local file — read from disk
+        file_path = os.path.join(os.getcwd(), raw_url.lstrip("/"))
+        if not os.path.isfile(file_path):
+            raise HTTPException(status_code=404, detail="Brochure PDF file not found on disk")
+        with open(file_path, "rb") as f:
+            data = f.read()
+        return Response(
+            content=data,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'inline; filename="brochure_{course_id}.pdf"',
+                "Cache-Control": "private, max-age=300",
+            },
+        )
+
+    # Remote URL (R2 / CDN) — fetch server-side and stream back
+    fetch_url = rewrite_url(raw_url)
+    if not fetch_url or not (fetch_url.startswith("http://") or fetch_url.startswith("https://")):
+        raise HTTPException(status_code=400, detail="Invalid brochure URL")
+
+    import urllib.request
+    try:
+        req = urllib.request.Request(fetch_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = resp.read()
+    except Exception:
+        raise HTTPException(status_code=502, detail="Failed to fetch brochure PDF from storage")
+
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="brochure_{course_id}.pdf"',
+            "Cache-Control": "private, max-age=300",
+        },
+    )
+
+
+# ── ADMIN: Brochure Leads Management ──────────────────────────────────────────
+
+@router.get("/courses/brochure-leads")
+def get_brochure_leads(
+    page: int = 1,
+    limit: int = 20,
+    course_id: Optional[int] = None,
+    lead_type: Optional[str] = None,
+    device: str = Depends(require_device),
+    db: Session = Depends(get_db),
+):
+    """Admin: list brochure leads, paginated, newest first, with optional filters."""
+    query = db.query(models.BrochureLead)
+    if course_id:
+        query = query.filter(models.BrochureLead.course_id == course_id)
+    if lead_type:
+        query = query.filter(models.BrochureLead.lead_type == lead_type)
+    total = query.count()
+    items = query.order_by(models.BrochureLead.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
+
+    # Batch-fetch course titles
+    course_ids = {i.course_id for i in items if i.course_id}
+    course_map = {}
+    if course_ids:
+        courses = db.query(models.Course.id, models.Course.title).filter(models.Course.id.in_(course_ids)).all()
+        course_map = {cid: title for cid, title in courses}
+
+    return {
+        "total": total,
+        "page": page,
+        "pages": (total + limit - 1) // limit,
+        "items": [
+            {
+                "id": i.id,
+                "course_id": i.course_id,
+                "course_title": course_map.get(i.course_id, "—") if i.course_id else "—",
+                "name": i.name,
+                "phone": i.phone,
+                "email": i.email,
+                "lead_type": i.lead_type,
+                "source": i.source,
+                "is_read": i.is_read,
+                "created_at": i.created_at.isoformat() if i.created_at else None,
+            }
+            for i in items
+        ],
+    }
+
+
+@router.patch("/courses/brochure-leads/{lead_id}/read")
+def mark_brochure_lead_read(lead_id: int, device: str = Depends(require_device), db: Session = Depends(get_db)):
+    """Admin: mark a brochure lead as read."""
+    lead = db.query(models.BrochureLead).filter(models.BrochureLead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    lead.is_read = True
+    db.commit()
+    return {"message": "Marked as read"}
 
 @router.get("/courses", response_model=List[CourseResponse])
 def get_all_courses(search: Optional[str] = None, subject_id: Optional[int] = Query(None), device: str = Depends(require_device), db: Session = Depends(get_db)):

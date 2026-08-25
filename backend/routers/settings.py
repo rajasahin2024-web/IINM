@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Optional, List
 
 from database import get_db
+from cache import cache, DEFAULT_TTL
 from models import (
     EmailSettings, SiteSettings, PaymentSettings, AISettings,
     NavbarItem, HomeHeroContent, HomePartnerSection,
@@ -174,10 +175,13 @@ class SiteSettingsSchema(BaseModel):
 @router.get("/site")
 async def get_site_settings(db: Session = Depends(get_db)):
     """Retrieve the global site settings. Public endpoint."""
+    cached_val = cache.get("site_settings")
+    if cached_val is not None:
+        return cached_val
     settings = db.query(SiteSettings).first()
     if not settings:
         return SiteSettingsSchema()
-    return {
+    result = {
         "site_name": settings.site_name,
         "logo_url": rewrite_url(settings.logo_url),
         "dark_logo_url": rewrite_url(settings.dark_logo_url),
@@ -209,6 +213,8 @@ async def get_site_settings(db: Session = Depends(get_db)):
         "google_site_verification": settings.google_site_verification if hasattr(settings, 'google_site_verification') else None,
         "default_robots_index": settings.default_robots_index if hasattr(settings, 'default_robots_index') and settings.default_robots_index is not None else True,
     }
+    cache.set("site_settings", result)
+    return result
 
 @router.put("/site")
 async def update_site_settings(req: SiteSettingsSchema, device: str = Depends(require_device), db: Session = Depends(get_db)):
@@ -228,6 +234,8 @@ async def update_site_settings(req: SiteSettingsSchema, device: str = Depends(re
 
     db.commit()
     db.refresh(settings)
+    # Invalidate caches derived from site settings.
+    cache.invalidate_many(["site_settings", "maintenance_status"])
     return {
         "site_name": settings.site_name,
         "logo_url": settings.logo_url,
@@ -266,16 +274,23 @@ class MaintenanceStatusResponse(BaseModel):
 @router.get("/maintenance", response_model=MaintenanceStatusResponse)
 async def get_maintenance_status(db: Session = Depends(get_db)):
     """Public endpoint to check if the site is in maintenance mode."""
+    # Short TTL (60s) — maintenance mode changes should propagate quickly.
+    cached_val = cache.get("maintenance_status", ttl=60.0)
+    if cached_val is not None:
+        return cached_val
     settings = db.query(SiteSettings).first()
     if not settings:
-        return MaintenanceStatusResponse()
-    return MaintenanceStatusResponse(
-        maintenance_mode=settings.maintenance_mode or False,
-        maintenance_title=settings.maintenance_title,
-        maintenance_message=settings.maintenance_message,
-        maintenance_video_url=settings.maintenance_video_url,
-        maintenance_bg_image_url=settings.maintenance_bg_image_url,
-    )
+        resp = MaintenanceStatusResponse()
+    else:
+        resp = MaintenanceStatusResponse(
+            maintenance_mode=settings.maintenance_mode or False,
+            maintenance_title=settings.maintenance_title,
+            maintenance_message=settings.maintenance_message,
+            maintenance_video_url=settings.maintenance_video_url,
+            maintenance_bg_image_url=settings.maintenance_bg_image_url,
+        )
+    cache.set("maintenance_status", resp)
+    return resp
 
 class NotificationBarUpdate(BaseModel):
     notification_bar_text: Optional[str] = None
@@ -311,6 +326,7 @@ async def update_notification_bar(req: NotificationBarUpdate, device: str = Depe
         settings.ticker_label_text_color = req.ticker_label_text_color or None
     db.commit()
     db.refresh(settings)
+    cache.invalidate("site_settings")
     return {
         "site_name": settings.site_name,
         "logo_url": settings.logo_url,
@@ -565,6 +581,7 @@ async def update_payment_settings(req: PaymentSettingsSchema, device: str = Depe
 
     db.commit()
     db.refresh(settings)
+    cache.invalidate("public_payment")
     return settings
 
 class PublicPaymentSettingsResponse(BaseModel):
@@ -579,23 +596,29 @@ class PublicPaymentSettingsResponse(BaseModel):
 @router.get("/public/payment", response_model=PublicPaymentSettingsResponse)
 async def get_public_payment_settings(db: Session = Depends(get_db)):
     """Retrieve public payment settings for frontend checkout."""
+    cached_val = cache.get("public_payment")
+    if cached_val is not None:
+        return cached_val
     settings = db.query(PaymentSettings).first()
     if not settings:
-        return PublicPaymentSettingsResponse()
-    # Send the correct key (test or live) based on is_test_mode
-    if settings.is_test_mode:
-        rzp_key = settings.razorpay_test_key_id or settings.razorpay_key_id
+        resp = PublicPaymentSettingsResponse()
     else:
-        rzp_key = settings.razorpay_live_key_id or settings.razorpay_key_id
-    return PublicPaymentSettingsResponse(
-        razorpay_key_id=rzp_key,
-        currency=settings.currency,
-        is_test_mode=settings.is_test_mode,
-        upi_enabled=settings.upi_enabled or False,
-        upi_qr_url=rewrite_url(settings.upi_qr_url) if settings.upi_qr_url else None,
-        upi_id=settings.upi_id,
-        upi_payee_name=settings.upi_payee_name,
-    )
+        # Send the correct key (test or live) based on is_test_mode
+        if settings.is_test_mode:
+            rzp_key = settings.razorpay_test_key_id or settings.razorpay_key_id
+        else:
+            rzp_key = settings.razorpay_live_key_id or settings.razorpay_key_id
+        resp = PublicPaymentSettingsResponse(
+            razorpay_key_id=rzp_key,
+            currency=settings.currency,
+            is_test_mode=settings.is_test_mode,
+            upi_enabled=settings.upi_enabled or False,
+            upi_qr_url=rewrite_url(settings.upi_qr_url) if settings.upi_qr_url else None,
+            upi_id=settings.upi_id,
+            upi_payee_name=settings.upi_payee_name,
+        )
+    cache.set("public_payment", resp)
+    return resp
 
 @router.post("/payment/upload-upi-qr")
 async def upload_upi_qr(file: UploadFile = File(...), device: str = Depends(require_device), db: Session = Depends(get_db)):
@@ -1911,12 +1934,19 @@ def seed_navbar_data(db: Session):
 @router.get("/navbar", response_model=List[NavbarItemResponseSchema])
 async def get_navbar_structure(db: Session = Depends(get_db)):
     """Retrieve the full hierarchical website navigation menu structure. Public endpoint."""
+    cached_val = cache.get("navbar")
+    if cached_val is not None:
+        return cached_val
     items = db.query(NavbarItem).filter(NavbarItem.parent_id == None).order_by(NavbarItem.order_position).all()
     if not items:
         # Seed and retry
         seed_navbar_data(db)
         items = db.query(NavbarItem).filter(NavbarItem.parent_id == None).order_by(NavbarItem.order_position).all()
-    return items
+    # Serialize to Pydantic schemas before caching — ORM objects are tied to the
+    # session and must not be stored in the cache (detached-instance errors).
+    serialized = [NavbarItemResponseSchema.model_validate(item) for item in items]
+    cache.set("navbar", serialized)
+    return serialized
 
 
 @router.post("/navbar", response_model=NavbarItemResponseSchema)
@@ -1936,6 +1966,7 @@ async def create_navbar_item(req: NavbarItemCreateSchema, device: str = Depends(
     db.add(item)
     db.commit()
     db.refresh(item)
+    cache.invalidate("navbar")
     return item
 
 
@@ -1945,7 +1976,7 @@ async def update_navbar_item(item_id: int, req: NavbarItemCreateSchema, device: 
     item = db.query(NavbarItem).filter(NavbarItem.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Navbar item not found")
-    
+
     item.parent_id = req.parent_id
     item.title = req.title
     item.link = req.link
@@ -1955,9 +1986,10 @@ async def update_navbar_item(item_id: int, req: NavbarItemCreateSchema, device: 
     item.order_position = req.order_position
     item.icon = req.icon
     item.meta_data = req.meta_data
-    
+
     db.commit()
     db.refresh(item)
+    cache.invalidate("navbar")
     return item
 
 
@@ -1967,9 +1999,10 @@ async def delete_navbar_item(item_id: int, device: str = Depends(require_device)
     item = db.query(NavbarItem).filter(NavbarItem.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Navbar item not found")
-    
+
     db.delete(item)
     db.commit()
+    cache.invalidate("navbar")
     return {"status": "success", "message": "Menu item deleted successfully"}
 
 
@@ -2091,6 +2124,9 @@ def seed_footer_menu_data(db: Session):
 @router.get("/footer-menu", response_model=FooterMenuFullSchema)
 async def get_footer_menu(db: Session = Depends(get_db)):
     """Retrieve the full footer menu structure. Public endpoint."""
+    cached_val = cache.get("footer_menu")
+    if cached_val is not None:
+        return cached_val
     groups = db.query(FooterMenuGroup).order_by(FooterMenuGroup.order_position).all()
     if not groups:
         seed_footer_menu_data(db)
@@ -2098,7 +2134,7 @@ async def get_footer_menu(db: Session = Depends(get_db)):
 
     bottom_links = db.query(FooterBottomLink).order_by(FooterBottomLink.order_position).all()
 
-    return {
+    result = {
         "groups": [
             {
                 "id": g.id,
@@ -2116,6 +2152,8 @@ async def get_footer_menu(db: Session = Depends(get_db)):
             for b in bottom_links
         ],
     }
+    cache.set("footer_menu", result)
+    return result
 
 
 @router.put("/footer-menu")
@@ -2154,6 +2192,7 @@ async def update_footer_menu(
         ))
 
     db.commit()
+    cache.invalidate("footer_menu")
     return {"status": "success", "message": "Footer menu updated successfully"}
 
 
@@ -2164,14 +2203,20 @@ async def update_footer_menu(
 @router.get("/hero")
 async def get_hero_content(db: Session = Depends(get_db)):
     """Retrieve the homepage hero slider content. Public endpoint."""
+    cached_val = cache.get("hero")
+    if cached_val is not None:
+        return cached_val
     record = db.query(HomeHeroContent).first()
     if not record or not record.content_json:
-        return {"content": None}
-    try:
-        data = json.loads(record.content_json)
-    except Exception:
-        return {"content": None}
-    return {"content": data}
+        result = {"content": None}
+    else:
+        try:
+            data = json.loads(record.content_json)
+            result = {"content": data}
+        except Exception:
+            result = {"content": None}
+    cache.set("hero", result)
+    return result
 
 
 class HeroContentUpdate(BaseModel):
@@ -2194,6 +2239,7 @@ async def update_hero_content(req: HeroContentUpdate, device: str = Depends(requ
     record.content_json = req.content_json
     db.commit()
     db.refresh(record)
+    cache.invalidate("hero")
     return {"status": "success", "content": parsed}
 
 
@@ -2204,14 +2250,20 @@ async def update_hero_content(req: HeroContentUpdate, device: str = Depends(requ
 @router.get("/partners")
 async def get_partner_content(db: Session = Depends(get_db)):
     """Retrieve the homepage partner/trust section content. Public endpoint."""
+    cached_val = cache.get("partners")
+    if cached_val is not None:
+        return cached_val
     record = db.query(HomePartnerSection).first()
     if not record or not record.content_json:
-        return {"content": None}
-    try:
-        data = json.loads(record.content_json)
-    except Exception:
-        return {"content": None}
-    return {"content": data}
+        result = {"content": None}
+    else:
+        try:
+            data = json.loads(record.content_json)
+            result = {"content": data}
+        except Exception:
+            result = {"content": None}
+    cache.set("partners", result)
+    return result
 
 
 class PartnerContentUpdate(BaseModel):
@@ -2234,6 +2286,7 @@ async def update_partner_content(req: PartnerContentUpdate, device: str = Depend
     record.content_json = req.content_json
     db.commit()
     db.refresh(record)
+    cache.invalidate("partners")
     return {"status": "success", "content": parsed}
 
 
@@ -2255,6 +2308,9 @@ class HomeCourseCategorySchema(BaseModel):
 @router.get("/home-categories")
 async def get_home_categories(db: Session = Depends(get_db)):
     """Retrieve all homepage course categories. Public endpoint."""
+    cached_val = cache.get("home_categories")
+    if cached_val is not None:
+        return cached_val
     records = db.query(HomeCourseCategory).filter(HomeCourseCategory.is_active == True).order_by(HomeCourseCategory.order_position.asc()).all()
     
     # Auto-seed standard categories if empty
@@ -2327,6 +2383,7 @@ async def get_home_categories(db: Session = Depends(get_db)):
             "order_position": r.order_position,
             "is_active": r.is_active,
         })
+    cache.set("home_categories", results)
     return results
 
 
@@ -2373,7 +2430,7 @@ async def create_home_category(req: HomeCourseCategorySchema, device: str = Depe
     db.add(new_cat)
     db.commit()
     db.refresh(new_cat)
-    
+    cache.invalidate("home_categories")
     return {"status": "success", "id": new_cat.id}
 
 
@@ -2397,6 +2454,7 @@ async def update_home_category(category_id: int, req: HomeCourseCategorySchema, 
         cat.is_active = req.is_active
         
     db.commit()
+    cache.invalidate("home_categories")
     return {"status": "success", "message": "Category updated successfully"}
 
 
@@ -2409,6 +2467,7 @@ async def delete_home_category(category_id: int, device: str = Depends(require_d
 
     db.delete(cat)
     db.commit()
+    cache.invalidate("home_categories")
     return {"status": "success", "message": "Category deleted successfully"}
 
 
@@ -2437,27 +2496,36 @@ class HomeJourneySectionSchema(BaseModel):
 @router.get("/journey-section")
 async def get_journey_section(db: Session = Depends(get_db)):
     """Get the journey section header settings (public)."""
+    cached_val = cache.get("journey_section")
+    if cached_val is not None:
+        return cached_val
     section = db.query(HomeJourneySection).first()
     if not section:
-        return {
+        result = {
             "badge": "THE IINM LEARNING PATHWAY",
             "heading": "Your Journey Through a Complete AI Ecosystem",
             "subheading": "Scroll to travel the path. Each milestone lights up as you progress."
         }
-    try:
-        data = json.loads(section.content_json) if section.content_json else {}
-    except Exception:
-        data = {}
-    return {
-        "badge": data.get("badge", "THE IINM LEARNING PATHWAY"),
-        "heading": data.get("heading", "Your Journey Through a Complete AI Ecosystem"),
-        "subheading": data.get("subheading", "Scroll to travel the path. Each milestone lights up as you progress."),
-    }
+    else:
+        try:
+            data = json.loads(section.content_json) if section.content_json else {}
+        except Exception:
+            data = {}
+        result = {
+            "badge": data.get("badge", "THE IINM LEARNING PATHWAY"),
+            "heading": data.get("heading", "Your Journey Through a Complete AI Ecosystem"),
+            "subheading": data.get("subheading", "Scroll to travel the path. Each milestone lights up as you progress."),
+        }
+    cache.set("journey_section", result)
+    return result
 
 
 @router.get("/journey-milestones")
 async def get_journey_milestones(db: Session = Depends(get_db)):
     """Get active journey milestones ordered by position (public)."""
+    cached_val = cache.get("journey_milestones")
+    if cached_val is not None:
+        return cached_val
     records = db.query(HomeJourneyMilestone).filter(
         HomeJourneyMilestone.is_active == True
     ).order_by(HomeJourneyMilestone.order_position.asc()).all()
@@ -2491,7 +2559,7 @@ async def get_journey_milestones(db: Session = Depends(get_db)):
             HomeJourneyMilestone.is_active == True
         ).order_by(HomeJourneyMilestone.order_position.asc()).all()
 
-    return [
+    result = [
         {
             "id": r.id,
             "tag": r.tag,
@@ -2503,6 +2571,8 @@ async def get_journey_milestones(db: Session = Depends(get_db)):
             "is_active": r.is_active,
         } for r in records
     ]
+    cache.set("journey_milestones", result)
+    return result
 
 
 # ── Admin endpoints ──
@@ -2544,6 +2614,7 @@ async def create_or_update_journey_section(req: HomeJourneySectionSchema, device
         section.content_json = payload
     db.commit()
     db.refresh(section)
+    cache.invalidate("journey_section")
     return {"status": "success"}
 
 
@@ -2580,6 +2651,7 @@ async def create_journey_milestone(req: HomeJourneyMilestoneSchema, device: str 
     db.add(new_m)
     db.commit()
     db.refresh(new_m)
+    cache.invalidate("journey_milestones")
     return {"status": "success", "id": new_m.id}
 
 
@@ -2601,6 +2673,7 @@ async def update_journey_milestone(milestone_id: int, req: HomeJourneyMilestoneS
         m.is_active = req.is_active
 
     db.commit()
+    cache.invalidate("journey_milestones")
     return {"status": "success", "message": "Milestone updated successfully"}
 
 
@@ -2613,6 +2686,7 @@ async def delete_journey_milestone(milestone_id: int, device: str = Depends(requ
 
     db.delete(m)
     db.commit()
+    cache.invalidate("journey_milestones")
     return {"status": "success", "message": "Milestone deleted successfully"}
 
 
@@ -2633,6 +2707,9 @@ class HomeRecentCoursesSchema(BaseModel):
 @router.get("/home-recent-courses")
 async def get_home_recent_courses(db: Session = Depends(get_db)):
     """Retrieve the homepage recently launched courses section config + hydrated courses."""
+    cached_val = cache.get("home_recent_courses")
+    if cached_val is not None:
+        return cached_val
     section = db.query(HomeRecentCoursesSection).filter(HomeRecentCoursesSection.is_active == True).first()
 
     # Auto-seed if missing
@@ -2711,7 +2788,7 @@ async def get_home_recent_courses(db: Session = Depends(get_db)):
                 "promo_video_url": c.promo_video_url,
             })
 
-    return {
+    result = {
         "section": {
             "id": section.id,
             "title": section.title,
@@ -2723,6 +2800,8 @@ async def get_home_recent_courses(db: Session = Depends(get_db)):
         },
         "courses": courses_data,
     }
+    cache.set("home_recent_courses", result)
+    return result
 
 
 @router.put("/home-recent-courses")
@@ -2750,6 +2829,7 @@ async def update_home_recent_courses(req: HomeRecentCoursesSchema, device: str =
 
     db.commit()
     db.refresh(section)
+    cache.invalidate("home_recent_courses")
     return {"status": "success", "message": "Recently launched courses section updated successfully"}
 
 
@@ -2779,6 +2859,9 @@ class HomeRecentCourseCardSchema(BaseModel):
 @router.get("/home-recent-course-cards")
 async def get_home_recent_course_cards(db: Session = Depends(get_db)):
     """Retrieve all active homepage recent course cards. Public endpoint."""
+    cached_val = cache.get("home_recent_course_cards")
+    if cached_val is not None:
+        return cached_val
     records = db.query(HomeRecentCourseCard).filter(HomeRecentCourseCard.is_active == True).order_by(HomeRecentCourseCard.order_position.asc()).all()
 
     # Auto-seed demo cards if empty
@@ -2851,7 +2934,7 @@ async def get_home_recent_course_cards(db: Session = Depends(get_db)):
         db.commit()
         records = db.query(HomeRecentCourseCard).filter(HomeRecentCourseCard.is_active == True).order_by(HomeRecentCourseCard.order_position.asc()).all()
 
-    return [
+    result = [
         {
             "id": r.id,
             "title": r.title,
@@ -2873,6 +2956,8 @@ async def get_home_recent_course_cards(db: Session = Depends(get_db)):
         }
         for r in records
     ]
+    cache.set("home_recent_course_cards", result)
+    return result
 
 
 @router.get("/home-recent-course-cards/all")
@@ -2927,6 +3012,7 @@ async def create_home_recent_course_card(req: HomeRecentCourseCardSchema, device
     db.add(card)
     db.commit()
     db.refresh(card)
+    cache.invalidate("home_recent_course_cards")
     return {"status": "success", "id": card.id}
 
 
@@ -2972,6 +3058,7 @@ async def update_home_recent_course_card(card_id: int, req: HomeRecentCourseCard
 
     db.commit()
     db.refresh(card)
+    cache.invalidate("home_recent_course_cards")
     return {"status": "success", "message": "Course card updated successfully"}
 
 
@@ -2984,6 +3071,7 @@ async def delete_home_recent_course_card(card_id: int, device: str = Depends(req
 
     db.delete(card)
     db.commit()
+    cache.invalidate("home_recent_course_cards")
     return {"status": "success", "message": "Course card deleted successfully"}
 
 
@@ -3014,6 +3102,9 @@ class HomeFounderDeskSchema(BaseModel):
 @router.get("/founder-desk")
 async def get_founder_desk(db: Session = Depends(get_db)):
     """Retrieve the Founder Desk section configuration. Public endpoint."""
+    cached_val = cache.get("founder_desk")
+    if cached_val is not None:
+        return cached_val
     record = db.query(HomeFounderDesk).first()
     if not record:
         record = HomeFounderDesk(
@@ -3034,7 +3125,7 @@ async def get_founder_desk(db: Session = Depends(get_db)):
         db.commit()
         db.refresh(record)
 
-    return {
+    result = {
         "section": {
             "id": record.id,
             "badge_text": record.badge_text,
@@ -3056,6 +3147,8 @@ async def get_founder_desk(db: Session = Depends(get_db)):
             "is_active": record.is_active,
         }
     }
+    cache.set("founder_desk", result)
+    return result
 
 
 @router.put("/founder-desk")
@@ -3103,6 +3196,7 @@ async def update_founder_desk(req: HomeFounderDeskSchema, device: str = Depends(
 
     db.commit()
     db.refresh(record)
+    cache.invalidate("founder_desk")
     return {"status": "success", "message": "Founder Desk section updated successfully"}
 
 
@@ -3132,6 +3226,9 @@ class HomeStudentReelUpdateSchema(BaseModel):
 @router.get("/student-reels")
 async def get_student_reels(db: Session = Depends(get_db)):
     """Public endpoint to get active student reels."""
+    cached_val = cache.get("student_reels")
+    if cached_val is not None:
+        return cached_val
     section = db.query(HomeStudentReelsSection).first()
     if not section:
         section = HomeStudentReelsSection(is_active=True)
@@ -3155,7 +3252,7 @@ async def get_student_reels(db: Session = Depends(get_db)):
         db.commit()
         reels = demo_reels
 
-    return {
+    result = {
         "section": {
             "id": section.id,
             "title": section.title,
@@ -3176,6 +3273,8 @@ async def get_student_reels(db: Session = Depends(get_db)):
             for r in reels
         ],
     }
+    cache.set("student_reels", result)
+    return result
 
 @router.get("/student-reels/all")
 async def get_all_student_reels_admin(device: str = Depends(require_device), db: Session = Depends(get_db)):
@@ -3219,6 +3318,7 @@ async def update_student_reels_section(req: HomeStudentReelsSectionSchema, devic
         section.is_active = req.is_active
     db.commit()
     db.refresh(section)
+    cache.invalidate("student_reels")
     return {"status": "success", "message": "Student reels section updated"}
 
 @router.post("/student-reels")
@@ -3236,6 +3336,7 @@ async def create_student_reel(req: HomeStudentReelSchema, device: str = Depends(
     db.add(reel)
     db.commit()
     db.refresh(reel)
+    cache.invalidate("student_reels")
     return {"status": "success", "id": reel.id}
 
 @router.put("/student-reels/{reel_id}")
@@ -3260,6 +3361,7 @@ async def update_student_reel(reel_id: int, req: HomeStudentReelUpdateSchema, de
         reel.is_active = req.is_active
     db.commit()
     db.refresh(reel)
+    cache.invalidate("student_reels")
     return {"status": "success", "message": "Reel updated"}
 
 @router.delete("/student-reels/{reel_id}")
@@ -3270,6 +3372,7 @@ async def delete_student_reel(reel_id: int, device: str = Depends(require_device
         raise HTTPException(status_code=404, detail="Reel not found")
     db.delete(reel)
     db.commit()
+    cache.invalidate("student_reels")
     return {"status": "success", "message": "Reel deleted"}
 
 
@@ -3306,6 +3409,9 @@ class HomeLearnerReviewUpdateSchema(BaseModel):
 @router.get("/learner-reviews")
 async def get_learner_reviews(db: Session = Depends(get_db)):
     """Public endpoint to get active learner reviews."""
+    cached_val = cache.get("learner_reviews")
+    if cached_val is not None:
+        return cached_val
     section = db.query(HomeLearnerReviewsSection).first()
     if not section:
         section = HomeLearnerReviewsSection(is_active=True)
@@ -3348,7 +3454,7 @@ async def get_learner_reviews(db: Session = Depends(get_db)):
         db.commit()
         reviews = demo_reviews
 
-    return {
+    result = {
         "section": {
             "id": section.id,
             "title": section.title,
@@ -3371,6 +3477,8 @@ async def get_learner_reviews(db: Session = Depends(get_db)):
             for r in reviews
         ],
     }
+    cache.set("learner_reviews", result)
+    return result
 
 @router.get("/learner-reviews/all")
 async def get_all_learner_reviews_admin(device: str = Depends(require_device), db: Session = Depends(get_db)):
@@ -3418,6 +3526,7 @@ async def update_learner_reviews_section(req: HomeLearnerReviewsSectionSchema, d
         section.is_active = req.is_active
     db.commit()
     db.refresh(section)
+    cache.invalidate("learner_reviews")
     return {"status": "success", "message": "Learner reviews section updated"}
 
 @router.post("/learner-reviews")
@@ -3436,6 +3545,7 @@ async def create_learner_review(req: HomeLearnerReviewSchema, device: str = Depe
     db.add(review)
     db.commit()
     db.refresh(review)
+    cache.invalidate("learner_reviews")
     return {"status": "success", "id": review.id}
 
 @router.put("/learner-reviews/{review_id}")
@@ -3462,6 +3572,7 @@ async def update_learner_review(review_id: int, req: HomeLearnerReviewUpdateSche
         review.is_active = req.is_active
     db.commit()
     db.refresh(review)
+    cache.invalidate("learner_reviews")
     return {"status": "success", "message": "Review updated"}
 
 @router.delete("/learner-reviews/{review_id}")
@@ -3472,6 +3583,7 @@ async def delete_learner_review(review_id: int, device: str = Depends(require_de
         raise HTTPException(status_code=404, detail="Review not found")
     db.delete(review)
     db.commit()
+    cache.invalidate("learner_reviews")
     return {"status": "success", "message": "Review deleted"}
 
 
@@ -3508,31 +3620,40 @@ class HomeCTASectionSchema(BaseModel):
 @router.get("/ai-ecosystem-section")
 async def get_ai_ecosystem_section(db: Session = Depends(get_db)):
     """Get the AI Ecosystem section header settings (public)."""
+    cached_val = cache.get("ai_ecosystem_section")
+    if cached_val is not None:
+        return cached_val
     section = db.query(HomeAIEcosystemSection).first()
     if not section:
-        return {
+        result = {
             "label": "IINM AI Ecosystem",
             "heading_line1": "Everything you need",
             "heading_line2": "to master modern AI",
             "accent_word": "modern AI",
             "lead": "One complete learning environment. Six interconnected pillars. From your first doubt to your final credential — everything lives here.",
         }
-    try:
-        data = json.loads(section.content_json) if section.content_json else {}
-    except Exception:
-        data = {}
-    return {
-        "label": data.get("label", "IINM AI Ecosystem"),
-        "heading_line1": data.get("heading_line1", "Everything you need"),
-        "heading_line2": data.get("heading_line2", "to master modern AI"),
-        "accent_word": data.get("accent_word", "modern AI"),
-        "lead": data.get("lead", "One complete learning environment. Six interconnected pillars. From your first doubt to your final credential — everything lives here."),
-    }
+    else:
+        try:
+            data = json.loads(section.content_json) if section.content_json else {}
+        except Exception:
+            data = {}
+        result = {
+            "label": data.get("label", "IINM AI Ecosystem"),
+            "heading_line1": data.get("heading_line1", "Everything you need"),
+            "heading_line2": data.get("heading_line2", "to master modern AI"),
+            "accent_word": data.get("accent_word", "modern AI"),
+            "lead": data.get("lead", "One complete learning environment. Six interconnected pillars. From your first doubt to your final credential — everything lives here."),
+        }
+    cache.set("ai_ecosystem_section", result)
+    return result
 
 
 @router.get("/ai-ecosystem-cards")
 async def get_ai_ecosystem_cards(db: Session = Depends(get_db)):
     """Get active AI Ecosystem cards ordered by position (public)."""
+    cached_val = cache.get("ai_ecosystem_cards")
+    if cached_val is not None:
+        return cached_val
     records = db.query(HomeAIEcosystemCard).filter(
         HomeAIEcosystemCard.is_active == True
     ).order_by(HomeAIEcosystemCard.order_position.asc()).all()
@@ -3566,7 +3687,7 @@ async def get_ai_ecosystem_cards(db: Session = Depends(get_db)):
             HomeAIEcosystemCard.is_active == True
         ).order_by(HomeAIEcosystemCard.order_position.asc()).all()
 
-    return [
+    result = [
         {
             "id": r.id,
             "title": r.title,
@@ -3577,6 +3698,8 @@ async def get_ai_ecosystem_cards(db: Session = Depends(get_db)):
         }
         for r in records
     ]
+    cache.set("ai_ecosystem_cards", result)
+    return result
 
 
 @router.get("/ai-ecosystem-section/all")
@@ -3622,6 +3745,7 @@ async def create_or_update_ai_ecosystem_section(req: HomeAIEcosystemSectionSchem
         section.content_json = payload
     db.commit()
     db.refresh(section)
+    cache.invalidate("ai_ecosystem_section")
     return {"status": "success", "message": "AI Ecosystem section updated"}
 
 
@@ -3655,6 +3779,7 @@ async def create_ai_ecosystem_card(req: HomeAIEcosystemCardSchema, device: str =
     db.add(new_card)
     db.commit()
     db.refresh(new_card)
+    cache.invalidate("ai_ecosystem_cards")
     return {"status": "success", "message": "Card created", "id": new_card.id}
 
 
@@ -3675,6 +3800,7 @@ async def update_ai_ecosystem_card(card_id: int, req: HomeAIEcosystemCardSchema,
         card.is_active = req.is_active
     db.commit()
     db.refresh(card)
+    cache.invalidate("ai_ecosystem_cards")
     return {"status": "success", "message": "Card updated"}
 
 
@@ -3686,6 +3812,7 @@ async def delete_ai_ecosystem_card(card_id: int, device: str = Depends(require_d
         raise HTTPException(status_code=404, detail="Card not found")
     db.delete(card)
     db.commit()
+    cache.invalidate("ai_ecosystem_cards")
     return {"status": "success", "message": "Card deleted"}
 
 
@@ -3835,9 +3962,12 @@ async def update_fomo_settings(req: FomoSettingsSchema, device: str = Depends(re
 @router.get("/cta-section")
 async def get_cta_section(db: Session = Depends(get_db)):
     """Get the homepage CTA section content (public)."""
+    cached_val = cache.get("cta_section")
+    if cached_val is not None:
+        return cached_val
     section = db.query(HomeCTASection).first()
     if not section:
-        return {
+        result = {
             "badge_text": "Admissions Open",
             "heading_line1": "Ready to",
             "heading_accent": "Connect the Dots",
@@ -3846,19 +3976,22 @@ async def get_cta_section(db: Session = Depends(get_db)):
             "button_text": "Apply For Admission",
             "button_link": "/contact-us",
         }
-    try:
-        data = json.loads(section.content_json) if section.content_json else {}
-    except Exception:
-        data = {}
-    return {
-        "badge_text": data.get("badge_text", "Admissions Open"),
-        "heading_line1": data.get("heading_line1", "Ready to"),
-        "heading_accent": data.get("heading_accent", "Connect the Dots"),
-        "heading_line2": data.get("heading_line2", "of AI?"),
-        "description": data.get("description", "Enroll in our upcoming cohort to master deep tech competencies, work in elite robotics laboratories, and accelerate your career trajectory."),
-        "button_text": data.get("button_text", "Apply For Admission"),
-        "button_link": data.get("button_link", "/contact-us"),
-    }
+    else:
+        try:
+            data = json.loads(section.content_json) if section.content_json else {}
+        except Exception:
+            data = {}
+        result = {
+            "badge_text": data.get("badge_text", "Admissions Open"),
+            "heading_line1": data.get("heading_line1", "Ready to"),
+            "heading_accent": data.get("heading_accent", "Connect the Dots"),
+            "heading_line2": data.get("heading_line2", "of AI?"),
+            "description": data.get("description", "Enroll in our upcoming cohort to master deep tech competencies, work in elite robotics laboratories, and accelerate your career trajectory."),
+            "button_text": data.get("button_text", "Apply For Admission"),
+            "button_link": data.get("button_link", "/contact-us"),
+        }
+    cache.set("cta_section", result)
+    return result
 
 
 @router.get("/cta-section/all")
@@ -3910,6 +4043,7 @@ async def create_or_update_cta_section(req: HomeCTASectionSchema, device: str = 
         section.content_json = payload
     db.commit()
     db.refresh(section)
+    cache.invalidate("cta_section")
     return {"status": "success", "message": "CTA section updated"}
 
 

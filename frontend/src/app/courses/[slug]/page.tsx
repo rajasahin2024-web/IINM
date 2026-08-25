@@ -10,7 +10,7 @@ const REVALIDATE = 300;
 
 async function fetchCourse(slug: string) {
   try {
-    const res = await fetch(`${API}/courses/public/courses/${slug}/extended`, {
+    const res = await fetch(`${API}/public/courses/${slug}/extended`, {
       next: { revalidate: REVALIDATE },
     });
     if (!res.ok) return null;
@@ -22,7 +22,7 @@ async function fetchCourse(slug: string) {
 
 async function fetchCourseFaqs(slug: string) {
   try {
-    const res = await fetch(`${API}/courses/public/courses/${slug}/faqs`, {
+    const res = await fetch(`${API}/public/courses/${slug}/faqs`, {
       next: { revalidate: REVALIDATE },
     });
     if (!res.ok) return [];

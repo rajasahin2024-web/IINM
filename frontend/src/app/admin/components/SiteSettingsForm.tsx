@@ -1,6 +1,7 @@
 "use client";
 import { apiFetch } from "@/lib/apiFetch";
 import { BASE_URL } from "@/lib/config";
+import { invalidateCache } from "@/lib/apiCache";
 import React, { useState, useEffect } from "react";
 import { useToast } from "./ToastProvider";
 import { useSiteSettings } from "./SiteSettingsContext";
@@ -176,6 +177,8 @@ export default function SiteSettingsForm() {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error("Failed to save settings");
+      // Invalidate frontend cache so public pages see the new settings immediately.
+      invalidateCache(`${baseUrl}/api/settings/site`);
       await refreshSiteSettings();
       toast.success("Site settings updated successfully.");
     } catch (err: any) { toast.error(err.message); }

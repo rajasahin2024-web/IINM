@@ -123,6 +123,18 @@ class CancelPurchaseCreate(BaseModel):
     notes: Optional[str] = None
 
 
+class PurchaseEdit(BaseModel):
+    discount: Optional[float] = None
+    notes: Optional[str] = None
+    status: Optional[str] = None
+    is_installment: Optional[bool] = None
+    total_installments: Optional[int] = Field(default=None, ge=2, le=24)
+    installment_frequency: Optional[str] = None
+    frequency_days: Optional[int] = None
+    first_payment_date: Optional[date] = None
+    custom_installment_dates: Optional[List[date]] = None
+
+
 class InstallmentOut(BaseModel):
     id: int
     installment_no: int
@@ -406,6 +418,7 @@ def list_purchases(
             "is_installment": p.is_installment,
             "total_installments": inst_total,
             "installments_paid": inst_paid,
+            "notes": p.notes,
             "transactions": [
                 {
                     "id": t.id,
@@ -518,7 +531,10 @@ def get_installments(
         "paid_amount": purchase.paid_amount,
         "due_amount": purchase.due_amount,
         "refunded_amount": purchase.refunded_amount,
+        "discount": purchase.discount,
+        "notes": purchase.notes,
         "status": purchase.status,
+        "is_active": purchase.is_active,
         "total_installments": purchase.total_installments,
         "installment_frequency": purchase.installment_frequency,
         "frequency_days": purchase.frequency_days,
@@ -618,6 +634,8 @@ def get_purchase_details(
         "paid_amount": p.paid_amount,
         "due_amount": p.due_amount,
         "refunded_amount": p.refunded_amount,
+        "discount": p.discount,
+        "notes": p.notes,
         "status": p.status,
         "is_active": p.is_active,
         "invoice_uuid": p.invoice_uuid,
@@ -842,6 +860,119 @@ def list_pending_transactions(
             "due_amount": purchase.due_amount,
         })
     return result
+
+@router.put("/purchases/{purchase_id}")
+def edit_purchase(
+    purchase_id: int,
+    data: PurchaseEdit,
+    device: str = Depends(require_device),
+    db: Session = Depends(get_db),
+):
+    """Edit a purchase's discount, notes, status, or installment configuration."""
+    p = db.query(models.CoursePurchase).filter(models.CoursePurchase.id == purchase_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Purchase not found")
+    if p.status == "cancelled":
+        raise HTTPException(status_code=400, detail="Cannot edit a cancelled purchase.")
+
+    changed = False
+    if data.discount is not None:
+        new_discount = max(float(data.discount), 0.0)
+        if new_discount > p.total_fee:
+            raise HTTPException(status_code=400, detail="Discount cannot exceed total fee.")
+        p.discount = new_discount
+        p.net_fee = round(p.total_fee - new_discount, 2)
+        p.due_amount = round(p.net_fee - p.paid_amount, 2)
+        if p.due_amount <= 0:
+            p.status = "completed"
+        elif p.status == "completed":
+            p.status = "active"
+        changed = True
+
+    if data.notes is not None:
+        p.notes = data.notes
+        changed = True
+
+    if data.status is not None:
+        allowed = ["active", "completed", "cancelled"]
+        if data.status not in allowed:
+            raise HTTPException(status_code=400, detail=f"Status must be one of {allowed}.")
+        p.status = data.status
+        changed = True
+
+    # Update installment configuration
+    if data.is_installment is not None:
+        if data.is_installment:
+            n = data.total_installments or 2
+            if n < 2 or n > 24:
+                raise HTTPException(status_code=400, detail="Installment count must be between 2 and 24.")
+            p.is_installment = True
+            p.total_installments = n
+            p.installment_frequency = data.installment_frequency or "monthly"
+            p.frequency_days = data.frequency_days
+            first_date = data.first_payment_date or date.today()
+            p.first_payment_date = first_date
+
+            # Rebuild installment schedule (preserve paid amounts on existing installments)
+            existing_paid = {}
+            for inst in p.installments:
+                existing_paid[inst.installment_no] = inst.paid_amount
+
+            # Delete old schedule
+            for inst in list(p.installments):
+                db.delete(inst)
+            db.flush()
+
+            schedule = build_schedule(
+                net_fee=p.net_fee,
+                n=n,
+                frequency=p.installment_frequency,
+                freq_days=p.frequency_days,
+                first_date=first_date,
+                paying_amount=p.paid_amount,
+                custom_dates=data.custom_installment_dates,
+            )
+            for (inst_no, due_dt, amt) in schedule:
+                paid = existing_paid.get(inst_no, 0.0)
+                if inst_no == 1:
+                    paid = p.paid_amount
+                st = "paid" if paid >= amt else ("partial" if paid > 0 else "pending")
+                inst = models.InstallmentSchedule(
+                    purchase_id=p.id,
+                    installment_no=inst_no,
+                    due_date=due_dt,
+                    amount=amt,
+                    paid_amount=paid,
+                    status=st,
+                    paid_at=datetime.utcnow() if st == "paid" else None,
+                )
+                db.add(inst)
+        else:
+            p.is_installment = False
+            p.total_installments = None
+            p.installment_frequency = None
+            p.frequency_days = None
+            p.first_payment_date = None
+            for inst in list(p.installments):
+                db.delete(inst)
+        changed = True
+
+    if changed:
+        db.commit()
+        db.refresh(p)
+
+    return {
+        "message": "Purchase updated successfully.",
+        "id": p.id,
+        "net_fee": p.net_fee,
+        "discount": p.discount,
+        "due_amount": p.due_amount,
+        "status": p.status,
+        "notes": p.notes,
+        "is_installment": p.is_installment,
+        "total_installments": p.total_installments,
+    }
+
 
 @router.delete("/purchases/{purchase_id}")
 def delete_purchase(

@@ -9,7 +9,7 @@ export default async function Image({ params }: { params: { slug: string } }) {
   // Fetch course data
   let course: any = null;
   try {
-    const res = await fetch(`${API}/courses/public/courses/${params.slug}`, {
+    const res = await fetch(`${API}/public/courses/${params.slug}`, {
       next: { revalidate: 300 },
     });
     if (res.ok) course = await res.json();

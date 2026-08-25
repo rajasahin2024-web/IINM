@@ -12,15 +12,17 @@ if not DATABASE_URL:
         "Please add it to your .env file before starting the server."
     )
 
-# Pool tuning: default (5 + 10 overflow = 15) is too small when many public
-# components hit /api/settings/site concurrently. Raise the ceiling and recycle
-# connections so stale ones don't leak.
+# Pool tuning: With the in-memory response cache (backend/cache.py), most
+# public GET requests never touch the database, so the pool pressure is much
+# lower. A pool of 10 + 20 overflow = 30 total connections is a safe ceiling
+# that stays well under PostgreSQL's default max_connections (100).
+# pool_recycle prevents stale connections from accumulating.
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
-    pool_size=20,
-    max_overflow=30,
-    pool_timeout=60,
+    pool_size=10,
+    max_overflow=20,
+    pool_timeout=30,
     pool_recycle=1800,  # recycle connections every 30 minutes
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

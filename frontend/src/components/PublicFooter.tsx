@@ -5,6 +5,7 @@ import "../app/home.css";
 
 import { BASE_URL } from "@/lib/config";
 import { getSiteSettings } from "@/lib/siteSettingsCache";
+import { cachedFetch } from "@/lib/apiCache";
 
 interface FooterMenuItem {
   title: string;
@@ -90,7 +91,7 @@ export default function PublicFooter({
       }
     }).catch(() => {});
 
-    fetch(`${bUrl}/api/contact/settings`).then(r => r.json()).then(d => {
+    cachedFetch<Record<string, unknown>>(`${bUrl}/api/contact/settings`).then(d => {
       localStorage.setItem("iinm_contact_settings", JSON.stringify(d));
       if (!initialContactSettings) {
         setContactInfo(d);
@@ -99,7 +100,7 @@ export default function PublicFooter({
 
     // Only fetch footer-menu if we don't have server-provided data
     if (!initialFooterMenu) {
-      fetch(`${bUrl}/api/settings/footer-menu`).then(r => r.json()).then(d => {
+      cachedFetch<{ groups: any[]; bottom_links: any[] }>(`${bUrl}/api/settings/footer-menu`).then(d => {
         if (d.groups && d.groups.length > 0) {
           setFooterGroups(d.groups);
           setFooterBottomLinks(d.bottom_links || []);

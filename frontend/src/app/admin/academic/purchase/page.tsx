@@ -9,7 +9,7 @@ import {CSS,FI,FS,SummaryRow,Toggle} from "./components";
 import {downloadReceiptPdf,ReceiptData} from "@/lib/receipt";
 import "../../admin.css";
 
-const COLS="1.8fr 1.4fr 1fr 1fr 1fr 1.2fr 100px 100px";
+const COLS="1.8fr 1.4fr 1fr 1fr 1fr 1.2fr 100px 160px";
 const MTHS=["Generate Invoice Link (Pending)","Cash","UPI","Bank Transfer","Card"];
 
 const handleDownloadReceipt=async(data:any)=>{
@@ -83,7 +83,7 @@ function InstituteBankDetails({onDetailsChange}:{onDetailsChange:(d:any)=>void})
 
   return(
     <div style={{background:"#fff",border:"1px solid #e2e8f0",padding:12,borderRadius:0,fontSize:13,color:"#475569",lineHeight:1.6,position:"relative"}}>
-      <button type="button" onClick={()=>setEditing(true)} style={{position:"absolute",top:12,right:12,background:"none",border:"none",color:"#6366f1",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><Icon name="edit-2" size={12}/> Edit</button>
+      <button type="button" onClick={()=>setEditing(true)} style={{position:"absolute",top:12,right:12,background:"none",border:"none",color:"#6366f1",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><Icon name="edit" size={12}/> Edit</button>
       <div style={{fontWeight:800,color:"#0f172a",marginBottom:4,fontSize:12,textTransform:"uppercase",paddingRight:40}}>Institute Bank Details</div>
       <div>Bank Name: <strong style={{color:"#0f172a"}}>{details.bankName}</strong></div>
       <div>Account No: <strong style={{color:"#0f172a"}}>{details.accNo}</strong></div>
@@ -104,13 +104,13 @@ function PaymentMethodFields({form,setForm,prefix=""}:{form:any,setForm:(v:any)=
       {method==="UPI"&&(
         <div style={{background:"#f8fafc",padding:16,borderRadius:0,border:"1px solid #e2e8f0",textAlign:"center"}}>
           <div style={{fontSize:12,fontWeight:700,color:"#64748b",marginBottom:12,textTransform:"uppercase"}}>Scan to Pay</div>
-          <img src="/qr.jpg" alt="UPI QR" style={{width:200,height:200,objectFit:"contain",margin:"0 auto 16px",borderRadius:0,border:"1px solid #e2e8f0",background:"#fff",display:"block"}} onError={(e)=>{e.currentTarget.style.display='none'}}/>
+          <img src="/qr.jpg" alt="UPI QR" style={{maxWidth:"100%",width:200,height:200,objectFit:"contain",margin:"0 auto 16px",borderRadius:0,border:"1px solid #e2e8f0",background:"#fff",display:"block"}} onError={(e)=>{e.currentTarget.style.display='none'}}/>
           <FI label="UTR Number" value={form[`${prefix}ref`]||""} onChange={v=>setForm({...form,[`${prefix}ref`]:v})} required/>
         </div>
       )}
 
       {method==="Card"&&(
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 12px",background:"#f8fafc",padding:16,borderRadius:0,border:"1px solid #e2e8f0"}}>
+        <div className="payment-card-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 12px",background:"#f8fafc",padding:16,borderRadius:0,border:"1px solid #e2e8f0"}}>
           <FI label="Card Holder Name" value={form.cardName||""} onChange={v=>setForm({...form,cardName:v})} required/>
           <FI label="Last 4 Digits / Txn ID" value={form[`${prefix}ref`]||""} onChange={v=>setForm({...form,[`${prefix}ref`]:v})} required/>
         </div>
@@ -159,8 +159,8 @@ function RegisterModal({onClose,onSuccess}:{onClose:()=>void;onSuccess:(s:any)=>
     finally{setSaving(false);}
   };
   return(
-    <div style={{position:"fixed",inset:0,zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(15,23,42,.6)",backdropFilter:"blur(6px)",animation:"fadeIn .2s"}}>
-      <div style={{width:"94%",maxWidth:560,background:"#fff",borderRadius:0,boxShadow:"0 24px 60px rgba(0,0,0,.2)",overflow:"hidden",display:"flex",flexDirection:"column",maxHeight:"88vh",animation:"slideUp .3s cubic-bezier(.16,1,.3,1)"}}>
+    <div style={{position:"fixed",inset:0,zIndex:3000,background:"rgba(15,23,42,.5)",backdropFilter:"blur(4px)",animation:"fadeIn .2s",display:"flex",alignItems:"flex-start",justifyContent:"center",overflowY:"auto",padding:"40px 16px"}}>
+      <div style={{width:"100%",maxWidth:560,background:"#fff",borderRadius:0,boxShadow:"0 24px 60px rgba(0,0,0,.2)",overflow:"hidden",display:"flex",flexDirection:"column",animation:"slideUp .3s cubic-bezier(.16,1,.3,1)"}}>
         <div style={{padding:"18px 22px",borderBottom:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center",background:"linear-gradient(135deg,#eef2ff,#e0e7ff)"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <div style={{width:36,height:36,borderRadius:0,background:"#6366f1",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon name="user-plus" size={18}/></div>
@@ -204,6 +204,10 @@ function PurchaseDetailModal({purchaseId,onClose,onSuccess}:{purchaseId:number;o
   const [payForm,setPayForm]=useState({amount:"",method:"Cash",ref:"",notes:"",cardName:"",ifsc:"",accNo:"",bankName:""});
   const [paying,setPaying]=useState(false);
   const [showConfirm,setShowConfirm]=useState(false);
+  const [editing,setEditing]=useState(false);
+  const [editForm,setEditForm]=useState({discount:"",notes:"",status:"active"});
+  const [savingEdit,setSavingEdit]=useState(false);
+  const [showManualPay,setShowManualPay]=useState(false);
 
   const fetchDetail=useCallback(async()=>{
     setLoading(true);
@@ -216,6 +220,50 @@ function PurchaseDetailModal({purchaseId,onClose,onSuccess}:{purchaseId:number;o
   },[purchaseId,onClose,showToast]);
 
   useEffect(()=>{fetchDetail();},[fetchDetail]);
+
+  const startEdit=()=>{
+    if(!data)return;
+    setEditForm({discount:String(data.discount||0),notes:data.notes||"",status:data.status||"active"});
+    setEditing(true);
+  };
+
+  const saveEdit=async()=>{
+    setSavingEdit(true);
+    try{
+      const r=await apiFetch(`${API_BASE_URL}/academic/purchases/${purchaseId}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({discount:parseFloat(editForm.discount)||0,notes:editForm.notes||null,status:editForm.status})});
+      if(!r.ok){const e=await r.json();throw new Error(e.detail||"Failed to update");}
+      showToast("Purchase updated!","success");
+      setEditing(false);
+      fetchDetail();
+      onSuccess();
+    }catch(err:any){showToast(err.message,"error");}
+    finally{setSavingEdit(false);}
+  };
+
+  const submitManualPayment=async(e:React.FormEvent)=>{
+    e.preventDefault();
+    const amt=parseFloat(payForm.amount);
+    if(amt<=0){showToast("Enter a valid amount","error");return;}
+    setPaying(true);
+    let finalNotes=payForm.notes;
+    if(payForm.method==="Card") finalNotes=`Card Holder: ${payForm.cardName}`;
+    if(payForm.method==="Bank Transfer") finalNotes=`Bank: ${payForm.bankName}, Acc: ${payForm.accNo}, IFSC: ${payForm.ifsc}`;
+    try{
+      const unpaidInst=data.installments.find((i:any)=>i.status!=="paid");
+      if(!unpaidInst){showToast("No unpaid installments found","error");return;}
+      const r=await apiFetch(`${API_BASE_URL}/academic/purchases/${purchaseId}/pay-installment`,{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({installment_id:unpaidInst.id,amount:amt,payment_method:payForm.method,reference_no:payForm.ref,notes:finalNotes})
+      });
+      if(!r.ok){const err=await r.json();throw new Error(err.detail||"Failed to record payment");}
+      showToast("Payment recorded successfully!","success");
+      setShowManualPay(false);
+      setPayForm({amount:"",method:"Cash",ref:"",notes:"",cardName:"",ifsc:"",accNo:"",bankName:""});
+      fetchDetail();
+      onSuccess();
+    }catch(err:any){showToast(err.message,"error");}
+    finally{setPaying(false);}
+  };
 
   const submitPayment=async(e:React.FormEvent)=>{
     e.preventDefault();
@@ -249,8 +297,8 @@ function PurchaseDetailModal({purchaseId,onClose,onSuccess}:{purchaseId:number;o
   };
 
   return(
-    <div style={{position:"fixed",inset:0,zIndex:2500,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(15,23,42,.6)",backdropFilter:"blur(6px)",animation:"fadeIn .2s"}}>
-      <div style={{width:"94vw",maxWidth:920,background:"#fff",borderRadius:0,boxShadow:"0 24px 60px rgba(0,0,0,.2)",overflow:"hidden",display:"flex",flexDirection:"column",maxHeight:"94vh",animation:"slideUp .3s cubic-bezier(.16,1,.3,1)"}}>
+    <div style={{position:"fixed",inset:0,zIndex:2500,background:"rgba(15,23,42,.5)",backdropFilter:"blur(4px)",animation:"fadeIn .2s",display:"flex",alignItems:"flex-start",justifyContent:"center",overflowY:"auto",padding:"40px 16px"}}>
+      <div style={{width:"100%",maxWidth:920,background:"#fff",borderRadius:0,boxShadow:"0 24px 60px rgba(0,0,0,.2)",overflow:"hidden",display:"flex",flexDirection:"column",animation:"slideUp .3s cubic-bezier(.16,1,.3,1)"}}>
         <div style={{padding:"18px 24px",borderBottom:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f8fafc",flexWrap:"wrap",gap:10}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             <div style={{width:40,height:40,borderRadius:0,background:"#0f172a",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon name="calendar" size={20}/></div>
@@ -266,7 +314,9 @@ function PurchaseDetailModal({purchaseId,onClose,onSuccess}:{purchaseId:number;o
                 showToast("Payment link copied to clipboard!", "success");
               }} style={{background:"#f0fdf4",border:"1px solid #bbf7d0",padding:"6px 14px",borderRadius:0,fontSize:12,fontWeight:700,cursor:"pointer",color:"#16a34a",display:"flex",alignItems:"center",gap:6}}><Icon name="link" size={14}/> Copy Link</button>
             )}
-            <button onClick={()=>setShowConfirm(true)} style={{background:"#eff6ff",border:"1px solid #bfdbfe",padding:"6px 14px",borderRadius:0,fontSize:12,fontWeight:700,cursor:"pointer",color:"#1d4ed8",display:"flex",alignItems:"center",gap:6}}><Icon name="download" size={14}/> Download Receipt</button>
+            {data?.due_amount>0&&<button onClick={()=>{setShowManualPay(p=>!p);setPayForm({amount:"",method:"Cash",ref:"",notes:"",cardName:"",ifsc:"",accNo:"",bankName:""});}} style={{background:"#fef3c7",border:"1px solid #fde68a",padding:"6px 14px",borderRadius:0,fontSize:12,fontWeight:700,cursor:"pointer",color:"#b45309",display:"flex",alignItems:"center",gap:6}}><Icon name="plus" size={14}/> Record Payment</button>}
+            <button onClick={()=>editing?setEditing(false):startEdit()} style={{background:editing?"#fee2e2":"#eff6ff",border:editing?"1px solid #fecaca":"1px solid #bfdbfe",padding:"6px 14px",borderRadius:0,fontSize:12,fontWeight:700,cursor:"pointer",color:editing?"#dc2626":"#1d4ed8",display:"flex",alignItems:"center",gap:6}}><Icon name={editing?"x":"edit"} size={14}/> {editing?"Cancel Edit":"Edit"}</button>
+            <button onClick={()=>setShowConfirm(true)} style={{background:"#eff6ff",border:"1px solid #bfdbfe",padding:"6px 14px",borderRadius:0,fontSize:12,fontWeight:700,cursor:"pointer",color:"#1d4ed8",display:"flex",alignItems:"center",gap:6}}><Icon name="download" size={14}/> Receipt</button>
             <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"#94a3b8",padding:6}}><Icon name="x" size={20}/></button>
           </div>
         </div>
@@ -274,6 +324,35 @@ function PurchaseDetailModal({purchaseId,onClose,onSuccess}:{purchaseId:number;o
         <div style={{overflowY:"auto",padding:"24px",flex:1}}>
           {loading?<div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>Loading schedule...</div>: (
             <>
+              {editing&&(
+                <div style={{background:"#eef2ff",border:"1px solid #c7d2fe",padding:20,marginBottom:20}}>
+                  <div style={{fontSize:13,fontWeight:800,color:"#1e1b4b",marginBottom:14,display:"flex",alignItems:"center",gap:8}}><Icon name="edit" size={15}/> Edit Purchase</div>
+                  <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                    <div style={{flex:"1 1 200px"}}><FI label="Discount (₹)" value={editForm.discount} onChange={v=>setEditForm({...editForm,discount:v})} type="number"/></div>
+                    <div style={{flex:"1 1 200px"}}><FS label="Status" value={editForm.status} onChange={v=>setEditForm({...editForm,status:v})}><option value="active">Active</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></FS></div>
+                    <div style={{flex:"1 1 100%"}}><FI label="Notes" value={editForm.notes} onChange={v=>setEditForm({...editForm,notes:v})}/></div>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:14}}>
+                    <button onClick={()=>setEditing(false)} style={{padding:"10px 20px",borderRadius:0,border:"1.5px solid #e2e8f0",background:"#fff",color:"#475569",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancel</button>
+                    <button onClick={saveEdit} disabled={savingEdit} className="btn-primary" style={{padding:"10px 24px",fontSize:13}}>{savingEdit?"Saving…":"Save Changes"}</button>
+                  </div>
+                </div>
+              )}
+
+              {showManualPay&&(
+                <div style={{background:"#fffbeb",border:"1px solid #fde68a",padding:20,marginBottom:20}}>
+                  <div style={{fontSize:13,fontWeight:800,color:"#92400e",marginBottom:14,display:"flex",alignItems:"center",gap:8}}><Icon name="plus" size={15}/> Record Manual Payment</div>
+                  <form onSubmit={submitManualPayment} style={{display:"flex",flexDirection:"column",gap:12}}>
+                    <FI label="Amount (₹)" value={payForm.amount} onChange={v=>setPayForm({...payForm,amount:v})} required type="number"/>
+                    <PaymentMethodFields form={payForm} setForm={setPayForm} />
+                    <div style={{display:"flex",justifyContent:"flex-end",gap:10}}>
+                      <button type="button" onClick={()=>setShowManualPay(false)} style={{padding:"10px 20px",borderRadius:0,border:"1.5px solid #e2e8f0",background:"#fff",color:"#475569",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancel</button>
+                      <button type="submit" className="btn-primary" disabled={paying} style={{padding:"10px 24px",fontSize:13}}>{paying?"Wait..":"Submit Payment"}</button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
               <div style={{display:"flex",gap:12,marginBottom:24,flexWrap:"wrap"}}>
                 <div style={{flex:"1 1 140px",background:"#f8fafc",padding:16,borderRadius:0,border:"1px solid #e2e8f0"}}>
                   <div style={{fontSize:11,color:"#64748b",fontWeight:700,textTransform:"uppercase"}}>Net Fee</div>
@@ -340,6 +419,9 @@ function PurchaseGeneralModal({purchaseId,onClose,onSuccess}:{purchaseId:number;
   const [payForm,setPayForm]=useState({amount:"",method:"Cash",ref:"",notes:"",cardName:"",ifsc:"",accNo:"",bankName:""});
   const [paying,setPaying]=useState(false);
   const [showConfirm,setShowConfirm]=useState(false);
+  const [editing,setEditing]=useState(false);
+  const [editForm,setEditForm]=useState({discount:"",notes:"",status:"active"});
+  const [savingEdit,setSavingEdit]=useState(false);
 
   const fetchDetail=useCallback(async()=>{
     setLoading(true);
@@ -352,6 +434,25 @@ function PurchaseGeneralModal({purchaseId,onClose,onSuccess}:{purchaseId:number;
   },[purchaseId,onClose,showToast]);
 
   useEffect(()=>{fetchDetail();},[fetchDetail]);
+
+  const startEdit=()=>{
+    if(!data)return;
+    setEditForm({discount:String(data.discount||0),notes:data.notes||"",status:data.status||"active"});
+    setEditing(true);
+  };
+
+  const saveEdit=async()=>{
+    setSavingEdit(true);
+    try{
+      const r=await apiFetch(`${API_BASE_URL}/academic/purchases/${purchaseId}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({discount:parseFloat(editForm.discount)||0,notes:editForm.notes||null,status:editForm.status})});
+      if(!r.ok){const e=await r.json();throw new Error(e.detail||"Failed to update");}
+      showToast("Purchase updated!","success");
+      setEditing(false);
+      fetchDetail();
+      onSuccess();
+    }catch(err:any){showToast(err.message,"error");}
+    finally{setSavingEdit(false);}
+  };
 
   const submitPayment=async(e:React.FormEvent)=>{
     e.preventDefault();
@@ -376,8 +477,8 @@ function PurchaseGeneralModal({purchaseId,onClose,onSuccess}:{purchaseId:number;
   };
 
   return(
-    <div style={{position:"fixed",inset:0,zIndex:2500,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(15,23,42,.6)",backdropFilter:"blur(6px)",animation:"fadeIn .2s"}}>
-      <div style={{width:"94vw",maxWidth:900,background:"#fff",borderRadius:0,boxShadow:"0 24px 60px rgba(0,0,0,.2)",overflow:"hidden",display:"flex",flexDirection:"column",maxHeight:"94vh",animation:"slideUp .3s cubic-bezier(.16,1,.3,1)"}}>
+    <div style={{position:"fixed",inset:0,zIndex:2500,background:"rgba(15,23,42,.5)",backdropFilter:"blur(4px)",animation:"fadeIn .2s",display:"flex",alignItems:"flex-start",justifyContent:"center",overflowY:"auto",padding:"40px 16px"}}>
+      <div style={{width:"100%",maxWidth:900,background:"#fff",borderRadius:0,boxShadow:"0 24px 60px rgba(0,0,0,.2)",overflow:"hidden",display:"flex",flexDirection:"column",animation:"slideUp .3s cubic-bezier(.16,1,.3,1)"}}>
         <div style={{padding:"18px 24px",borderBottom:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f8fafc",flexWrap:"wrap",gap:10}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             <div style={{width:40,height:40,borderRadius:0,background:"#0f172a",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon name="shopping-cart" size={20}/></div>
@@ -393,7 +494,8 @@ function PurchaseGeneralModal({purchaseId,onClose,onSuccess}:{purchaseId:number;
                 showToast("Payment link copied to clipboard!", "success");
               }} style={{background:"#f0fdf4",border:"1px solid #bbf7d0",padding:"6px 14px",borderRadius:0,fontSize:12,fontWeight:700,cursor:"pointer",color:"#16a34a",display:"flex",alignItems:"center",gap:6}}><Icon name="link" size={14}/> Copy Link</button>
             )}
-            <button onClick={()=>setShowConfirm(true)} style={{background:"#eff6ff",border:"1px solid #bfdbfe",padding:"6px 14px",borderRadius:0,fontSize:12,fontWeight:700,cursor:"pointer",color:"#1d4ed8",display:"flex",alignItems:"center",gap:6}}><Icon name="download" size={14}/> Download Receipt</button>
+            <button onClick={()=>editing?setEditing(false):startEdit()} style={{background:editing?"#fee2e2":"#eff6ff",border:editing?"1px solid #fecaca":"1px solid #bfdbfe",padding:"6px 14px",borderRadius:0,fontSize:12,fontWeight:700,cursor:"pointer",color:editing?"#dc2626":"#1d4ed8",display:"flex",alignItems:"center",gap:6}}><Icon name={editing?"x":"edit"} size={14}/> {editing?"Cancel Edit":"Edit"}</button>
+            <button onClick={()=>setShowConfirm(true)} style={{background:"#eff6ff",border:"1px solid #bfdbfe",padding:"6px 14px",borderRadius:0,fontSize:12,fontWeight:700,cursor:"pointer",color:"#1d4ed8",display:"flex",alignItems:"center",gap:6}}><Icon name="download" size={14}/> Receipt</button>
             <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"#94a3b8",padding:6}}><Icon name="x" size={20}/></button>
           </div>
         </div>
@@ -401,6 +503,21 @@ function PurchaseGeneralModal({purchaseId,onClose,onSuccess}:{purchaseId:number;
         <div style={{overflowY:"auto",padding:"24px",flex:1}}>
           {loading?<div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>Loading details...</div>: (
             <>
+              {editing&&(
+                <div style={{background:"#eef2ff",border:"1px solid #c7d2fe",padding:20,marginBottom:20}}>
+                  <div style={{fontSize:13,fontWeight:800,color:"#1e1b4b",marginBottom:14,display:"flex",alignItems:"center",gap:8}}><Icon name="edit" size={15}/> Edit Purchase</div>
+                  <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                    <div style={{flex:"1 1 200px"}}><FI label="Discount (₹)" value={editForm.discount} onChange={v=>setEditForm({...editForm,discount:v})} type="number"/></div>
+                    <div style={{flex:"1 1 200px"}}><FS label="Status" value={editForm.status} onChange={v=>setEditForm({...editForm,status:v})}><option value="active">Active</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></FS></div>
+                    <div style={{flex:"1 1 100%"}}><FI label="Notes" value={editForm.notes} onChange={v=>setEditForm({...editForm,notes:v})}/></div>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:14}}>
+                    <button onClick={()=>setEditing(false)} style={{padding:"10px 20px",borderRadius:0,border:"1.5px solid #e2e8f0",background:"#fff",color:"#475569",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancel</button>
+                    <button onClick={saveEdit} disabled={savingEdit} className="btn-primary" style={{padding:"10px 24px",fontSize:13}}>{savingEdit?"Saving…":"Save Changes"}</button>
+                  </div>
+                </div>
+              )}
+
               <div style={{display:"flex",gap:12,marginBottom:24,flexWrap:"wrap"}}>
                 <div style={{flex:"1 1 140px",background:"#f8fafc",padding:16,borderRadius:0,border:"1px solid #e2e8f0"}}>
                   <div style={{fontSize:11,color:"#64748b",fontWeight:700,textTransform:"uppercase"}}>Net Fee</div>
@@ -470,8 +587,8 @@ function PurchaseGeneralModal({purchaseId,onClose,onSuccess}:{purchaseId:number;
 }
 
 /* ─── Purchase Form Modal ─── */
-function PurchaseModal({students,courses,loadingData,onClose,onSuccess}:{
-  students:any[];courses:any[];loadingData:boolean;onClose:()=>void;onSuccess:()=>void;
+function PurchaseModal({students,courses,loadingData,onClose,onSuccess,editPurchase}:{
+  students:any[];courses:any[];loadingData:boolean;onClose:()=>void;onSuccess:()=>void;editPurchase?:any|null;
 }){
   const {showToast}=useToast();
   const [showReg,setShowReg]=useState(false);
@@ -483,13 +600,18 @@ function PurchaseModal({students,courses,loadingData,onClose,onSuccess}:{
   const [generatedUuid,setGeneratedUuid]=useState("");
   
   // Basic Form
-  const [form,setForm]=useState({student_id:"",student_label:"",course_id:"",discount:"0",paying:"",method:"Generate Invoice Link (Pending)",ref:"",notes:"",cardName:"",ifsc:"",accNo:"",bankName:""});
+  const [form,setForm]=useState(()=>{
+    if(editPurchase){
+      return{student_id:String(editPurchase.student_id||""),student_label:`${editPurchase.student_name||""} — ${editPurchase.student_email||""}`,course_id:String(editPurchase.course_id||""),discount:String(editPurchase.discount||0),paying:String(editPurchase.paid_amount||0),method:"Cash",ref:"",notes:editPurchase.notes||"",cardName:"",ifsc:"",accNo:"",bankName:""};
+    }
+    return{student_id:"",student_label:"",course_id:"",discount:"0",paying:"",method:"Generate Invoice Link (Pending)",ref:"",notes:"",cardName:"",ifsc:"",accNo:"",bankName:""};
+  });
   const [promoCode,setPromoCode]=useState("");
   const [promoValidating,setPromoValidating]=useState(false);
   
   // Installment Config
-  const [isInst,setIsInst]=useState(false);
-  const [instCountStr,setInstCountStr]=useState("1");
+  const [isInst,setIsInst]=useState(()=>editPurchase?.is_installment||false);
+  const [instCountStr,setInstCountStr]=useState(()=>String(Math.max((editPurchase?.total_installments||2)-1,1)));
   const [customDates,setCustomDates]=useState<string[]>([new Date().toISOString().split("T")[0]]);
 
   const sel=courses.find(c=>String(c.id)===form.course_id);
@@ -574,8 +696,8 @@ function PurchaseModal({students,courses,loadingData,onClose,onSuccess}:{
     e.preventDefault();
     if(!form.student_id){showToast("Select a student","error");return;}
     if(!form.course_id){showToast("Select a course","error");return;}
-    if(pay<=0){showToast("Enter paying amount","error");return;}
-    if(invalid){showToast(`Minimum payment: ₹${minReq}`,"error");return;}
+    if(!editPurchase&&pay<=0){showToast("Enter paying amount","error");return;}
+    if(!editPurchase&&invalid){showToast(`Minimum payment: ₹${minReq}`,"error");return;}
     const count = parseInt(instCountStr) || 1;
     if(isInst){
       if(count<1||count>23){showToast("Future installments must be between 1 and 23","error");return;}
@@ -586,33 +708,53 @@ function PurchaseModal({students,courses,loadingData,onClose,onSuccess}:{
     if(form.method==="Card") finalNotes=`Card Holder: ${form.cardName}`;
     if(form.method==="Bank Transfer") finalNotes=`Bank: ${form.bankName}, Acc: ${form.accNo}, IFSC: ${form.ifsc}`;
     try{
-      const isPending = form.method === "Generate Invoice Link (Pending)";
-      const body={
-        student_id:+form.student_id,course_id:+form.course_id,discount:disc,paying_amount:pay,
-        payment_method: isPending ? "Online (Pending)" : form.method,
-        record_payment: !isPending,
-        reference_no:form.ref||null,notes:finalNotes||null,
-        coupon_code:promoCode.trim()||null,
-        is_installment:isInst,total_installments:count+1,
-        custom_installment_dates:customDates.slice(0,count)
-      };
-      const r=await apiFetch(`${API_BASE_URL}/academic/purchase`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-      if(!r.ok){const e=await r.json();throw new Error(e.detail||"Failed");}
-      const d=await r.json();
-      onSuccess(); // refresh the list
-      if(d.invoice_uuid){
-        setGeneratedUuid(d.invoice_uuid);
-        setShowLinkModal(true);
-      } else {
-        showToast("Purchase complete!","success");
+      if(editPurchase){
+        // Edit mode - PUT update
+        const body:any={discount:disc,notes:finalNotes||null,status:editPurchase.status||"active"};
+        if(isInst){
+          body.is_installment=true;
+          body.total_installments=count+1;
+          body.installment_frequency="custom";
+          body.custom_installment_dates=customDates.slice(0,count);
+          body.first_payment_date=customDates[0]||new Date().toISOString().split("T")[0];
+        }else{
+          body.is_installment=false;
+        }
+        const r=await apiFetch(`${API_BASE_URL}/academic/purchases/${editPurchase.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+        if(!r.ok){const e=await r.json();throw new Error(e.detail||"Failed to update");}
+        showToast("Purchase updated successfully!","success");
+        onSuccess();
         onClose();
+      }else{
+        // Create mode - POST
+        const isPending = form.method === "Generate Invoice Link (Pending)";
+        const body={
+          student_id:+form.student_id,course_id:+form.course_id,discount:disc,paying_amount:pay,
+          payment_method: isPending ? "Online (Pending)" : form.method,
+          record_payment: !isPending,
+          reference_no:form.ref||null,notes:finalNotes||null,
+          coupon_code:promoCode.trim()||null,
+          is_installment:isInst,total_installments:count+1,
+          custom_installment_dates:customDates.slice(0,count)
+        };
+        const r=await apiFetch(`${API_BASE_URL}/academic/purchase`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+        if(!r.ok){const e=await r.json();throw new Error(e.detail||"Failed");}
+        const d=await r.json();
+        onSuccess();
+        if(d.invoice_uuid){
+          setGeneratedUuid(d.invoice_uuid);
+          setShowLinkModal(true);
+        } else {
+          showToast("Purchase complete!","success");
+          onClose();
+        }
       }
     }catch(err:any){showToast(err.message,"error");}
     setSubmitting(false);
   };
 
   return(
-    <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(15,23,42,.6)",backdropFilter:"blur(6px)",animation:"fadeIn .2s"}}>
+    <div className="purchase-modal" style={{position:"fixed",inset:0,zIndex:2000,background:"#fff",animation:"fadeIn .15s",display:"flex",flexDirection:"column"}}>
       {showReg&&<RegisterModal onClose={()=>setShowReg(false)} onSuccess={s=>{setStuList(p=>[s,...p]);selStu(s);setShowReg(false);}}/>}
 
       {/* Post-Purchase Link Modal — Dynamic based on payment method */}
@@ -715,33 +857,33 @@ function PurchaseModal({students,courses,loadingData,onClose,onSuccess}:{
       )}
 
 
-      <div style={{width:"94vw",maxWidth:920,background:"#fff",borderRadius:0,boxShadow:"0 24px 60px rgba(0,0,0,.2)",overflow:"hidden",display:"flex",flexDirection:"column",maxHeight:"96vh",animation:"slideUp .3s cubic-bezier(.16,1,.3,1)"}}>
+      <div style={{width:"100%",height:"100%",background:"#fff",overflow:"hidden",display:"flex",flexDirection:"column"}}>
         {/* Header */}
-        <div style={{padding:"18px 24px",borderBottom:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center",background:"linear-gradient(135deg,#eef2ff,#e0e7ff)"}}>
+        <div className="purchase-modal-header" style={{padding:"18px 24px",borderBottom:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center",background:"linear-gradient(135deg,#eef2ff,#e0e7ff)"}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
-            <div style={{width:40,height:40,borderRadius:0,background:"#6366f1",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon name="shopping-cart" size={20}/></div>
+            <div style={{width:40,height:40,borderRadius:0,background:editPurchase?"#0f172a":"#6366f1",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon name={editPurchase?"edit":"shopping-cart"} size={20}/></div>
             <div>
-              <div style={{fontWeight:800,fontSize:17,color:"#1e1b4b"}}>New Course Purchase</div>
-              <div style={{fontSize:12,color:"#6366f1"}}>Enroll a student and record payment</div>
+              <div className="purchase-modal-title" style={{fontWeight:800,fontSize:17,color:"#1e1b4b"}}>{editPurchase?"Edit Course Purchase":"New Course Purchase"}</div>
+              <div style={{fontSize:12,color:"#6366f1"}}>{editPurchase?"Update enrollment and installment settings":"Enroll a student and record payment"}</div>
             </div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"#94a3b8",padding:6}}><Icon name="x" size={20}/></button>
         </div>
 
         {/* Body */}
-        <div style={{overflowY:"auto",flex:1,padding:"24px"}}>
-          <form id="purchase-form" onSubmit={submit} style={{display:"flex",gap:24,flexWrap:"wrap"}}>
+        <div className="purchase-modal-body" style={{overflowY:"auto",flex:1,padding:24,maxWidth:1100,width:"100%",margin:"0 auto",minHeight:0}}>
+          <form id="purchase-form" className="purchase-form" onSubmit={submit} style={{display:"flex",gap:24,flexWrap:"wrap"}}>
             {/* Left Col */}
-            <div style={{flex:"1 1 320px",minWidth:0,display:"flex",flexDirection:"column",gap:16}}>
+            <div className="purchase-col" style={{flex:"1 1 320px",minWidth:0,display:"flex",flexDirection:"column",gap:16}}>
               <div className="cp-card" style={{margin:0}}>
                 <div className="cp-section-label" style={{color:"#6366f1"}}><Icon name="users" size={13}/> Student & Course</div>
-                <div style={{display:"flex",gap:8,alignItems:"flex-start",position:"relative",marginBottom:14}}>
+                <div className="purchase-student-row" style={{display:"flex",gap:8,alignItems:"flex-start",position:"relative",marginBottom:14}}>
                   <div style={{flex:1,position:"relative"}}>
-                    <div className="fi-field" style={{cursor:"pointer"}} onClick={()=>setStuOpen(p=>!p)}>
-                      <label className={`fi-label${form.student_label?" up":""}`}>Select Student <span className="fi-req">*</span></label>
-                      <input className="fi-inp" readOnly value={form.student_label} style={{cursor:"pointer"}}/>
+                    <div className="fi-field" style={{cursor:editPurchase?"default":"pointer"}} onClick={()=>!editPurchase&&setStuOpen(p=>!p)}>
+                      <label className={`fi-label${form.student_label?" up":""}`}>{editPurchase?"Student":"Select Student"} {!editPurchase&&<span className="fi-req">*</span>}</label>
+                      <input className="fi-inp" readOnly value={form.student_label} style={{cursor:editPurchase?"default":"pointer"}}/>
                     </div>
-                    {stuOpen&&(
+                    {stuOpen&&!editPurchase&&(
                       <div className="stu-drop">
                         <div style={{padding:"8px 12px",borderBottom:"1px solid #f1f5f9"}}>
                           <input autoFocus value={stuSearch} onChange={e=>setStuSearch(e.target.value)} placeholder="Search..."
@@ -759,9 +901,14 @@ function PurchaseModal({students,courses,loadingData,onClose,onSuccess}:{
                       </div>
                     )}
                   </div>
-                  <button type="button" className="btn-outline" onClick={()=>setShowReg(true)} style={{height:54,padding:"0 14px"}}><Icon name="user-plus" size={14}/>New</button>
+                  <button type="button" className="btn-outline" onClick={()=>setShowReg(true)} style={{height:54,padding:"0 14px",display:editPurchase?"none":"flex"}}><Icon name="user-plus" size={14}/>New</button>
                 </div>
-                {loadingData?<div style={{color:"#94a3b8",fontSize:13}}>Loading courses…</div>:(
+                {loadingData?<div style={{color:"#94a3b8",fontSize:13}}>Loading courses…</div>:editPurchase?(
+                  <FS label="Course" value={form.course_id} onChange={()=>{}} disabled>
+                    <option value="">Choose a course…</option>
+                    {courses.map(c=><option key={c.id} value={String(c.id)}>{c.title} — ₹{c.price?.toFixed(2)||"0.00"}</option>)}
+                  </FS>
+                ):(
                   <FS label="Select Course" value={form.course_id} onChange={v=>{
                     const c = courses.find(x=>String(x.id)===v);
                     const n = Math.max((c?.price||0), 0);
@@ -774,19 +921,25 @@ function PurchaseModal({students,courses,loadingData,onClose,onSuccess}:{
               </div>
 
               <div className="cp-card" style={{margin:0}}>
-                <div className="cp-section-label" style={{color:"#6366f1"}}><Icon name="credit-card" size={13}/> Payment Configuration</div>
+                <div className="cp-section-label" style={{color:"#6366f1"}}><Icon name="credit-card" size={13}/> {editPurchase?"Discount & Notes":"Payment Configuration"}</div>
                 
-                <div style={{display:"flex",gap:12,marginBottom:14}}>
+                {!editPurchase&&<>
+                <div className="purchase-promo-row" style={{display:"flex",gap:12,marginBottom:14}}>
                   <div style={{flex:1}}><FI label="Promo Code" value={promoCode} onChange={setPromoCode}/></div>
                   <button type="button" onClick={validatePromo} disabled={promoValidating} className="btn-outline" style={{height:54,padding:"0 16px"}}>{promoValidating?"Wait..":"Apply"}</button>
                 </div>
                 <div style={{marginBottom:14,textAlign:"center",color:"#94a3b8",fontSize:12,fontWeight:600}}>OR</div>
+                </>}
                 <FI label="Manual Discount (₹)" value={form.discount} onChange={up("discount")} type="text"/>
                 
-                <div style={{marginBottom:14}}>
+                {!editPurchase&&<div style={{marginBottom:14}}>
                   <FI label="Paying Amount Now (₹)" value={form.paying} onChange={up("paying")} required type="text"/>
                   {invalid&&<div style={{margin:"-10px 0 10px",padding:"6px 12px",background:"#fef2f2",borderRadius:0,border:"1px solid #fecaca",fontSize:12,color:"#dc2626",fontWeight:600}}>Minimum: ₹{minReq.toFixed(2)}</div>}
-                </div>
+                </div>}
+
+                {editPurchase&&<div style={{marginBottom:14}}>
+                  <FI label="Notes" value={form.notes} onChange={up("notes")}/>
+                </div>}
 
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",background:"#f8fafc",borderRadius:0,border:"1px solid #e2e8f0",marginBottom:14,marginTop:14}}>
                   <div style={{fontWeight:700,fontSize:14,color:"#0f172a"}}>Pay in Installments?</div>
@@ -815,7 +968,7 @@ function PurchaseModal({students,courses,loadingData,onClose,onSuccess}:{
                     }} type="text"/>
                     
                     {parseInt(instCountStr)>0 && (
-                      <div style={{marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 14px"}}>
+                      <div className="installment-date-grid" style={{marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 14px"}}>
                         {Array.from({length: parseInt(instCountStr)}).map((_, i) => (
                           <FI key={i} label={`Installment ${i+2} Date`} value={customDates[i]||""} onChange={v=>{
                             const newDates = [...customDates];
@@ -827,12 +980,12 @@ function PurchaseModal({students,courses,loadingData,onClose,onSuccess}:{
                     )}
                   </div>
                 )}
-                <PaymentMethodFields form={form} setForm={setForm} />
+                {!editPurchase&&<PaymentMethodFields form={form} setForm={setForm} />}
               </div>
             </div>
 
             {/* Right Col */}
-            <div style={{flex:"1 1 320px",minWidth:0,display:"flex",flexDirection:"column",gap:16}}>
+            <div className="purchase-col" style={{flex:"1 1 320px",minWidth:0,display:"flex",flexDirection:"column",gap:16}}>
               {isInst&&sched.length>0&&(
                 <div className="cp-card" style={{margin:0,background:"#f8fafc"}}>
                   <div className="cp-section-label" style={{color:"#6366f1"}}><Icon name="calendar" size={13}/> Installment Schedule Preview</div>
@@ -876,11 +1029,11 @@ function PurchaseModal({students,courses,loadingData,onClose,onSuccess}:{
         </div>
 
         {/* Footer */}
-        <div style={{padding:"16px 24px",borderTop:"1px solid #f1f5f9",display:"flex",justifyContent:"flex-end",gap:12,background:"#fafbfc",flexWrap:"wrap"}}>
+        <div className="purchase-modal-footer" style={{padding:"16px 24px",borderTop:"1px solid #f1f5f9",display:"flex",justifyContent:"flex-end",gap:12,background:"#fafbfc",flexWrap:"wrap"}}>
           <button type="button" onClick={onClose} style={{padding:"10px 24px",borderRadius:0,border:"1.5px solid #e2e8f0",background:"#fff",color:"#475569",fontWeight:600,fontSize:14,cursor:"pointer"}}>Cancel</button>
-          <button type="submit" form="purchase-form" disabled={submitting||!form.student_id||!form.course_id||(!isInst&&pay<=0)}
+          <button type="submit" form="purchase-form" disabled={submitting||(!editPurchase&&(!form.student_id||!form.course_id||(!isInst&&pay<=0)))}
             className="btn-primary" style={{padding:"10px 28px",fontSize:15}}>
-            <Icon name="shopping-cart" size={18}/>{submitting?"Processing…":"Complete Purchase"}
+            <Icon name={editPurchase?"edit":"shopping-cart"} size={18}/>{submitting?(editPurchase?"Saving…":"Processing…"):(editPurchase?"Save Changes":"Complete Purchase")}
           </button>
         </div>
       </div>
@@ -897,6 +1050,7 @@ function CoursePurchaseInner(){
   const [loadingData,setLoadingData]=useState(true);
   const [loadingPurchases,setLoadingPurchases]=useState(true);
   const [showModal,setShowModal]=useState(false);
+  const [editId,setEditId]=useState<number|null>(null);
   const [detailId,setDetailId]=useState<number|null>(null);
   const [genDetailId,setGenDetailId]=useState<number|null>(null);
   const [deleteId,setDeleteId]=useState<number|null>(null);
@@ -1011,11 +1165,12 @@ function CoursePurchaseInner(){
     <div className="manager-content">
       <style dangerouslySetInnerHTML={{__html:CSS}}/>
       {showModal&&<PurchaseModal students={students} courses={courses} loadingData={loadingData} onClose={()=>setShowModal(false)} onSuccess={fetchPurchases}/>}
+      {editId&&<PurchaseModal students={students} courses={courses} loadingData={loadingData} onClose={()=>setEditId(null)} onSuccess={fetchPurchases} editPurchase={purchases.find(p=>p.id===editId)}/>}
       {detailId&&<PurchaseDetailModal purchaseId={detailId} onClose={()=>setDetailId(null)} onSuccess={fetchPurchases}/>}
       {genDetailId&&<PurchaseGeneralModal purchaseId={genDetailId} onClose={()=>setGenDetailId(null)} onSuccess={fetchPurchases}/>}
 
       {deleteId&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.6)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",animation:"fadeIn .2s"}}>
+        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.5)",backdropFilter:"blur(4px)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",animation:"fadeIn .2s",overflowY:"auto",padding:"40px 16px"}}>
           <div style={{background:"#fff",width:"100%",maxWidth:400,borderRadius:0,boxShadow:"0 20px 25px -5px rgba(0,0,0,.1)",overflow:"hidden",animation:"slideUp .3s ease-out"}}>
             <div style={{padding:"24px 24px 0",textAlign:"center"}}>
               <div style={{width:48,height:48,borderRadius:0,background:"#fee2e2",color:"#ef4444",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}>
@@ -1106,7 +1261,7 @@ function CoursePurchaseInner(){
 
         <div style={{overflowX:"auto"}}>
           <div className="tbl-head" style={{gridTemplateColumns:COLS,minWidth:860}}>
-            {["Student","Course","Total Fee","Paid","Due","Installments","Status","Active"].map(h=><span key={h}>{h}</span>)}
+            {["Student","Course","Total Fee","Paid","Due","Installments","Status","Actions"].map(h=><span key={h}>{h}</span>)}
           </div>
           {loadingPurchases?(
             <div style={{padding:"40px",textAlign:"center",color:"#94a3b8",fontSize:14}}>Loading records…</div>
@@ -1146,7 +1301,13 @@ function CoursePurchaseInner(){
                   )}
                 </div>
                 <div><span className={`badge ${badge}`}>{label}</span></div>
-                <div onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:16}}>
+                <div onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:8}}>
+                  <button onClick={(e)=>{e.stopPropagation();p.due_amount>0?(p.is_installment?setDetailId(p.id):setGenDetailId(p.id)):showToast("No due amount to record payment","error");}} title="Record Payment" style={{border:"none",background:"#fef3c7",color:"#b45309",width:30,height:30,borderRadius:0,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <Icon name="credit-card" size={14}/>
+                  </button>
+                  <button onClick={(e)=>{e.stopPropagation();setEditId(p.id);}} title="Edit" style={{border:"none",background:"#eff6ff",color:"#1d4ed8",width:30,height:30,borderRadius:0,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <Icon name="edit" size={14}/>
+                  </button>
                   <Toggle checked={p.is_active} onChange={()=>toggleActive(p.id, p.is_active)}/>
                   <button onClick={(e) => { e.stopPropagation(); setDeleteId(p.id); }} title="Delete" style={{ border: "none", background: "#fef2f2", color: "#ef4444", width: 30, height: 30, borderRadius: 0, cursor: "pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
                     <Icon name="trash" size={14} />

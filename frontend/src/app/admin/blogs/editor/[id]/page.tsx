@@ -1,10 +1,21 @@
 "use client";
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { useRouter, useParams } from "next/navigation";
 import { apiFetch } from "@/lib/apiFetch";
 import { API_BASE_URL } from "@/lib/config";
 import { AdminProvider } from "../../../components/ProtectedAdmin";
 import AIBlogGeneratorModal, { AIBlogData } from "../../../components/AIBlogGeneratorModal";
+
+// TinyMCE is a heavy client-side library; load it lazily (client-only).
+const RichEditor = dynamic(() => import("@/components/RichEditor"), {
+  ssr: false,
+  loading: () => (
+    <div style={{ height: 500, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: 14 }}>
+      Loading editor…
+    </div>
+  ),
+});
 
 /* ─── Types ─── */
 interface BlogCategory { id: number; name: string; color: string; subcategories?: BlogSubCategory[] }
@@ -236,7 +247,8 @@ function BlogEditor() {
   const postId = params?.id as string;
   const isNew = postId === "new";
 
-  const editorRef = useRef<HTMLDivElement>(null);
+  const tinyMceRef = useRef<any>(null);
+  const [content, setContent] = useState("");
   const [categories, setCategories] = useState<BlogCategory[]>([]);
   const [subcategories, setSubcategories] = useState<BlogSubCategory[]>([]);
   const [saving, setSaving] = useState(false);
@@ -338,7 +350,7 @@ function BlogEditor() {
         setSeoTitle(p.seo_title ?? "");
         setSeoDesc(p.seo_description ?? "");
         setSeoKw(p.seo_keywords ?? "");
-        if (editorRef.current && p.content) editorRef.current.innerHTML = p.content;
+        setContent(p.content ?? "");
         setLoaded(true);
       });
       
@@ -362,8 +374,8 @@ function BlogEditor() {
       }, 0);
     }
     if (data.excerpt) setExcerpt(data.excerpt);
-    if (editorRef.current && data.content_html) {
-      editorRef.current.innerHTML = data.content_html;
+    if (data.content_html) {
+      setContent(data.content_html);
     }
     
     if (data.tags && data.tags.length > 0) {
@@ -381,11 +393,11 @@ function BlogEditor() {
     if (!title.trim()) { setSaveMsg("⚠️ Title is required"); return; }
     setSaving(true);
     setSaveMsg("");
-    const content = editorRef.current?.innerHTML ?? "";
+    const htmlContent = content;
     const body = {
       title: title.trim(),
       excerpt: excerpt || null,
-      content,
+      content: htmlContent,
       featured_image: featImg || null,
       category_id: catId !== "" ? Number(catId) : null,
       subcategory_id: subCatId !== "" ? Number(subCatId) : null,
@@ -420,7 +432,7 @@ function BlogEditor() {
       }
     } catch { setSaveMsg("❌ Network error"); }
     finally { setSaving(false); }
-  }, [title, excerpt, featImg, catId, subCatId, tags, authorId, status, isFeatured, publishedAt, seoTitle, seoDesc, seoKw, isNew, postId, router]);
+  }, [title, excerpt, featImg, catId, subCatId, tags, authorId, status, isFeatured, publishedAt, seoTitle, seoDesc, seoKw, content, isNew, postId, router]);
 
   /* Restore Revision */
   const restoreRevision = async (revId: number) => {
@@ -436,14 +448,15 @@ function BlogEditor() {
 
   /* Auto-TOC */
   const generateTOC = () => {
-    if (!editorRef.current) return;
-    const editor = editorRef.current;
-    
+    const editor = tinyMceRef.current;
+    if (!editor) return;
+    const body = editor.getBody();
+
     // Remove old TOC if exists
-    const oldToc = editor.querySelector(".table-of-contents");
+    const oldToc = body.querySelector(".table-of-contents");
     if (oldToc) oldToc.remove();
 
-    const headings = Array.from(editor.querySelectorAll("h2, h3"));
+    const headings: Element[] = Array.from(body.querySelectorAll("h2, h3") as NodeListOf<Element>);
     if (headings.length === 0) {
       customAlert("No Headings (H2 or H3) found to generate a TOC.");
       return;
@@ -453,20 +466,20 @@ function BlogEditor() {
     tocList.style.listStyleType = "none";
     tocList.style.paddingLeft = "0";
 
-    headings.forEach((heading, i) => {
+    headings.forEach((heading: Element, i: number) => {
       const id = `toc-${i}`;
       heading.id = id;
-      
+
       const li = document.createElement("li");
       li.style.marginBottom = "8px";
       if (heading.tagName === "H3") li.style.paddingLeft = "20px";
-      
+
       const a = document.createElement("a");
       a.href = `#${id}`;
       a.innerText = (heading as HTMLElement).innerText;
       a.style.color = "#6366f1";
       a.style.textDecoration = "none";
-      
+
       li.appendChild(a);
       tocList.appendChild(li);
     });
@@ -478,16 +491,18 @@ function BlogEditor() {
     tocContainer.style.borderRadius = "8px";
     tocContainer.style.padding = "20px";
     tocContainer.style.marginBottom = "24px";
-    
+
     const title = document.createElement("h3");
     title.innerText = "Table of Contents";
     title.style.marginTop = "0";
     title.style.fontSize = "18px";
-    
+
     tocContainer.appendChild(title);
     tocContainer.appendChild(tocList);
 
-    editor.insertBefore(tocContainer, editor.firstChild);
+    body.insertBefore(tocContainer, body.firstChild);
+    editor.save();
+    setContent(editor.getContent());
     save();
   };
 
@@ -497,11 +512,11 @@ function BlogEditor() {
     setGeneratingSnippets(true);
     setShowSocialSnippets(true);
     try {
-      const content = editorRef.current?.innerText || "";
+      const textContent = tinyMceRef.current ? tinyMceRef.current.getContent({ format: "text" }) : content;
       const res = await apiFetch(`${API_BASE_URL}/settings/ai/generate_social_snippet`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, content })
+        body: JSON.stringify({ title, content: textContent })
       });
       if (res.ok) {
         const data = await res.json();
@@ -610,18 +625,14 @@ function BlogEditor() {
             style={{ ...inputSx, resize: "vertical", fontStyle: "italic", color: "#64748b", fontSize: 16, marginBottom: 24, background: "#f8fafc" }}
           />
 
-          {/* Rich Toolbar + Body */}
-          <div style={{ border: "1.5px solid #e2e8f0", borderRadius: 10, overflow: "hidden", background: "#fff" }}>
-            <RichToolbar editorRef={editorRef} customAlert={customAlert} />
-            <div
-              ref={editorRef}
-              contentEditable
-              suppressContentEditableWarning
-              className="editor-content"
-              data-placeholder="Start writing your article…"
-              style={{ padding: "24px 28px" }}
-            />
-          </div>
+          {/* Rich Editor (TinyMCE, self-hosted) */}
+          <RichEditor
+            value={content}
+            onChange={setContent}
+            onInit={(ed) => { tinyMceRef.current = ed; }}
+            placeholder="Start writing your article…"
+            minHeight={500}
+          />
         </div>
 
         {/* ── Right Sidebar ── */}

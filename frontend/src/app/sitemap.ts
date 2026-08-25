@@ -12,6 +12,7 @@ const STATIC_PAGES: { path: string; priority: number; changeFrequency: "daily" |
   { path: "/about-us", priority: 0.6, changeFrequency: "monthly" },
   { path: "/about-iinm", priority: 0.6, changeFrequency: "monthly" },
   { path: "/contact-us", priority: 0.6, changeFrequency: "monthly" },
+  { path: "/career", priority: 0.7, changeFrequency: "weekly" },
 ];
 
 function getBaseUrl(site: any): string {
@@ -20,11 +21,12 @@ function getBaseUrl(site: any): string {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  // Fetch site settings + courses + blogs in parallel
-  const [site, coursesData, blogsData] = await Promise.all([
+  // Fetch site settings + courses + blogs + static pages in parallel
+  const [site, coursesData, blogsData, pagesData] = await Promise.all([
     serverFetch("/settings/site", REVALIDATE),
-    serverFetch("/courses/public/courses?limit=1000", REVALIDATE),
+    serverFetch("/public/courses?limit=1000", REVALIDATE),
     serverFetch("/blogs?status=published&limit=1000", REVALIDATE),
+    serverFetch("/pages/published", REVALIDATE),
   ]);
 
   const baseUrl = getBaseUrl(site && !("__dbDown" in site) ? site : null);
@@ -65,6 +67,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           : new Date(),
         changeFrequency: "weekly",
         priority: 0.7,
+      });
+    }
+  }
+
+  // ── Static pages ──
+  if (pagesData && !("__dbDown" in pagesData) && Array.isArray(pagesData)) {
+    for (const pg of pagesData) {
+      if (!pg.slug) continue;
+      entries.push({
+        url: `${baseUrl}/page/${pg.slug}`,
+        lastModified: pg.updated_at ? new Date(pg.updated_at) : new Date(),
+        changeFrequency: "monthly",
+        priority: 0.6,
       });
     }
   }

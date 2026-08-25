@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
+import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { BASE_URL, API_BASE_URL } from "@/lib/config";
@@ -13,6 +14,10 @@ import "../../home.css";
 import PublicNavbar from "../../../components/PublicNavbar";
 import PublicFooter from "../../../components/PublicFooter";
 import SlotBookingDrawer from "./SlotBookingDrawer";
+import BrochureModal from "./BrochureModal";
+
+// Lazy-load BrochurePreview (PDF.js is heavy, client-only)
+const BrochurePreview = dynamic(() => import("./BrochurePreview"), { ssr: false });
 
 const Icons = {
   Video: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>,
@@ -601,13 +606,12 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
   const [openFaqs, setOpenFaqs] = useState<Record<number, boolean>>({});
   const [activeFaqCategory, setActiveFaqCategory] = useState<string>("General Questions");
 
-  // Lead Modal & Video Modal States
-  const [leadModalOpen, setLeadModalOpen] = useState(false);
+  // Brochure Modal, Slot Booking, Video Modal & Preview States
+  const [brochureModalOpen, setBrochureModalOpen] = useState(false);
+  const [brochurePreviewOpen, setBrochurePreviewOpen] = useState(false);
+  const [brochurePdfUrl, setBrochurePdfUrl] = useState<string | null>(null);
   const [slotBookingOpen, setSlotBookingOpen] = useState(false);
   const [videoModalUrl, setVideoModalUrl] = useState<string | null>(null);
-  const [leadName, setLeadName] = useState("");
-  const [leadEmail, setLeadEmail] = useState("");
-  const [leadPhone, setLeadPhone] = useState("");
   const [submittingLead, setSubmittingLead] = useState(false);
 
   // Admin Inline Drawer Editor State
@@ -811,34 +815,58 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
   const toggleChapter = (id: number) => setOpenChapters(p => ({ ...p, [id]: !p[id] }));
   const toggleFaq = (idx: number) => setOpenFaqs(p => ({ ...p, [idx]: !p[idx] }));
 
-  // Handle Lead / Brochure Submit
-  const handleBrochureSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!leadName || !leadEmail) {
-      showToast("Please enter name and email");
-      return;
+  // Handle Brochure Click — check localStorage + backend, then open form or preview
+  const handleBrochureClick = async () => {
+    if (!course) return;
+    // 1. Check localStorage for previously submitted phone
+    const storedPhone = typeof window !== "undefined" ? localStorage.getItem(`brochure_submitted_${course.id}`) : null;
+    if (storedPhone) {
+      // 2. Backend verify (cross-device check)
+      try {
+        const res = await apiFetch(`/api/public/courses/${course.id}/brochure-check?phone=${encodeURIComponent(storedPhone)}`);
+        const data = await res.json();
+        if (data.already_submitted && data.syllabus_url) {
+          setBrochurePdfUrl(data.syllabus_url);
+          setBrochurePreviewOpen(true);
+          return;
+        }
+      } catch {
+        // fall through to form
+      }
     }
+    // 3. Not submitted yet → open brochure form
+    setBrochureModalOpen(true);
+  };
+
+  // Handle Brochure Form Submit — save lead, store phone, open preview
+  const handleBrochureSubmit = async (payload: { name: string; email: string; phone: string; leadType: string }) => {
+    if (!course) return;
     setSubmittingLead(true);
     try {
       const res = await apiFetch("/api/public/courses/brochure-lead", {
         method: "POST",
         body: JSON.stringify({
-          course_id: course?.id,
-          name: leadName,
-          email: leadEmail,
-          phone: leadPhone,
+          course_id: course.id,
+          name: payload.name,
+          phone: payload.phone,
+          email: payload.email || undefined,
+          lead_type: payload.leadType,
           source: "brochure_download"
         })
       });
       const data = await res.json();
       setSubmittingLead(false);
-      setLeadModalOpen(false);
-      showToast("Brochure request received! Downloading syllabus PDF...");
-
-      const pdfUrl = data.syllabus_url || course?.upload_syllabus;
-      if (pdfUrl) {
-        const fullUrl = pdfUrl.startsWith("http") ? pdfUrl : `${baseUrl}${pdfUrl}`;
-        window.open(fullUrl, "_blank");
+      setBrochureModalOpen(false);
+      // Store phone in localStorage for next-time skip
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`brochure_submitted_${course.id}`, payload.phone);
+      }
+      if (data.syllabus_url) {
+        setBrochurePdfUrl(data.syllabus_url);
+        setBrochurePreviewOpen(true);
+        showToast("Brochure ready! Opening preview...");
+      } else {
+        showToast("No brochure PDF available for this course yet.");
       }
     } catch (err: any) {
       setSubmittingLead(false);
@@ -1115,10 +1143,10 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               </p>
 
               <div className="cd-hero-cta-group">
-                <button onClick={() => setLeadModalOpen(true)} className="cd-btn-primary">
+                <button onClick={() => setSlotBookingOpen(true)} className="cd-btn-primary">
                   {heroContent.cta_primary || "Apply Now & Enroll"}
                 </button>
-                <button onClick={() => setLeadModalOpen(true)} className="cd-btn-secondary">
+                <button onClick={() => handleBrochureClick()} className="cd-btn-secondary">
                   <Icons.Download /> {heroContent.cta_secondary || "Download Brochure / Syllabus"}
                 </button>
               </div>
@@ -1512,7 +1540,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               </p>
 
               <div className="cd-who-cta-row">
-                <button className="cd-who-cta-btn" onClick={() => setLeadModalOpen(true)}>
+                <button className="cd-who-cta-btn" onClick={() => setSlotBookingOpen(true)}>
                   <Icons.Sparkles /> Enroll & Apply Now
                 </button>
                 <button className="cd-who-video-btn" onClick={() => setVideoModalUrl(course?.promo_video_url || "https://www.youtube.com/embed/dQw4w9WgXcQ")}>
@@ -1641,7 +1669,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               <span className="cd-help-cta-text">
                 {outcomes.cta_text || "Get in touch with our career expert to know more"}
               </span>
-              <button onClick={() => setLeadModalOpen(true)} className="cd-help-cta-btn">
+              <button onClick={() => setSlotBookingOpen(true)} className="cd-help-cta-btn">
                 {outcomes.cta_button || "Get Instant Callback"} <Icons.PhoneCall />
               </button>
             </div>
@@ -1745,7 +1773,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
             )}
 
             <div style={{ textAlign: "center", marginTop: 32 }}>
-              <button onClick={() => setLeadModalOpen(true)} className="cd-btn-secondary">
+              <button onClick={() => handleBrochureClick()} className="cd-btn-secondary">
                 <Icons.Download /> Download Syllabus
               </button>
             </div>
@@ -2053,7 +2081,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               <p className="cd-cta-subtitle">
                 Thousands of professionals have switched to their dream data roles with IINM. <strong>Your transformation could be next.</strong>
               </p>
-              <button onClick={() => setLeadModalOpen(true)} className="cd-cta-btn">
+              <button onClick={() => setSlotBookingOpen(true)} className="cd-cta-btn">
                 <span>Book Your Admission Slot</span>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
               </button>
@@ -2140,38 +2168,23 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
         course={course ? { id: course.id, title: course.title, slug: course.slug, price: course.price, discount_price: course.discount_price, is_free: course.is_free, currency: course.currency, min_payment_type: course.min_payment_type, min_payment_value: course.min_payment_value, full_payment_discount_type: (course as any).full_payment_discount_type, full_payment_discount_value: (course as any).full_payment_discount_value, full_payment_discount_valid_till: (course as any).full_payment_discount_valid_till } : null}
       />
 
-      {/* ── LEAD CAPTURE / BROCHURE MODAL ── */}
-      {leadModalOpen && (
-        <div className="cd-modal-backdrop" onClick={() => setLeadModalOpen(false)}>
-          <div className="cd-modal-content" onClick={e => e.stopPropagation()}>
-            <button className="cd-modal-close" onClick={() => setLeadModalOpen(false)}>×</button>
-            <h3 style={{ fontSize: 22, fontWeight: 900, color: "#fff", marginBottom: 8 }}>
-              Download Course Brochure & Syllabus
-            </h3>
-            <p style={{ fontSize: 14, color: "#94a3b8", marginBottom: 24 }}>
-              Enter your contact details to download the complete curriculum PDF for <strong>{course.title}</strong>.
-            </p>
+      {/* ── BROCHURE LEAD CAPTURE MODAL ── */}
+      <BrochureModal
+        open={brochureModalOpen}
+        onClose={() => setBrochureModalOpen(false)}
+        courseTitle={course?.title || ""}
+        onSubmit={handleBrochureSubmit}
+        submitting={submittingLead}
+      />
 
-            <form onSubmit={handleBrochureSubmit}>
-              <div className="cd-form-group">
-                <label className="cd-form-label">Full Name *</label>
-                <input type="text" className="cd-form-input" required placeholder="e.g. Rahul Sharma" value={leadName} onChange={e => setLeadName(e.target.value)} />
-              </div>
-              <div className="cd-form-group">
-                <label className="cd-form-label">Email Address *</label>
-                <input type="email" className="cd-form-input" required placeholder="rahul@example.com" value={leadEmail} onChange={e => setLeadEmail(e.target.value)} />
-              </div>
-              <div className="cd-form-group">
-                <label className="cd-form-label">Phone / WhatsApp Number</label>
-                <input type="tel" className="cd-form-input" placeholder="+91 9876543210" value={leadPhone} onChange={e => setLeadPhone(e.target.value)} />
-              </div>
-
-              <button type="submit" className="cd-btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 8 }} disabled={submittingLead}>
-                {submittingLead ? "Submitting..." : "Get Syllabus PDF Instantly"}
-              </button>
-            </form>
-          </div>
-        </div>
+      {/* ── BROCHURE PDF PREVIEW (full-screen, no download) ── */}
+      {brochurePreviewOpen && brochurePdfUrl && course && (
+        <BrochurePreview
+          pdfUrl={brochurePdfUrl}
+          courseId={course.id}
+          phone={typeof window !== "undefined" ? localStorage.getItem(`brochure_submitted_${course.id}`) || "" : ""}
+          onClose={() => setBrochurePreviewOpen(false)}
+        />
       )}
 
       {/* ── VIDEO PLAYER PREVIEW MODAL ── */}

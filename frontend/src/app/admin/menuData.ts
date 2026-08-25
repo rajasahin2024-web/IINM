@@ -103,6 +103,7 @@ export const adminMenuData: MenuItem[] = [
     icon: "graduation-cap",
     type: "dropdown",
     children: [
+      { label: "Enquiries",        href: "/admin/leads",                       icon: "users" },
       { label: "Register Student",  href: "/admin/academic/register",          icon: "user-plus" },
       { label: "Course Purchase",   href: "/admin/academic/purchase",          icon: "shopping-cart" },
       { label: "Batch Assign",      href: "/admin/academic/batch-assign",      icon: "git-merge" },
@@ -133,9 +134,27 @@ export const adminMenuData: MenuItem[] = [
     icon: "file-text",
     type: "dropdown",
     children: [
-      { label: "Blogs", href: "/admin/blogs", icon: "file-text" },
-      { label: "Navbar CMS", href: "/admin/cms/navbar", icon: "menu" },
-      { label: "Footer Menu", href: "/admin/cms/footer", icon: "layout" },
+      { label: "Blog", href: "/admin/blogs", icon: "file-text" },
+      {
+        label: "Menu",
+        href: "/admin/cms/menu",
+        icon: "menu",
+        children: [
+          { label: "Navbar CMS",  href: "/admin/cms/navbar", icon: "menu" },
+          { label: "Footer Menu", href: "/admin/cms/footer", icon: "layout" },
+        ],
+      },
+      {
+        label: "Career",
+        href: "/admin/cms/career",
+        icon: "briefcase",
+        children: [
+          { label: "Career Positions", href: "/admin/cms/career/positions", icon: "layers" },
+          { label: "Job Posts",        href: "/admin/cms/career/jobs",      icon: "file-text" },
+          { label: "Job Requests",     href: "/admin/cms/career/applications", icon: "inbox" },
+        ],
+      },
+      { label: "Pages", href: "/admin/cms/pages", icon: "layers" },
     ],
   },
 
@@ -176,6 +195,7 @@ export const adminMenuData: MenuItem[] = [
       { label: "Fomo Notifications", href: "/admin/settings/fomo", icon: "bell" },
       { label: "Payment Settings", href: "/admin/settings/payment", icon: "credit-card" },
       { label: "R2 Bucket Setup",  href: "/admin/settings/r2",      icon: "database" },
+      { label: "Response Cache",   href: "/admin/settings/cache",   icon: "layers" },
       { label: "AI Settings",      href: "/admin/settings/ai",      icon: "cpu" },
       { label: "Google API",        href: "/admin/settings/google",   icon: "globe" },
       { label: "Push Notifications", href: "/admin/settings/pusher",  icon: "bell" },

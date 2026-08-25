@@ -46,10 +46,25 @@ export const CSS = `
   .tbl-row{grid-template-columns:1fr!important;gap:6px;padding:14px 14px}
   .tbl-row>div{padding:2px 0}
   .tbl-row>div:last-child{justify-content:flex-start}
-  .stu-drop{border-radius:0}
+  .stu-drop{border-radius:0;position:fixed!important;top:50%!important;left:12px!important;right:12px!important;transform:translateY(-50%);max-height:60vh}
   .cp-section-label{font-size:10px}
   .badge{font-size:10px}
   .reg-grid{grid-template-columns:1fr!important}
+  .purchase-form{flex-direction:column!important;flex-wrap:nowrap!important;gap:16px!important}
+  .purchase-col{flex:1 1 auto!important;width:100%!important;min-width:0!important}
+  .purchase-modal-body{padding:14px!important}
+  .purchase-modal-header{padding:14px 16px!important}
+  .purchase-modal-header .purchase-modal-title{font-size:15px}
+  .purchase-student-row{flex-direction:column!important;gap:8px!important;align-items:stretch!important}
+  .purchase-student-row .btn-outline{width:100%;height:48px;justify-content:center}
+  .purchase-promo-row{flex-direction:column!important;gap:8px!important;align-items:stretch!important}
+  .purchase-promo-row .btn-outline{width:100%;height:48px;justify-content:center}
+  .purchase-modal-footer{flex-direction:column-reverse!important;padding:14px 16px!important}
+  .purchase-modal-footer button{width:100%}
+  .installment-date-grid{grid-template-columns:1fr!important}
+  .payment-card-grid{grid-template-columns:1fr!important}
+  .payment-card-grid .fi-wrap{margin-bottom:0}
+  .payment-card-grid .fi-wrap:first-child{margin-bottom:14px}
 }
 `;
 
@@ -69,14 +84,14 @@ export function FI({label,value,onChange,required=false,type="text",readOnly=fal
   );
 }
 
-export function FS({label,value,onChange,children,required=false}:{
-  label:string;value:string;onChange:(v:string)=>void;children:React.ReactNode;required?:boolean;
+export function FS({label,value,onChange,children,required=false,disabled=false}:{
+  label:string;value:string;onChange:(v:string)=>void;children:React.ReactNode;required?:boolean;disabled?:boolean;
 }){
   return(
     <div className="fi-wrap">
       <div className="fi-field">
         <label className="fi-label up">{label}{required&&<span className="fi-req">*</span>}</label>
-        <select className="fi-inp fi-sel" value={value} onChange={e=>onChange(e.target.value)}>{children}</select>
+        <select className="fi-inp fi-sel" value={value} onChange={e=>onChange(e.target.value)} disabled={disabled}>{children}</select>
         <span className="fi-arr">▼</span>
       </div>
     </div>

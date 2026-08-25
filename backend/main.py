@@ -17,8 +17,9 @@ import time
 from typing import Optional
 
 from database import engine, SessionLocal, Base, get_db
+from cache import cache as app_cache
 from models import AdminUser, DeviceSession, DeviceAdminUser
-from routers import courses, materials, questions, question_types, settings, comprehensions, topics, difficulty, batches, student, academic, progress, exams, dashboard, blogs, testimonials, contact, about, faq, leadership, invoice, slot_booking, seo
+from routers import courses, materials, questions, question_types, settings, comprehensions, topics, difficulty, batches, student, academic, progress, exams, dashboard, blogs, testimonials, contact, about, faq, leadership, invoice, slot_booking, seo, career, pages
 from security import check_public_rate_limit, get_client_ip
 
 # ── Database Setup ──────────────────────────────────────────────────────────
@@ -62,11 +63,14 @@ app.include_router(leadership.router)
 app.include_router(invoice.router)
 app.include_router(slot_booking.router)
 app.include_router(seo.router)
+app.include_router(career.router)
+app.include_router(pages.router)
 # Ensure upload directories exist
 os.makedirs("uploads", exist_ok=True)
 os.makedirs("uploads/materials", exist_ok=True)
 os.makedirs("uploads/thumbnails", exist_ok=True)
 os.makedirs("uploads/leadership", exist_ok=True)
+os.makedirs("uploads/career", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 app.add_middleware(
@@ -85,19 +89,45 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-Device-Token", "Authorization", "X-Requested-With"],
 )
 
-# ── Security Headers Middleware ──────────────────────────────────────────────
-from starlette.middleware.base import BaseHTTPMiddleware
+# ── Security Headers Middleware (pure ASGI) ─────────────────────────────────
+# Pure ASGI middleware injects security headers into http.response.start WITHOUT
+# buffering the response body. This is critical: BaseHTTPMiddleware buffers the
+# entire response before sending it, which delays db.close() in get_db's finally
+# block and holds DB connections longer than necessary, causing QueuePool
+# exhaustion under concurrent load.
+# See: https://www.starlette.io/middleware/#limitations-of-basemiddleware
 
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
-        return response
+class SecurityHeadersMiddleware:
+    """Pure ASGI middleware — adds static security headers, no body buffering."""
+
+    _HEADERS = [
+        (b"x-content-type-options", b"nosniff"),
+        (b"x-frame-options", b"DENY"),
+        (b"x-xss-protection", b"1; mode=block"),
+        (b"referrer-policy", b"strict-origin-when-cross-origin"),
+        (b"permissions-policy", b"geolocation=(), microphone=(), camera=()"),
+        (b"strict-transport-security", b"max-age=31536000; includeSubDomains; preload"),
+    ]
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        # Only intercept HTTP requests; pass through websocket/lifespan as-is.
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                # Build a header lookup so we overwrite existing values without
+                # creating duplicates (security headers should be authoritative).
+                existing = dict(message.get("headers", []))
+                for name, value in self._HEADERS:
+                    existing[name] = value
+                message["headers"] = list(existing.items())
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
 
 app.add_middleware(SecurityHeadersMiddleware)
 
@@ -136,6 +166,7 @@ async def health_check():
             status_code=503,
             content={"status": "unhealthy", "database": "disconnected"}
         )
+
 
 def _hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -202,6 +233,36 @@ def _require_admin_device(
     if not session:
         raise HTTPException(status_code=401, detail="Unauthorized device")
     return x_device_token
+
+# ── Cache Management Endpoints ───────────────────────────────────────────────
+# Must be defined AFTER _require_admin_device (default args evaluate at def time).
+@app.delete("/api/settings/cache/clear")
+async def clear_cache(device: str = Depends(_require_admin_device)):
+    """Admin: clear the in-memory response cache. Use after manual DB edits."""
+    count = app_cache.clear()
+    logging.info(f"Cache cleared by admin: {count} entries removed")
+    return {"status": "success", "entries_cleared": count}
+
+@app.get("/api/settings/cache/stats")
+async def cache_stats(device: str = Depends(_require_admin_device)):
+    """Admin: inspect the in-memory cache — entries, hits/misses, per-key TTL."""
+    return app_cache.stats()
+
+@app.delete("/api/settings/cache/invalidate/{cache_key:path}")
+async def invalidate_cache_key(
+    cache_key: str,
+    device: str = Depends(_require_admin_device),
+):
+    """Admin: invalidate a single cache key (e.g. 'settings:site')."""
+    app_cache.invalidate(cache_key)
+    logging.info(f"Cache key invalidated by admin: {cache_key}")
+    return {"status": "success", "key": cache_key}
+
+@app.post("/api/settings/cache/reset-stats")
+async def reset_cache_stats(device: str = Depends(_require_admin_device)):
+    """Admin: reset only the hit/miss/set/invalidation counters."""
+    app_cache.reset_stats()
+    return {"status": "success"}
 
 # ── Login rate limiting (simple in-memory, per IP) ──
 _login_attempts: dict[str, list[float]] = {}

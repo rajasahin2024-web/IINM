@@ -8,6 +8,7 @@ import logging
 import os, uuid
 
 from database import get_db
+from cache import cache
 from models import (
     AboutSettings,
     AboutBanner,
@@ -162,11 +163,14 @@ def seed_about_settings(db: Session) -> None:
 @router.get("/settings")
 async def get_about_settings(db: Session = Depends(get_db)):
     """Public: get about us settings."""
+    cached_val = cache.get("about_settings")
+    if cached_val is not None:
+        return cached_val
     seed_about_settings(db)
     s = db.query(AboutSettings).first()
     if not s:
         return {}
-    return {
+    result = {
         "mission_statement": s.mission_statement,
         "vision_statement": s.vision_statement,
         "story_title": s.story_title,
@@ -198,6 +202,8 @@ async def get_about_settings(db: Session = Depends(get_db)):
         "alumni_title": s.alumni_title,
         "alumni_description": s.alumni_description,
     }
+    cache.set("about_settings", result)
+    return result
 
 @router.put("/settings")
 async def update_about_settings(
@@ -213,6 +219,7 @@ async def update_about_settings(
     for field, val in req.dict().items():
         setattr(s, field, val or None)
     db.commit()
+    cache.invalidate("about_settings")
     db.refresh(s)
     return {"message": "About settings updated successfully."}
 
@@ -236,6 +243,7 @@ async def upload_director_image(file: UploadFile = File(...), device: str = Depe
         db.add(s)
     s.director_image_url = url
     db.commit()
+    cache.invalidate("about_settings")
     return {"url": s.director_image_url}
 
 
@@ -246,8 +254,13 @@ async def upload_director_image(file: UploadFile = File(...), device: str = Depe
 @router.get("/banners")
 async def get_banners(db: Session = Depends(get_db)):
     """Public: list active about banners ordered by order_index."""
+    cached_val = cache.get("about_banners")
+    if cached_val is not None:
+        return cached_val
     banners = db.query(AboutBanner).filter(AboutBanner.is_active == True).order_by(AboutBanner.order_index).all()
-    return [{"id": b.id, "image_url": rewrite_url(b.image_url), "caption": b.caption, "order_index": b.order_index} for b in banners]
+    result = [{"id": b.id, "image_url": rewrite_url(b.image_url), "caption": b.caption, "order_index": b.order_index} for b in banners]
+    cache.set("about_banners", result)
+    return result
 
 @router.get("/banners/all")
 async def get_all_banners(device: str = Depends(require_device), db: Session = Depends(get_db)):
@@ -272,6 +285,7 @@ async def upload_banner(file: UploadFile = File(...), device: str = Depends(requ
     banner = AboutBanner(image_url=image_url, order_index=max_order)
     db.add(banner)
     db.commit()
+    cache.invalidate("about_banners")
     db.refresh(banner)
     return {"id": banner.id, "image_url": banner.image_url, "order_index": banner.order_index}
 
@@ -283,6 +297,7 @@ async def delete_banner(banner_id: int, device: str = Depends(require_device), d
         raise HTTPException(status_code=404, detail="Banner not found")
     db.delete(banner)
     db.commit()
+    cache.invalidate("about_banners")
     return {"message": "Deleted"}
 
 @router.patch("/banners/{banner_id}/toggle")
@@ -293,6 +308,7 @@ async def toggle_banner(banner_id: int, device: str = Depends(require_device), d
         raise HTTPException(status_code=404, detail="Banner not found")
     banner.is_active = not banner.is_active
     db.commit()
+    cache.invalidate("about_banners")
     return {"id": banner.id, "is_active": banner.is_active}
 
 
@@ -303,8 +319,13 @@ async def toggle_banner(banner_id: int, device: str = Depends(require_device), d
 @router.get("/core-values")
 async def get_core_values(db: Session = Depends(get_db)):
     """Public & Admin: get core values ordered by order_index."""
+    cached_val = cache.get("about_core_values")
+    if cached_val is not None:
+        return cached_val
     values = db.query(AboutCoreValue).order_by(AboutCoreValue.order_index).all()
-    return [{"id": v.id, "title": v.title, "description": v.description, "icon_name": v.icon_name, "order_index": v.order_index} for v in values]
+    result = [{"id": v.id, "title": v.title, "description": v.description, "icon_name": v.icon_name, "order_index": v.order_index} for v in values]
+    cache.set("about_core_values", result)
+    return result
 
 @router.post("/core-values")
 async def add_core_value(req: CoreValueSchema, device: str = Depends(require_device), db: Session = Depends(get_db)):
@@ -313,6 +334,7 @@ async def add_core_value(req: CoreValueSchema, device: str = Depends(require_dev
     val = AboutCoreValue(title=req.title, description=req.description, icon_name=req.icon_name, order_index=max_order)
     db.add(val)
     db.commit()
+    cache.invalidate("about_core_values")
     db.refresh(val)
     return {"id": val.id, "title": val.title}
 
@@ -324,6 +346,7 @@ async def delete_core_value(value_id: int, device: str = Depends(require_device)
         raise HTTPException(status_code=404, detail="Not found")
     db.delete(val)
     db.commit()
+    cache.invalidate("about_core_values")
     return {"message": "Deleted"}
 
 

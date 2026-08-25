@@ -5,6 +5,7 @@ from typing import Optional, List
 import os, uuid, shutil
 
 from database import get_db
+from cache import cache
 from models import ContactSettings, ContactBanner, ContactInquiry, GoogleApiSettings
 from routers.auth import require_device
 from helpers import rewrite_url
@@ -81,29 +82,35 @@ class InquirySchema(BaseModel):
 async def get_contact_settings(response: Response, db: Session = Depends(get_db)):
     """Public: get contact settings for the public Contact Us page."""
     response.headers["Cache-Control"] = "public, max-age=60"
+    cached_val = cache.get("contact_settings")
+    if cached_val is not None:
+        return cached_val
     s = db.query(ContactSettings).first()
     if not s:
-        return {}
-    return {
-        "phone1": s.phone1, "phone2": s.phone2, "whatsapp": s.whatsapp,
-        "email1": s.email1, "email2": s.email2,
-        "address_line1": s.address_line1, "address_line2": s.address_line2,
-        "city": s.city, "state": s.state, "pin_code": s.pin_code, "country": s.country,
-        "weekday_hours": s.weekday_hours, "weekend_hours": s.weekend_hours,
-        "map_embed_url": s.map_embed_url,
-        "map_lat": s.map_lat, "map_lng": s.map_lng,
-        "facebook_url": s.facebook_url, "instagram_url": s.instagram_url,
-        "linkedin_url": s.linkedin_url, "youtube_url": s.youtube_url, "twitter_url": s.twitter_url,
-        "page_title": s.page_title, "page_subtitle": s.page_subtitle,
-        "get_in_touch_heading": s.get_in_touch_heading, "get_in_touch_description": s.get_in_touch_description,
-        "contact_email_label": s.contact_email_label, "contact_phone_label": s.contact_phone_label,
-        "registered_office_label": s.registered_office_label, "registered_office_city": s.registered_office_city,
-        "registered_office_address": s.registered_office_address,
-        "form_title": s.form_title, "form_subtitle": s.form_subtitle,
-        "state_options": s.state_options, "qualification_options": s.qualification_options,
-        "terms_text": s.terms_text, "terms_url": s.terms_url,
-        "success_message": s.success_message, "review_badges": s.review_badges,
-    }
+        result = {}
+    else:
+        result = {
+            "phone1": s.phone1, "phone2": s.phone2, "whatsapp": s.whatsapp,
+            "email1": s.email1, "email2": s.email2,
+            "address_line1": s.address_line1, "address_line2": s.address_line2,
+            "city": s.city, "state": s.state, "pin_code": s.pin_code, "country": s.country,
+            "weekday_hours": s.weekday_hours, "weekend_hours": s.weekend_hours,
+            "map_embed_url": s.map_embed_url,
+            "map_lat": s.map_lat, "map_lng": s.map_lng,
+            "facebook_url": s.facebook_url, "instagram_url": s.instagram_url,
+            "linkedin_url": s.linkedin_url, "youtube_url": s.youtube_url, "twitter_url": s.twitter_url,
+            "page_title": s.page_title, "page_subtitle": s.page_subtitle,
+            "get_in_touch_heading": s.get_in_touch_heading, "get_in_touch_description": s.get_in_touch_description,
+            "contact_email_label": s.contact_email_label, "contact_phone_label": s.contact_phone_label,
+            "registered_office_label": s.registered_office_label, "registered_office_city": s.registered_office_city,
+            "registered_office_address": s.registered_office_address,
+            "form_title": s.form_title, "form_subtitle": s.form_subtitle,
+            "state_options": s.state_options, "qualification_options": s.qualification_options,
+            "terms_text": s.terms_text, "terms_url": s.terms_url,
+            "success_message": s.success_message, "review_badges": s.review_badges,
+        }
+    cache.set("contact_settings", result)
+    return result
 
 @router.put("/settings")
 async def update_contact_settings(
@@ -120,6 +127,7 @@ async def update_contact_settings(
         setattr(s, field, val or None)
     db.commit()
     db.refresh(s)
+    cache.invalidate("contact_settings")
     return {"message": "Contact settings updated successfully."}
 
 # ══════════════════════════════════════════════════════
@@ -129,8 +137,13 @@ async def update_contact_settings(
 @router.get("/banners")
 async def get_banners(db: Session = Depends(get_db)):
     """Public: list active banners ordered by order_index."""
+    cached_val = cache.get("contact_banners")
+    if cached_val is not None:
+        return cached_val
     banners = db.query(ContactBanner).filter(ContactBanner.is_active == True).order_by(ContactBanner.order_index).all()
-    return [{"id": b.id, "image_url": rewrite_url(b.image_url), "caption": b.caption, "order_index": b.order_index} for b in banners]
+    result = [{"id": b.id, "image_url": rewrite_url(b.image_url), "caption": b.caption, "order_index": b.order_index} for b in banners]
+    cache.set("contact_banners", result)
+    return result
 
 @router.get("/banners/all")
 async def get_all_banners(device: str = Depends(require_device), db: Session = Depends(get_db)):
@@ -153,6 +166,7 @@ async def upload_banner(file: UploadFile = File(...), device: str = Depends(requ
     db.add(banner)
     db.commit()
     db.refresh(banner)
+    cache.invalidate("contact_banners")
     return {"id": banner.id, "image_url": banner.image_url, "order_index": banner.order_index}
 
 @router.delete("/banners/{banner_id}")
@@ -163,6 +177,7 @@ async def delete_banner(banner_id: int, device: str = Depends(require_device), d
         raise HTTPException(status_code=404, detail="Banner not found")
     db.delete(banner)
     db.commit()
+    cache.invalidate("contact_banners")
     return {"message": "Deleted"}
 
 @router.patch("/banners/{banner_id}/toggle")
@@ -173,6 +188,7 @@ async def toggle_banner(banner_id: int, device: str = Depends(require_device), d
         raise HTTPException(status_code=404, detail="Banner not found")
     banner.is_active = not banner.is_active
     db.commit()
+    cache.invalidate("contact_banners")
     return {"id": banner.id, "is_active": banner.is_active}
 
 # ══════════════════════════════════════════════════════

@@ -8,6 +8,7 @@ import "../app/home.css";
 import { BASE_URL } from "@/lib/config";
 import { apiFetch } from "@/lib/apiFetch";
 import { getSiteSettings } from "@/lib/siteSettingsCache";
+import { cachedFetch } from "@/lib/apiCache";
 
 function isAdminLoggedIn(): boolean {
   if (typeof window === "undefined") return false;
@@ -151,14 +152,14 @@ export default function PublicNavbar({
       }
     }).catch(() => {});
 
-    fetch(`${bUrl}/api/contact/settings`).then(r => r.json()).then(d => {
+    cachedFetch<Record<string, unknown>>(`${bUrl}/api/contact/settings`).then(d => {
       localStorage.setItem("iinm_contact_settings", JSON.stringify(d));
       if (!initialContactSettings) {
         setContactInfo(d);
       }
     }).catch(() => {});
 
-    fetch(`${bUrl}/api/settings/navbar`).then(r => r.json()).then(d => {
+    cachedFetch<NavbarItem[]>(`${bUrl}/api/settings/navbar`).then(d => {
       localStorage.setItem("iinm_navbar_items", JSON.stringify(d));
       if (!initialNavbarItems) {
         setNavbarItems(d);

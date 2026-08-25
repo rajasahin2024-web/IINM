@@ -974,6 +974,26 @@ class BlogPost(Base):
     reactions   = relationship("BlogReaction", back_populates="post", cascade="all, delete-orphan")
 
 
+class StaticPage(Base):
+    """Standalone CMS pages (e.g. Privacy Policy, Terms, About-Us variants).
+    Mirrors BlogPost but without author/category/tags — pages are standalone."""
+    __tablename__ = "static_pages"
+    id              = Column(Integer, primary_key=True, index=True)
+    title           = Column(String(500), nullable=False)
+    slug            = Column(String(500), unique=True, nullable=False)
+    excerpt         = Column(Text, nullable=True)        # optional subtitle/summary
+    content         = Column(Text, nullable=True)        # full HTML body
+    featured_image  = Column(Text, nullable=True)        # optional URL
+    status          = Column(String(20), default="draft") # draft | published | archived
+    seo_title       = Column(String(500), nullable=True)
+    seo_description = Column(Text, nullable=True)
+    seo_keywords    = Column(Text, nullable=True)
+    show_in_sitemap = Column(Boolean, default=True)
+    published_at    = Column(DateTime(timezone=True), nullable=True)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at      = Column(DateTime(timezone=True), onupdate=func.now())
+
+
 class BlogComment(Base):
     __tablename__ = "blog_comments"
     id          = Column(Integer, primary_key=True, index=True)
@@ -1103,6 +1123,23 @@ class ContactInquiry(Base):
     message       = Column(Text, nullable=True)
     is_read       = Column(Boolean, default=False)
     created_at    = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# ══════════════════════════════════════════════════════
+#  BROCHURE LEADS — Course brochure download lead capture
+# ══════════════════════════════════════════════════════
+
+class BrochureLead(Base):
+    __tablename__ = "brochure_lead"
+    id         = Column(Integer, primary_key=True, index=True)
+    course_id  = Column(Integer, ForeignKey("courses.id", ondelete="SET NULL"), nullable=True, index=True)
+    name       = Column(String(255), nullable=False)
+    phone      = Column(String(50), nullable=False, index=True)
+    email      = Column(String(255), nullable=True)
+    lead_type  = Column(String(100), nullable=True)  # Student, Business Owner, Working Professional, Others
+    source     = Column(String(100), default="brochure_download")
+    is_read    = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 # ══════════════════════════════════════════════════════
@@ -1605,4 +1642,99 @@ class GscQueryStat(Base):
     ctr         = Column(Float, default=0)
     position    = Column(Float, default=0)
     date        = Column(Date, index=True)
+
+
+# ══════════════════════════════════════════════════════
+#  CAREER MODULE — positions, job posts, applications
+# ══════════════════════════════════════════════════════
+
+class CareerSettings(Base):
+    """Singleton row holding public Career page content."""
+    __tablename__ = "career_settings"
+    id                       = Column(Integer, primary_key=True, index=True)
+    hero_eyebrow             = Column(String(255), nullable=True)
+    hero_title               = Column(String(500), nullable=True)
+    hero_subtitle            = Column(Text, nullable=True)
+    hero_image_url           = Column(Text, nullable=True)
+    intro_eyebrow            = Column(String(255), nullable=True)
+    intro_title              = Column(String(500), nullable=True)
+    intro_text               = Column(Text, nullable=True)
+    culture_eyebrow          = Column(String(255), nullable=True)
+    culture_title            = Column(String(500), nullable=True)
+    culture_text             = Column(Text, nullable=True)
+    culture_image_url        = Column(Text, nullable=True)
+    perks_json               = Column(Text, nullable=True)   # JSON array of {icon,title,description}
+    cta_eyebrow              = Column(String(255), nullable=True)
+    cta_title                = Column(String(500), nullable=True)
+    cta_text                 = Column(Text, nullable=True)
+    cta_button_label         = Column(String(100), nullable=True)
+    open_form_title          = Column(String(255), nullable=True)
+    open_form_subtitle       = Column(Text, nullable=True)
+    open_form_success_message= Column(Text, nullable=True)
+    email_to_notify          = Column(String(255), nullable=True)
+    updated_at               = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
+class CareerPosition(Base):
+    """Reusable role template (master) — e.g. Faculty, Counsellor."""
+    __tablename__ = "career_positions"
+    id          = Column(Integer, primary_key=True, index=True)
+    title       = Column(String(255), nullable=False)
+    slug        = Column(String(255), unique=True, index=True, nullable=False)
+    department  = Column(String(100), nullable=True)
+    description = Column(Text, nullable=True)
+    is_active   = Column(Boolean, default=True)
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at  = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
+class CareerJobPost(Base):
+    """A published opening tied to a CareerPosition."""
+    __tablename__ = "career_job_posts"
+    id                  = Column(Integer, primary_key=True, index=True)
+    position_id         = Column(Integer, ForeignKey("career_positions.id", ondelete="SET NULL"), nullable=True, index=True)
+    title               = Column(String(255), nullable=False)
+    slug                = Column(String(255), unique=True, index=True, nullable=False)
+    summary             = Column(Text, nullable=True)
+    description         = Column(Text, nullable=True)
+    requirements        = Column(Text, nullable=True)
+    responsibilities   = Column(Text, nullable=True)
+    location            = Column(String(100), nullable=True)
+    job_type            = Column(String(50), default="full_time")   # full_time/part_time/contract/internship/remote
+    experience_min      = Column(Integer, nullable=True)
+    experience_max      = Column(Integer, nullable=True)
+    salary_min          = Column(Integer, nullable=True)
+    salary_max          = Column(Integer, nullable=True)
+    salary_currency     = Column(String(10), default="INR")
+    vacancies           = Column(Integer, default=1)
+    application_deadline= Column(Date, nullable=True)
+    status              = Column(String(20), default="open")        # open/closed/draft
+    is_featured         = Column(Boolean, default=False)
+    created_at          = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at          = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+    published_at        = Column(DateTime(timezone=True), nullable=True)
+
+
+class CareerApplication(Base):
+    """A candidate's submission (Job Request)."""
+    __tablename__ = "career_applications"
+    id                  = Column(Integer, primary_key=True, index=True)
+    job_post_id         = Column(Integer, ForeignKey("career_job_posts.id", ondelete="SET NULL"), nullable=True, index=True)
+    full_name           = Column(String(255), nullable=False)
+    email               = Column(String(255), nullable=False)
+    phone               = Column(String(50), nullable=True)
+    cv_url              = Column(String(500), nullable=True)
+    cover_note          = Column(Text, nullable=True)
+    linkedin_url        = Column(String(500), nullable=True)
+    github_url          = Column(String(500), nullable=True)
+    portfolio_url       = Column(String(500), nullable=True)
+    twitter_url         = Column(String(500), nullable=True)
+    expected_salary     = Column(Integer, nullable=True)
+    notice_period_days  = Column(Integer, nullable=True)
+    years_experience    = Column(Integer, nullable=True)
+    status              = Column(String(20), default="new")   # new/reviewing/interview/hired/rejected
+    admin_notes         = Column(Text, nullable=True)
+    is_read             = Column(Boolean, default=False)
+    created_at          = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at          = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 

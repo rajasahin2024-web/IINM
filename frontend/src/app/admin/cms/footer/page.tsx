@@ -4,6 +4,7 @@ import { AdminProvider } from "../../components/ProtectedAdmin";
 import { useToast } from "../../components/ToastProvider";
 import { apiFetch } from "@/lib/apiFetch";
 import { API_BASE_URL } from "@/lib/config";
+import { invalidateCache } from "@/lib/apiCache";
 import { Icon } from "../../icons";
 
 interface FooterMenuItem {
@@ -69,6 +70,7 @@ function FooterMenuCmsForm() {
         body: JSON.stringify(data),
       });
       if (res.ok) {
+        invalidateCache(`${API_BASE_URL}/settings/footer-menu`);
         showToast("Footer menu saved successfully", "success");
       } else {
         const err = await res.json();

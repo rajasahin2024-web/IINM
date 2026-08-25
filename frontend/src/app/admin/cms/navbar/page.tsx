@@ -4,6 +4,7 @@ import { AdminProvider } from "../../components/ProtectedAdmin";
 import { useToast } from "../../components/ToastProvider";
 import { apiFetch } from "@/lib/apiFetch";
 import { API_BASE_URL } from "@/lib/config";
+import { invalidateCache } from "@/lib/apiCache";
 import { Icon } from "../../icons";
 
 interface NavbarItem {
@@ -133,6 +134,7 @@ function NavbarCmsForm() {
 
       if (res.ok) {
         showToast(editingItem ? "Menu item updated" : "Menu item added", "success");
+        invalidateCache(`${API_BASE_URL}/settings/navbar`);
         setIsModalOpen(false);
         fetchNavbar();
       } else {
@@ -157,6 +159,7 @@ function NavbarCmsForm() {
 
       if (res.ok) {
         showToast("Menu item deleted successfully", "success");
+        invalidateCache(`${API_BASE_URL}/settings/navbar`);
         fetchNavbar();
       } else {
         showToast("Failed to delete item", "error");
