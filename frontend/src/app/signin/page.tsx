@@ -1,25 +1,15 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { API_BASE_URL, BASE_URL } from "@/lib/config";
 import { toast } from "react-hot-toast";
+import CourseCard, { CourseCardType } from "@/components/CourseCard";
+import "../courses/courses.css";
 
 interface SiteSettingsData {
   site_name: string;
   logo_url: string;
-}
-
-interface CourseItem {
-  id: number;
-  title: string;
-  slug: string;
-  thumbnail_url: string | null;
-  price: number | null;
-  discount_price: number | null;
-  currency: string;
-  skill_level: string | null;
-  instructor_name: string | null;
-  instructors?: { id: number; name: string }[];
+  dark_logo_url?: string;
 }
 
 interface ReviewItem {
@@ -42,29 +32,13 @@ export default function StudentSignIn() {
   const [siteSettings, setSiteSettings] = useState<SiteSettingsData>({
     site_name: "IINM",
     logo_url: "",
+    dark_logo_url: "",
   });
 
-  const [courses, setCourses] = useState<CourseItem[]>([]);
+  const [courses, setCourses] = useState<CourseCardType[]>([]);
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
-  const [activeCourseIdx, setActiveCourseIdx] = useState(0);
-  const [activeReviewIdx, setActiveReviewIdx] = useState(0);
-
-  // Auto-slide courses & reviews
-  useEffect(() => {
-    if (courses.length <= 1) return;
-    const interval = setInterval(() => {
-      setActiveCourseIdx((prev) => (prev + 1) % courses.length);
-    }, 4500);
-    return () => clearInterval(interval);
-  }, [courses.length]);
-
-  useEffect(() => {
-    if (reviews.length <= 1) return;
-    const interval = setInterval(() => {
-      setActiveReviewIdx((prev) => (prev + 1) % reviews.length);
-    }, 6000);
-    return () => clearInterval(interval);
-  }, [reviews.length]);
+  const [activeCourseIndex, setActiveCourseIndex] = useState(0);
+  const [activeReviewIndex, setActiveReviewIndex] = useState(0);
 
   // Fetch Site Settings, Courses, Reviews
   useEffect(() => {
@@ -81,19 +55,20 @@ export default function StudentSignIn() {
           setSiteSettings({
             site_name: siteData.site_name || "IINM",
             logo_url: siteData.logo_url || "",
+            dark_logo_url: siteData.dark_logo_url || "",
           });
         }
 
         if (coursesRes.status === "fulfilled" && coursesRes.value.ok) {
           const courseData = await coursesRes.value.json();
           const items = Array.isArray(courseData) ? courseData : courseData.items || [];
-          if (items.length > 0) setCourses(items.slice(0, 8));
+          if (items.length > 0) setCourses(items);
         }
 
         if (reviewsRes.status === "fulfilled" && reviewsRes.value.ok) {
           const revData = await reviewsRes.value.json();
           const items = Array.isArray(revData) ? revData : revData.reviews || [];
-          if (items.length > 0) setReviews(items.slice(0, 6));
+          if (items.length > 0) setReviews(items);
         }
       } catch {
         /* fallback content will render */
@@ -102,51 +77,89 @@ export default function StudentSignIn() {
     fetchData();
   }, []);
 
+  // Auto-slide courses & reviews
+  useEffect(() => {
+    if (courses.length <= 1) return;
+    const interval = setInterval(() => {
+      setActiveCourseIndex((prev) => (prev + 1) % courses.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [courses.length]);
+
+  useEffect(() => {
+    if (reviews.length <= 1) return;
+    const interval = setInterval(() => {
+      setActiveReviewIndex((prev) => (prev + 1) % reviews.length);
+    }, 6000);
+    return () => clearInterval(interval);
+  }, [reviews.length]);
+
   // Fallback courses if DB empty
-  const displayCourses = courses.length > 0 ? courses : [
+  const displayCourses: CourseCardType[] = courses.length > 0 ? courses : [
     {
       id: 1,
-      title: "Mastering AI Agents & Autonomous Workflows",
-      slug: "ai-agents",
+      slug: "ai-agents-automation",
+      title: "Executive AI Agents & Workflow Automation",
+      description: "Master autonomous AI systems, LangChain, and enterprise agent architecture.",
       thumbnail_url: null,
       price: 24999,
       discount_price: 14999,
+      price_usd: 299,
+      discount_price_usd: 179,
       currency: "INR",
+      is_free: false,
+      is_featured: true,
+      is_new: false,
       skill_level: "Advanced",
-      instructor_name: "Industry Faculty",
+      instructor_name: "IINM Research Faculty",
+      has_certificate: true,
     },
     {
       id: 2,
-      title: "Enterprise Full-Stack & Cloud Architecture",
-      slug: "full-stack-cloud",
+      slug: "cloud-fullstack-ai",
+      title: "Enterprise Full-Stack & Generative AI Systems",
+      description: "End-to-end cloud engineering with Next.js, FastAPI, vector databases, and microservices.",
       thumbnail_url: null,
       price: 29999,
       discount_price: 19999,
+      price_usd: 349,
+      discount_price_usd: 239,
       currency: "INR",
+      is_free: false,
+      is_featured: true,
+      is_new: true,
       skill_level: "Comprehensive",
-      instructor_name: "Lead Architects",
+      instructor_name: "Principal Engineers",
+      has_certificate: true,
     },
     {
       id: 3,
-      title: "Executive Prompt Engineering & LLMOps",
-      slug: "llmops-mastery",
+      slug: "llmops-fine-tuning",
+      title: "Advanced LLMOps, RAG & Model Fine-Tuning",
+      description: "Deploy and optimize production-grade foundational models at scale.",
       thumbnail_url: null,
-      price: 18999,
-      discount_price: 11999,
+      price: 19999,
+      discount_price: 12999,
+      price_usd: 249,
+      discount_price_usd: 159,
       currency: "INR",
+      is_free: false,
+      is_featured: false,
+      is_new: true,
       skill_level: "Professional",
-      instructor_name: "AI Researchers",
+      instructor_name: "AI Scientists",
+      has_certificate: true,
     },
   ];
 
   // Fallback reviews if DB empty
-  const displayReviews = reviews.length > 0 ? reviews : [
+  const displayReviews: ReviewItem[] = reviews.length > 0 ? reviews : [
     {
       id: 1,
       student_name: "Sneha Mukherjee",
       role_title: "AI Engineer",
-      company_name: "Global Tech",
-      feedback_text: "The structured curriculum and 1-on-1 mentor guidance transformed my engineering career. The live projects are unmatched.",
+      company_name: "Global Tech Inc.",
+      feedback_text: "The structured curriculum and 1-on-1 mentorship transformed my career trajectory. The live projects and real-time guidance are unparalleled.",
       avatar_url: null,
       star_rating: 5,
     },
@@ -154,8 +167,8 @@ export default function StudentSignIn() {
       id: 2,
       student_name: "Rohan Varma",
       role_title: "Product Architect",
-      company_name: "Fintech Leader",
-      feedback_text: "Hands down the most rigorous, industry-relevant curriculum in India. Exceptional faculty and real-time support.",
+      company_name: "FinTech Innovation",
+      feedback_text: "Hands down the most rigorous, industry-relevant curriculum in India. Exceptional faculty office hours and seamless doubt resolution.",
       avatar_url: null,
       star_rating: 5,
     },
@@ -163,15 +176,15 @@ export default function StudentSignIn() {
       id: 3,
       student_name: "Pooja Hegde",
       role_title: "Data Analyst",
-      company_name: "Consulting Co.",
-      feedback_text: "I landed my dream role within 2 months of batch completion. The doubt-solving and peer community are incredible.",
+      company_name: "Analytics Global",
+      feedback_text: "I transitioned into AI analytics within 2 months of batch completion. The peer community and career coaching exceeded all expectations.",
       avatar_url: null,
       star_rating: 5,
     },
   ];
 
-  const currentCourse = displayCourses[activeCourseIdx % displayCourses.length];
-  const currentReview = displayReviews[activeReviewIdx % displayReviews.length];
+  const currentCourse = displayCourses[activeCourseIndex % displayCourses.length];
+  const currentReview = displayReviews[activeReviewIndex % displayReviews.length];
 
   const resolveImage = (url: string | null | undefined) => {
     if (!url) return "";
@@ -179,6 +192,8 @@ export default function StudentSignIn() {
     if (url.startsWith("/")) return `${BASE_URL}${url}`;
     return url;
   };
+
+  const darkLogo = siteSettings.dark_logo_url || siteSettings.logo_url;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -200,10 +215,10 @@ export default function StudentSignIn() {
 
       const data = await res.json();
       const student = data.student;
-      toast.success(`Welcome back, ${student?.first_name || "Student"}! Access granted.`, {
+      toast.success(`Welcome back, ${student?.first_name || "Student"}! Login successful.`, {
         duration: 4000,
         style: {
-          background: "#0a0f1d",
+          background: "#0a1628",
           color: "#f8fafc",
           border: "1px solid rgba(255,255,255,0.1)",
           fontSize: "14px",
@@ -212,199 +227,172 @@ export default function StudentSignIn() {
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "An unexpected error occurred";
-      setError(msg === "Failed to fetch" ? "Unable to reach server. Please check your connection." : msg);
+      setError(msg === "Failed to fetch" ? "Unable to connect to server. Please check your connection." : msg);
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div className="ep-viewport">
-      {/* ── Background Ambience ── */}
-      <div className="ep-bg-glow-1" />
-      <div className="ep-bg-glow-2" />
-      <div className="ep-bg-grid" />
+  const nextCourse = () => {
+    setActiveCourseIndex((prev) => (prev + 1) % displayCourses.length);
+  };
 
-      <div className="ep-canvas">
+  const prevCourse = () => {
+    setActiveCourseIndex((prev) => (prev - 1 + displayCourses.length) % displayCourses.length);
+  };
+
+  return (
+    <div className="spl-page">
+      {/* ── Background Glows & Ambience ── */}
+      <div className="spl-glow-red" />
+      <div className="spl-glow-blue" />
+      <div className="spl-fine-grid" />
+
+      <div className="spl-container">
         {/* ════════════════════════════════════════════════════
-            LEFT: Enterprise University Showcase (Desktop/Tablet)
+            LEFT COLUMN: Live Courses & Student Reviews Showcase
            ════════════════════════════════════════════════════ */}
-        <div className="ep-showcase">
-          {/* Top Brand & Institutional Crest */}
-          <div className="ep-showcase-header">
-            <Link href="/" className="ep-brand">
-              {siteSettings.logo_url ? (
+        <div className="spl-showcase-column">
+          {/* Brand Logo (Dark Logo without text name) */}
+          <div className="spl-brand-row">
+            <Link href="/" className="spl-brand-link" aria-label="Home">
+              {darkLogo ? (
                 <img
-                  src={siteSettings.logo_url}
-                  alt={siteSettings.site_name}
-                  className="ep-brand-logo"
+                  src={resolveImage(darkLogo)}
+                  alt="Logo"
+                  className="spl-dark-logo"
                 />
               ) : (
-                <div className="ep-brand-crest">
-                  <span>{siteSettings.site_name?.[0] || "I"}</span>
+                <div className="spl-logo-badge">
+                  <span>I</span>
                 </div>
               )}
-              <div className="ep-brand-text">
-                <span className="ep-brand-name">{siteSettings.site_name || "IINM"}</span>
-                <span className="ep-brand-tagline">Institute of Innovation &amp; Management</span>
-              </div>
             </Link>
-
-            <div className="ep-portal-badge">
-              <span className="ep-pulse-dot" />
-              <span>LIVE ADMISSIONS &amp; ACADEMICS</span>
-            </div>
           </div>
 
-          {/* Centerpiece: Hero Message */}
-          <div className="ep-showcase-center">
-            <div className="ep-hero-tag">
-              <span>Next-Gen Career Excellence</span>
-            </div>
-            <h1 className="ep-hero-title">
-              Empowering Future <span className="ep-crimson-text">Leaders</span> with Industry Mastery.
-            </h1>
-            <p className="ep-hero-sub">
-              Access real-time lecture streams, curriculum tracking, interactive assignments, and direct faculty office hours.
-            </p>
-          </div>
-
-          {/* ── Dynamic Live Course Spotlight Slider ── */}
-          <div className="ep-course-spotlight">
-            <div className="ep-spotlight-top">
-              <div className="ep-spotlight-label">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                </svg>
-                <span>FEATURED CURRICULUM</span>
+          {/* Section 1: Live Courses Slider (/courses exact cards) */}
+          <div className="spl-courses-section">
+            <div className="spl-section-header">
+              <div className="spl-header-left">
+                <span className="spl-badge-tag">EXECUTIVE CURRICULUM</span>
+                <h2 className="spl-section-title">Industry Masterclasses</h2>
               </div>
-              <div className="ep-slider-dots">
-                {displayCourses.slice(0, 5).map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setActiveCourseIdx(i)}
-                    className={`ep-dot ${activeCourseIdx % Math.min(displayCourses.length, 5) === i ? "ep-dot-active" : ""}`}
-                    aria-label={`Slide ${i + 1}`}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="ep-course-card">
-              <div className="ep-course-thumb-box">
-                {currentCourse.thumbnail_url ? (
-                  <img
-                    src={resolveImage(currentCourse.thumbnail_url)}
-                    alt={currentCourse.title}
-                    className="ep-course-img"
-                  />
-                ) : (
-                  <div className="ep-course-placeholder">
-                    <span>AI</span>
-                  </div>
-                )}
-                {currentCourse.skill_level && (
-                  <span className="ep-level-pill">{currentCourse.skill_level}</span>
-                )}
-              </div>
-
-              <div className="ep-course-info">
-                <h3 className="ep-course-title">{currentCourse.title}</h3>
-                <div className="ep-course-meta">
-                  <span className="ep-instructor-name">
-                    Faculty: {currentCourse.instructor_name || "IINM Lead Faculty"}
-                  </span>
-                  {currentCourse.discount_price && (
-                    <span className="ep-price-tag">
-                      ₹{currentCourse.discount_price.toLocaleString()}
-                    </span>
-                  )}
+              <div className="spl-slider-controls">
+                <button
+                  type="button"
+                  onClick={prevCourse}
+                  className="spl-ctrl-btn"
+                  aria-label="Previous Course"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                    <polyline points="15 18 9 12 15 6" />
+                  </svg>
+                </button>
+                <div className="spl-course-counter">
+                  {(activeCourseIndex % displayCourses.length) + 1} / {displayCourses.length}
                 </div>
+                <button
+                  type="button"
+                  onClick={nextCourse}
+                  className="spl-ctrl-btn"
+                  aria-label="Next Course"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </button>
               </div>
+            </div>
+
+            {/* Exact CourseCard from /courses */}
+            <div className="spl-card-frame">
+              <CourseCard
+                course={currentCourse}
+                baseUrl={BASE_URL}
+                listView={false}
+                wishlisted={false}
+                onWishlist={() => {}}
+                onPlayVideo={() => {}}
+              />
             </div>
           </div>
 
-          {/* ── Student Testimonial / Review Ticker ── */}
-          <div className="ep-review-ticker">
-            <div className="ep-review-header">
-              <div className="ep-stars">
+          {/* Section 2: Home Page Student Reviews / Wall of Love */}
+          <div className="spl-reviews-section">
+            <div className="spl-review-top-bar">
+              <div className="spl-stars-row">
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <svg key={i} width="12" height="12" viewBox="0 0 24 24" fill="#e63946">
+                  <svg
+                    key={i}
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill={i < currentReview.star_rating ? "#f59e0b" : "#475569"}
+                  >
                     <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                   </svg>
                 ))}
               </div>
-              <span className="ep-review-badge">Verified Learner Review</span>
+              <span className="spl-verified-tag">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                Verified Student Review
+              </span>
             </div>
 
-            <p className="ep-review-quote">&ldquo;{currentReview.feedback_text}&rdquo;</p>
+            <p className="spl-review-text">&ldquo;{currentReview.feedback_text}&rdquo;</p>
 
-            <div className="ep-review-author">
-              <div className="ep-author-avatar">
+            <div className="spl-reviewer-footer">
+              <div className="spl-reviewer-avatar">
                 {currentReview.avatar_url ? (
                   <img src={resolveImage(currentReview.avatar_url)} alt={currentReview.student_name} />
                 ) : (
                   <span>{currentReview.student_name?.[0] || "S"}</span>
                 )}
               </div>
-              <div className="ep-author-details">
-                <div className="ep-author-name">{currentReview.student_name}</div>
-                <div className="ep-author-role">
-                  {currentReview.role_title || "Batch Scholar"} {currentReview.company_name ? `• ${currentReview.company_name}` : ""}
+              <div className="spl-reviewer-info">
+                <div className="spl-reviewer-name">{currentReview.student_name}</div>
+                <div className="spl-reviewer-role">
+                  {currentReview.role_title || "Batch Scholar"}{" "}
+                  {currentReview.company_name && <span className="spl-co-name">• {currentReview.company_name}</span>}
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* Institutional Stats Strip */}
-          <div className="ep-stats-strip">
-            <div className="ep-stat-item">
-              <span className="ep-stat-val">100%</span>
-              <span className="ep-stat-lbl">Live Mentorship</span>
-            </div>
-            <div className="ep-stat-item">
-              <span className="ep-stat-val">4.9/5</span>
-              <span className="ep-stat-lbl">Student Rating</span>
-            </div>
-            <div className="ep-stat-item">
-              <span className="ep-stat-val">50+</span>
-              <span className="ep-stat-lbl">Hiring Partners</span>
             </div>
           </div>
         </div>
 
         {/* ════════════════════════════════════════════════════
-            RIGHT: High-Precision Student Portal Card
+            RIGHT COLUMN: Enterprise Student Portal Login Card
            ════════════════════════════════════════════════════ */}
-        <div className="ep-auth-panel">
-          <div className="ep-auth-card">
-            {/* Mobile Header Brand Bar */}
-            <div className="ep-mobile-brand">
-              <Link href="/" className="ep-brand">
-                {siteSettings.logo_url ? (
-                  <img src={siteSettings.logo_url} alt={siteSettings.site_name} className="ep-brand-logo" />
+        <div className="spl-auth-column">
+          <div className="spl-auth-card">
+            {/* Mobile-Only Dark Logo */}
+            <div className="spl-mobile-logo-bar">
+              <Link href="/" aria-label="Home">
+                {darkLogo ? (
+                  <img src={resolveImage(darkLogo)} alt="Logo" className="spl-dark-logo" />
                 ) : (
-                  <div className="ep-brand-crest">
-                    <span>{siteSettings.site_name?.[0] || "I"}</span>
+                  <div className="spl-logo-badge">
+                    <span>I</span>
                   </div>
                 )}
-                <span className="ep-brand-name">{siteSettings.site_name || "IINM"}</span>
               </Link>
-              <div className="ep-mobile-badge">Portal</div>
             </div>
 
-            {/* Title & Hierarchy */}
-            <div className="ep-auth-header">
-              <div className="ep-auth-pill">STUDENT ACCESS</div>
-              <h2 className="ep-auth-title">Sign in to your Portal</h2>
-              <p className="ep-auth-desc">
-                Enter your registered credentials to access your academic dashboard, lectures &amp; materials.
+            {/* Title with Site Title */}
+            <div className="spl-auth-heading">
+              <h1 className="spl-portal-title">
+                Student Portal <span className="spl-divider-bar">|</span> <span className="spl-site-title">{siteSettings.site_name || "IINM"}</span>
+              </h1>
+              <p className="spl-portal-subtitle">
+                Enter your registered student credentials to access your batches, syllabus &amp; live classes.
               </p>
             </div>
 
-            {/* Error Message */}
+            {/* Error banner */}
             {error && (
-              <div className="ep-error-banner">
+              <div className="spl-error-banner">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="10" />
                   <line x1="12" y1="8" x2="12" y2="12" />
@@ -415,13 +403,13 @@ export default function StudentSignIn() {
             )}
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="ep-form">
-              <div className="ep-field">
-                <label htmlFor="identifier" className="ep-label">
+            <form onSubmit={handleSubmit} className="spl-form">
+              <div className="spl-field">
+                <label htmlFor="identifier" className="spl-label">
                   Registered Phone or Email
                 </label>
-                <div className="ep-input-wrap">
-                  <span className="ep-input-icon">
+                <div className="spl-input-wrap">
+                  <span className="spl-input-icon">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                       <circle cx="12" cy="7" r="4" />
@@ -432,30 +420,30 @@ export default function StudentSignIn() {
                     type="text"
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="e.g. +91 98765 43210 or name@domain.com"
+                    placeholder="name@example.com or +91..."
                     required
                     autoComplete="username"
-                    className="ep-input"
+                    className="spl-input"
                   />
                 </div>
               </div>
 
-              <div className="ep-field">
-                <div className="ep-label-row">
-                  <label htmlFor="password" className="ep-label">
+              <div className="spl-field">
+                <div className="spl-label-row">
+                  <label htmlFor="password" className="spl-label">
                     Password
                   </label>
                   <a
-                    href="https://wa.me/?text=Hello%20IINM%20Support%2C%20I%20need%20assistance%20recovering%20my%20student%20account%20password."
+                    href="https://wa.me/?text=Hello%20IINM%20Support%2C%20I%20need%20assistance%20recovering%20my%20student%20password."
                     target="_blank"
                     rel="noreferrer"
-                    className="ep-forgot-link"
+                    className="spl-help-link"
                   >
                     Need Help?
                   </a>
                 </div>
-                <div className="ep-input-wrap">
-                  <span className="ep-input-icon">
+                <div className="spl-input-wrap">
+                  <span className="spl-input-icon">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                       <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
@@ -466,15 +454,15 @@ export default function StudentSignIn() {
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your confidential password"
+                    placeholder="Enter confidential password"
                     required
                     autoComplete="current-password"
-                    className="ep-input ep-input-pwd"
+                    className="spl-input spl-input-pwd"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="ep-pwd-btn"
+                    className="spl-pwd-toggle"
                     aria-label="Toggle password visibility"
                   >
                     {showPassword ? (
@@ -492,9 +480,9 @@ export default function StudentSignIn() {
                 </div>
               </div>
 
-              {/* Primary Action Button */}
-              <button type="submit" disabled={loading} className="ep-submit-btn">
-                <span>{loading ? "Authenticating Session..." : "Sign In to Portal"}</span>
+              {/* Obsidian Black / Red Transition Submit Button */}
+              <button type="submit" disabled={loading} className="spl-btn-submit">
+                <span>{loading ? "Authenticating..." : "Sign In to Portal"}</span>
                 {!loading && (
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                     <line x1="5" y1="12" x2="19" y2="12" />
@@ -504,19 +492,18 @@ export default function StudentSignIn() {
               </button>
             </form>
 
-            {/* Bottom Support & Security Assurance */}
-            <div className="ep-auth-footer">
-              <div className="ep-security-note">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2">
+            <div className="spl-card-bottom">
+              <div className="spl-security-badge">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.2">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 </svg>
-                <span>256-Bit TLS Encrypted Academic Session</span>
+                <span>Encrypted Academic Session</span>
               </div>
 
-              <div className="ep-enrollment-help">
-                <span>Not registered in a batch yet?</span>{" "}
-                <Link href="/courses" className="ep-explore-link">
-                  Explore Masterclasses
+              <div className="spl-admissions-link">
+                <span>New to the institute?</span>{" "}
+                <Link href="/courses" className="spl-enroll-link">
+                  Explore Courses
                 </Link>
               </div>
             </div>
@@ -524,362 +511,238 @@ export default function StudentSignIn() {
         </div>
       </div>
 
-      {/* ── World-Class Scoped Styles ── */}
+      {/* ── Scoped Layout Styles ── */}
       <style jsx global>{`
-        /* Viewport Reset & Background */
-        .ep-viewport {
+        /* Viewport Canvas */
+        .spl-page {
           min-height: 100vh;
           width: 100%;
-          background: #060913;
+          background: #080c16;
           color: #f8fafc;
           display: flex;
           align-items: center;
           justify-content: center;
           position: relative;
           overflow-x: hidden;
-          font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
           -webkit-font-smoothing: antialiased;
         }
 
-        .ep-bg-glow-1 {
+        .spl-glow-red {
           position: absolute;
-          top: -150px;
-          left: -100px;
-          width: 600px;
-          height: 600px;
+          top: -120px;
+          left: -80px;
+          width: 550px;
+          height: 550px;
           border-radius: 50%;
-          background: radial-gradient(circle, rgba(230, 57, 70, 0.12) 0%, rgba(10, 15, 29, 0) 70%);
+          background: radial-gradient(circle, rgba(230, 57, 70, 0.14) 0%, rgba(8, 12, 22, 0) 70%);
           filter: blur(80px);
           pointer-events: none;
         }
 
-        .ep-bg-glow-2 {
+        .spl-glow-blue {
           position: absolute;
-          bottom: -150px;
-          right: -100px;
-          width: 700px;
-          height: 700px;
+          bottom: -120px;
+          right: -80px;
+          width: 650px;
+          height: 650px;
           border-radius: 50%;
-          background: radial-gradient(circle, rgba(30, 58, 138, 0.18) 0%, rgba(10, 15, 29, 0) 70%);
+          background: radial-gradient(circle, rgba(14, 116, 144, 0.12) 0%, rgba(8, 12, 22, 0) 70%);
           filter: blur(90px);
           pointer-events: none;
         }
 
-        .ep-bg-grid {
+        .spl-fine-grid {
           position: absolute;
           inset: 0;
           background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
             linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-          background-size: 40px 40px;
+          background-size: 32px 32px;
           pointer-events: none;
         }
 
-        .ep-canvas {
+        .spl-container {
           position: relative;
           z-index: 10;
           width: 100%;
-          max-width: 1240px;
+          max-width: 1180px;
           min-height: 100vh;
           display: flex;
           align-items: center;
-          padding: 40px 24px;
-          gap: 60px;
+          padding: 36px 24px;
+          gap: 50px;
         }
 
-        /* ── Left Showcase Column ── */
-        .ep-showcase {
+        /* ── Left Column: Showcase ── */
+        .spl-showcase-column {
           flex: 1.15;
           display: flex;
           flex-direction: column;
-          gap: 28px;
+          gap: 22px;
+          min-width: 0;
         }
 
-        .ep-showcase-header {
+        .spl-brand-row {
           display: flex;
           align-items: center;
-          justify-content: space-between;
         }
 
-        .ep-brand {
-          display: flex;
+        .spl-brand-link {
+          display: inline-flex;
           align-items: center;
-          gap: 12px;
           text-decoration: none;
         }
 
-        .ep-brand-logo {
-          height: 38px;
-          max-width: 130px;
+        .spl-dark-logo {
+          height: 42px;
+          max-width: 160px;
           object-fit: contain;
         }
 
-        .ep-brand-crest {
-          width: 40px;
-          height: 40px;
+        .spl-logo-badge {
+          width: 42px;
+          height: 42px;
           border-radius: 10px;
-          background: linear-gradient(135deg, #e63946 0%, #991b1b 100%);
+          background: linear-gradient(135deg, #e63946 0%, #0a1628 100%);
           color: #ffffff;
           font-weight: 700;
-          font-size: 18px;
+          font-size: 20px;
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 4px 16px rgba(230, 57, 70, 0.35);
+          box-shadow: 0 4px 16px rgba(230, 57, 70, 0.3);
         }
 
-        .ep-brand-text {
-          display: flex;
-          flex-direction: column;
-        }
-
-        .ep-brand-name {
-          font-size: 18px;
-          font-weight: 700;
-          letter-spacing: -0.3px;
-          color: #ffffff;
-        }
-
-        .ep-brand-tagline {
-          font-size: 11px;
-          color: #94a3b8;
-          letter-spacing: 0.2px;
-        }
-
-        .ep-portal-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          background: rgba(230, 57, 70, 0.1);
-          border: 1px solid rgba(230, 57, 70, 0.25);
-          color: #ff8b94;
-          font-size: 11px;
-          font-weight: 600;
-          letter-spacing: 0.6px;
-          padding: 6px 14px;
-          border-radius: 100px;
-        }
-
-        .ep-pulse-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: #e63946;
-          box-shadow: 0 0 8px #e63946;
-          animation: epPulse 2s infinite ease-in-out;
-        }
-
-        @keyframes epPulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.4; transform: scale(0.85); }
-        }
-
-        .ep-hero-tag {
-          font-size: 12px;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-          color: #38bdf8;
-          margin-bottom: 12px;
-        }
-
-        .ep-hero-title {
-          font-size: 38px;
-          font-weight: 700;
-          line-height: 1.18;
-          letter-spacing: -0.8px;
-          color: #ffffff;
-          margin: 0 0 14px 0;
-        }
-
-        .ep-crimson-text {
-          color: #e63946;
-          font-weight: 700;
-        }
-
-        .ep-hero-sub {
-          font-size: 15px;
-          line-height: 1.6;
-          color: #94a3b8;
-          margin: 0;
-          max-width: 520px;
-        }
-
-        /* Course Spotlight Card */
-        .ep-course-spotlight {
-          background: rgba(15, 23, 42, 0.6);
+        /* Courses Card Section */
+        .spl-courses-section {
+          background: rgba(13, 22, 40, 0.65);
           border: 1px solid rgba(255, 255, 255, 0.08);
           backdrop-filter: blur(16px);
-          border-radius: 16px;
-          padding: 20px;
+          border-radius: 18px;
+          padding: 22px;
           display: flex;
           flex-direction: column;
-          gap: 14px;
-          transition: border-color 0.3s ease;
-        }
-
-        .ep-course-spotlight:hover {
-          border-color: rgba(230, 57, 70, 0.3);
-        }
-
-        .ep-spotlight-top {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        }
-
-        .ep-spotlight-label {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 11px;
-          font-weight: 600;
-          letter-spacing: 0.6px;
-          color: #f59e0b;
-        }
-
-        .ep-slider-dots {
-          display: flex;
-          gap: 6px;
-        }
-
-        .ep-dot {
-          width: 20px;
-          height: 3px;
-          border-radius: 2px;
-          background: rgba(255, 255, 255, 0.15);
-          border: none;
-          cursor: pointer;
-          transition: background 0.3s ease;
-        }
-
-        .ep-dot-active {
-          background: #e63946;
-        }
-
-        .ep-course-card {
-          display: flex;
-          align-items: center;
           gap: 16px;
         }
 
-        .ep-course-thumb-box {
-          width: 90px;
-          height: 64px;
-          border-radius: 10px;
-          overflow: hidden;
-          background: #1e293b;
-          position: relative;
-          flex-shrink: 0;
+        .spl-section-header {
+          display: flex;
+          align-items: flex-end;
+          justify-content: space-between;
         }
 
-        .ep-course-img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
+        .spl-badge-tag {
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 1px;
+          color: #e63946;
+          text-transform: uppercase;
+          display: block;
+          margin-bottom: 4px;
         }
 
-        .ep-course-placeholder {
-          width: 100%;
-          height: 100%;
+        .spl-section-title {
+          font-size: 20px;
+          font-weight: 700;
+          color: #ffffff;
+          margin: 0;
+          letter-spacing: -0.3px;
+        }
+
+        .spl-slider-controls {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .spl-ctrl-btn {
+          width: 32px;
+          height: 32px;
+          border-radius: 8px;
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          color: #ffffff;
+          cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-          font-weight: 800;
-          color: #e63946;
-          font-size: 20px;
+          transition: all 0.2s;
         }
 
-        .ep-level-pill {
-          position: absolute;
-          bottom: 4px;
-          left: 4px;
-          background: rgba(0, 0, 0, 0.7);
-          backdrop-filter: blur(4px);
-          font-size: 9px;
-          font-weight: 600;
-          color: #f1f5f9;
-          padding: 1px 6px;
-          border-radius: 4px;
+        .spl-ctrl-btn:hover {
+          background: #e63946;
+          border-color: #e63946;
         }
 
-        .ep-course-info {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-
-        .ep-course-title {
-          font-size: 15px;
-          font-weight: 600;
-          color: #f1f5f9;
-          margin: 0;
-          line-height: 1.35;
-        }
-
-        .ep-course-meta {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
+        .spl-course-counter {
           font-size: 12px;
+          font-weight: 600;
           color: #94a3b8;
         }
 
-        .ep-price-tag {
-          font-weight: 700;
-          color: #10b981;
+        .spl-card-frame {
+          width: 100%;
+          animation: splFade 0.4s ease-in-out;
         }
 
-        /* Review Ticker */
-        .ep-review-ticker {
-          background: rgba(15, 23, 42, 0.4);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          border-radius: 14px;
-          padding: 16px 18px;
+        @keyframes splFade {
+          from { opacity: 0; transform: translateY(4px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Reviews Section */
+        .spl-reviews-section {
+          background: rgba(13, 22, 40, 0.45);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-radius: 16px;
+          padding: 18px 20px;
           display: flex;
           flex-direction: column;
           gap: 10px;
         }
 
-        .ep-review-header {
+        .spl-review-top-bar {
           display: flex;
           align-items: center;
           justify-content: space-between;
         }
 
-        .ep-stars {
+        .spl-stars-row {
           display: flex;
           gap: 3px;
         }
 
-        .ep-review-badge {
+        .spl-verified-tag {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
           font-size: 11px;
-          color: #64748b;
+          color: #94a3b8;
           font-weight: 500;
         }
 
-        .ep-review-quote {
+        .spl-review-text {
           font-size: 13.5px;
-          line-height: 1.5;
+          line-height: 1.55;
           color: #cbd5e1;
           font-style: italic;
           margin: 0;
         }
 
-        .ep-review-author {
+        .spl-reviewer-footer {
           display: flex;
           align-items: center;
           gap: 10px;
+          margin-top: 2px;
         }
 
-        .ep-author-avatar {
+        .spl-reviewer-avatar {
           width: 32px;
           height: 32px;
           border-radius: 50%;
           background: #e63946;
           color: #ffffff;
-          font-weight: 600;
+          font-weight: 700;
           font-size: 13px;
           display: flex;
           align-items: center;
@@ -888,129 +751,84 @@ export default function StudentSignIn() {
           flex-shrink: 0;
         }
 
-        .ep-author-avatar img {
+        .spl-reviewer-avatar img {
           width: 100%;
           height: 100%;
           object-fit: cover;
         }
 
-        .ep-author-details {
-          display: flex;
-          flex-direction: column;
-        }
-
-        .ep-author-name {
-          font-size: 12.5px;
+        .spl-reviewer-name {
+          font-size: 13px;
           font-weight: 600;
-          color: #f1f5f9;
+          color: #ffffff;
         }
 
-        .ep-author-role {
+        .spl-reviewer-role {
           font-size: 11px;
           color: #94a3b8;
         }
 
-        /* Stats Strip */
-        .ep-stats-strip {
-          display: flex;
-          justify-content: space-between;
-          padding-top: 10px;
-          border-top: 1px solid rgba(255, 255, 255, 0.06);
+        .spl-co-name {
+          color: #38bdf8;
         }
 
-        .ep-stat-item {
-          display: flex;
-          flex-direction: column;
-        }
-
-        .ep-stat-val {
-          font-size: 18px;
-          font-weight: 700;
-          color: #ffffff;
-          letter-spacing: -0.3px;
-        }
-
-        .ep-stat-lbl {
-          font-size: 11.5px;
-          color: #64748b;
-        }
-
-        /* ════════════════════════════════════════════════════
-            RIGHT: High Precision Auth Panel
-           ════════════════════════════════════════════════════ */
-        .ep-auth-panel {
+        /* ── Right Column: Auth Card ── */
+        .spl-auth-column {
           flex: 0.95;
           display: flex;
           justify-content: center;
           width: 100%;
         }
 
-        .ep-auth-card {
+        .spl-auth-card {
           width: 100%;
           max-width: 440px;
           background: #ffffff;
           color: #0f172a;
           border-radius: 20px;
-          padding: 40px 36px;
+          padding: 38px 34px;
           box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
           display: flex;
           flex-direction: column;
-          position: relative;
         }
 
-        .ep-mobile-brand {
+        .spl-mobile-logo-bar {
           display: none;
-          align-items: center;
-          justify-content: space-between;
+          margin-bottom: 20px;
+        }
+
+        .spl-auth-heading {
           margin-bottom: 24px;
         }
 
-        .ep-mobile-brand .ep-brand-name {
+        .spl-portal-title {
+          font-size: 22px;
+          font-weight: 700;
+          letter-spacing: -0.3px;
           color: #0f172a;
+          margin: 0 0 6px 0;
+          line-height: 1.3;
         }
 
-        .ep-mobile-badge {
-          background: #f1f5f9;
-          color: #475569;
-          font-size: 11px;
-          font-weight: 700;
-          padding: 4px 10px;
-          border-radius: 6px;
-          text-transform: uppercase;
+        .spl-divider-bar {
+          color: #cbd5e1;
+          font-weight: 300;
+          margin: 0 4px;
         }
 
-        .ep-auth-header {
-          margin-bottom: 24px;
-        }
-
-        .ep-auth-pill {
-          display: inline-block;
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.8px;
+        .spl-site-title {
           color: #e63946;
-          background: rgba(230, 57, 70, 0.08);
-          padding: 4px 10px;
-          border-radius: 6px;
-          margin-bottom: 12px;
-        }
-
-        .ep-auth-title {
-          font-size: 24px;
           font-weight: 700;
-          letter-spacing: -0.4px;
-          color: #0f172a;
-          margin: 0 0 8px 0;
         }
 
-        .ep-auth-desc {
+        .spl-portal-subtitle {
           font-size: 13.5px;
           line-height: 1.5;
           color: #64748b;
           margin: 0;
         }
 
-        .ep-error-banner {
+        .spl-error-banner {
           display: flex;
           align-items: center;
           gap: 10px;
@@ -1024,50 +842,48 @@ export default function StudentSignIn() {
           margin-bottom: 20px;
         }
 
-        .ep-form {
+        .spl-form {
           display: flex;
           flex-direction: column;
-          gap: 20px;
+          gap: 18px;
         }
 
-        .ep-field {
+        .spl-field {
           display: flex;
           flex-direction: column;
-          gap: 7px;
+          gap: 6px;
         }
 
-        .ep-label-row {
+        .spl-label-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
         }
 
-        .ep-label {
+        .spl-label {
           font-size: 13px;
           font-weight: 600;
           color: #334155;
         }
 
-        .ep-forgot-link {
+        .spl-help-link {
           font-size: 12px;
           font-weight: 600;
           color: #e63946;
           text-decoration: none;
-          transition: opacity 0.2s;
         }
 
-        .ep-forgot-link:hover {
-          opacity: 0.8;
+        .spl-help-link:hover {
           text-decoration: underline;
         }
 
-        .ep-input-wrap {
+        .spl-input-wrap {
           position: relative;
           display: flex;
           align-items: center;
         }
 
-        .ep-input-icon {
+        .spl-input-icon {
           position: absolute;
           left: 14px;
           color: #94a3b8;
@@ -1076,7 +892,7 @@ export default function StudentSignIn() {
           align-items: center;
         }
 
-        .ep-input {
+        .spl-input {
           width: 100%;
           height: 48px;
           padding: 0 16px 0 42px;
@@ -1091,17 +907,17 @@ export default function StudentSignIn() {
           font-family: inherit;
         }
 
-        .ep-input:focus {
+        .spl-input:focus {
           background: #ffffff;
-          border-color: #0f172a;
-          box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
+          border-color: #0a1628;
+          box-shadow: 0 0 0 3px rgba(10, 22, 40, 0.08);
         }
 
-        .ep-input-pwd {
+        .spl-input-pwd {
           padding-right: 44px;
         }
 
-        .ep-pwd-btn {
+        .spl-pwd-toggle {
           position: absolute;
           right: 12px;
           background: none;
@@ -1112,24 +928,22 @@ export default function StudentSignIn() {
           align-items: center;
           justify-content: center;
           padding: 6px;
-          transition: color 0.2s;
         }
 
-        .ep-pwd-btn:hover {
+        .spl-pwd-toggle:hover {
           color: #0f172a;
         }
 
-        /* Submit Button: Sleek Black / Crimson Transition */
-        .ep-submit-btn {
+        /* Submit Button */
+        .spl-btn-submit {
           width: 100%;
           height: 48px;
-          background: #0f172a;
+          background: #0a1628;
           color: #ffffff;
           border: none;
           border-radius: 10px;
           font-size: 14.5px;
           font-weight: 600;
-          letter-spacing: -0.1px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1137,28 +951,24 @@ export default function StudentSignIn() {
           cursor: pointer;
           transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
           margin-top: 4px;
-          box-shadow: 0 4px 14px rgba(15, 23, 42, 0.25);
+          box-shadow: 0 4px 14px rgba(10, 22, 40, 0.25);
         }
 
-        .ep-submit-btn:hover:not(:disabled) {
+        .spl-btn-submit:hover:not(:disabled) {
           background: #e63946;
           box-shadow: 0 6px 20px rgba(230, 57, 70, 0.35);
           transform: translateY(-1px);
         }
 
-        .ep-submit-btn:active:not(:disabled) {
-          transform: translateY(0);
-        }
-
-        .ep-submit-btn:disabled {
+        .spl-btn-submit:disabled {
           opacity: 0.6;
           cursor: not-allowed;
         }
 
-        /* Card Footer */
-        .ep-auth-footer {
-          margin-top: 28px;
-          padding-top: 20px;
+        /* Card Bottom */
+        .spl-card-bottom {
+          margin-top: 24px;
+          padding-top: 18px;
           border-top: 1px solid #f1f5f9;
           display: flex;
           flex-direction: column;
@@ -1166,7 +976,7 @@ export default function StudentSignIn() {
           text-align: center;
         }
 
-        .ep-security-note {
+        .spl-security-badge {
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -1175,50 +985,48 @@ export default function StudentSignIn() {
           color: #64748b;
         }
 
-        .ep-enrollment-help {
+        .spl-admissions-link {
           font-size: 12.5px;
           color: #64748b;
         }
 
-        .ep-explore-link {
-          color: #0f172a;
+        .spl-enroll-link {
+          color: #0a1628;
           font-weight: 600;
           text-decoration: none;
           margin-left: 4px;
         }
 
-        .ep-explore-link:hover {
+        .spl-enroll-link:hover {
           color: #e63946;
           text-decoration: underline;
         }
 
-        /* ════════════════════════════════════════════════════
-            MOBILE APP EXPERIENCE (< 960px)
-           ════════════════════════════════════════════════════ */
+        /* ── Mobile Responsive App UI (< 960px) ── */
         @media (max-width: 960px) {
-          .ep-viewport {
+          .spl-page {
             align-items: flex-start;
             padding: 0;
             background: #f8fafc;
           }
 
-          .ep-canvas {
+          .spl-container {
             flex-direction: column;
             padding: 20px 16px 40px 16px;
             gap: 20px;
             min-height: auto;
           }
 
-          .ep-showcase {
-            display: none; /* Clean mobile app focus */
+          .spl-showcase-column {
+            display: none;
           }
 
-          .ep-auth-panel {
+          .spl-auth-column {
             flex: 1;
             max-width: 100%;
           }
 
-          .ep-auth-card {
+          .spl-auth-card {
             max-width: 100%;
             border-radius: 16px;
             padding: 28px 20px;
@@ -1226,16 +1034,16 @@ export default function StudentSignIn() {
             border: 1px solid #e2e8f0;
           }
 
-          .ep-mobile-brand {
+          .spl-mobile-logo-bar {
             display: flex;
           }
 
-          .ep-input {
-            font-size: 16px; /* Prevents iOS auto-zoom */
+          .spl-input {
+            font-size: 16px;
             height: 50px;
           }
 
-          .ep-submit-btn {
+          .spl-btn-submit {
             height: 50px;
             font-size: 15px;
           }
