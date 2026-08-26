@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from datetime import date
 from database import get_db
 from models import Student
+from security import hash_password
 
 router = APIRouter(prefix="/api/students", tags=["Students"])
 
@@ -16,6 +17,7 @@ class StudentCreate(BaseModel):
     phone: Optional[str] = None
     alternative_phone: Optional[str] = None
     is_active: bool = True
+    password: Optional[str] = None
 
     # Personal Information
     date_of_birth: Optional[date] = None
@@ -80,7 +82,11 @@ def create_student(student: StudentCreate, device: str = Depends(require_device)
         if existing_phone:
             raise HTTPException(status_code=400, detail="Phone number already registered with another student")
 
-    new_student = Student(**student.model_dump())
+    student_data = student.model_dump()
+    plain_password = student_data.pop("password", None)
+    new_student = Student(**student_data)
+    if plain_password:
+        new_student.password_hash = hash_password(plain_password)
     db.add(new_student)
     db.commit()
     db.refresh(new_student)
@@ -107,7 +113,11 @@ def update_student(student_id: int, student: StudentUpdate, device: str = Depend
         if existing_phone:
             raise HTTPException(status_code=400, detail="Phone number already registered with another student")
 
-    for key, value in student.model_dump().items():
+    student_data = student.model_dump()
+    plain_password = student_data.pop("password", None)
+    if plain_password:
+        db_student.password_hash = hash_password(plain_password)
+    for key, value in student_data.items():
         setattr(db_student, key, value)
 
     db.commit()

@@ -162,7 +162,7 @@ function StudentManagerInner() {
 
   const EMPTY_FORM = {
     id: null as number | null,
-    first_name: "", last_name: "", email: "", phone: "", alternative_phone: "", is_active: true,
+    first_name: "", last_name: "", email: "", phone: "", alternative_phone: "", is_active: true, password: "",
     // Personal
     date_of_birth: "", gender: "", profile_photo_url: "", city: "", state: "", pin_code: "",
     // Education
@@ -247,6 +247,7 @@ function StudentManagerInner() {
     const payload: any = {
       first_name: form.first_name.trim(), last_name: s(form.last_name), email: form.email.trim(),
       phone: s(form.phone), alternative_phone: s(form.alternative_phone), is_active: form.is_active,
+      password: form.password.trim() || undefined,
       date_of_birth: form.date_of_birth || null, gender: s(form.gender),
       profile_photo_url: s(form.profile_photo_url), city: s(form.city), state: s(form.state), pin_code: s(form.pin_code),
       highest_qualification: s(form.highest_qualification),
@@ -523,6 +524,7 @@ function StudentManagerInner() {
                   <FloatingInput label="Phone Number" value={form.phone} onChange={v => setForm({ ...form, phone: v })} />
                   <FloatingInput label="Alternative Phone" value={form.alternative_phone} onChange={v => setForm({ ...form, alternative_phone: v })} />
                 </div>
+                <FloatingInput type="password" label={form.id ? "New Password (leave blank to keep existing)" : "Password"} value={form.password} onChange={v => setForm({ ...form, password: v })} />
 
                 {/* Personal */}
                 <SectionTitle color="#8b5cf6" border="#ede9fe" label="📋 Personal Information" />

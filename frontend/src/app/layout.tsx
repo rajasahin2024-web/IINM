@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
+import { Toaster } from "react-hot-toast";
 import AnalyticsScripts from "@/components/AnalyticsScripts";
 import MaintenanceGuard from "@/components/MaintenanceGuard";
 import FomoNotification from "@/components/FomoNotification";
@@ -85,6 +86,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <AnalyticsScripts analyticsId={analyticsId} bingWebmasterId={bingWebmasterId} />
         <MaintenanceGuard>{children}</MaintenanceGuard>
         <FomoNotification />
+        <Toaster position="top-center" />
       </body>
     </html>
   );

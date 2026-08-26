@@ -686,7 +686,7 @@ export default function PublicNavbar({
                   )}
                 </div>
               ) : (
-                <Link href="/login" className="hp-btn-primary" style={{ borderRadius: "8px" }}>Sign In</Link>
+                <Link href="/signin" className="hp-btn-primary" style={{ borderRadius: "8px" }}>Sign In</Link>
               )}
             </div>
 
@@ -1132,7 +1132,7 @@ export default function PublicNavbar({
               </button>
 
               <Link
-                href="/login"
+                href="/signin"
                 onClick={() => setIsSidebarOpen(false)}
                 style={{
                   background: "#e63946", // Brand Red color for Sign In call to action

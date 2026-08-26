@@ -6,21 +6,22 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError, DBAPIError
 from sqlalchemy import text
 from pydantic import BaseModel
-import bcrypt
 import httpx
 import os
 import uuid
 import logging
 import secrets
 import hashlib
+import hmac
+import base64
 import time
 from typing import Optional
 
 from database import engine, SessionLocal, Base, get_db
 from cache import cache as app_cache
-from models import AdminUser, DeviceSession, DeviceAdminUser
+from models import AdminUser, DeviceSession, DeviceAdminUser, Student
 from routers import courses, materials, questions, question_types, settings, comprehensions, topics, difficulty, batches, student, academic, progress, exams, dashboard, blogs, testimonials, contact, about, faq, leadership, invoice, slot_booking, seo, career, pages
-from security import check_public_rate_limit, get_client_ip
+from security import check_public_rate_limit, get_client_ip, verify_password
 
 # ── Database Setup ──────────────────────────────────────────────────────────
 # create_all: Creates all tables on a FRESH database (safe — skips if exists).
@@ -168,11 +169,6 @@ async def health_check():
         )
 
 
-def _hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
-def _verify_password(password: str, hashed: str) -> bool:
-    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
 
 # Device admin secret — MUST be set in environment, no default
@@ -181,6 +177,16 @@ if not DEVICE_ADMIN_SECRET:
     logging.warning(
         "DEVICE_ADMIN_SECRET is not set in environment. "
         "Device admin login will be disabled until it is configured."
+    )
+
+# Student login secret — used to sign session cookies. Falls back to device admin
+# secret so the feature works without a separate env var, but a dedicated secret is
+# strongly recommended for production.
+STUDENT_AUTH_SECRET = os.getenv("STUDENT_AUTH_SECRET") or DEVICE_ADMIN_SECRET
+if not STUDENT_AUTH_SECRET:
+    logging.warning(
+        "STUDENT_AUTH_SECRET is not set in environment. "
+        "Student login will be disabled until it is configured."
     )
 
 # ── Token store with expiry (48 hours) ──
@@ -233,6 +239,45 @@ def _require_admin_device(
     if not session:
         raise HTTPException(status_code=401, detail="Unauthorized device")
     return x_device_token
+
+# ── Student session helpers ──────────────────────────────────────────────────
+_STUDENT_TOKEN_TTL_SECONDS = 48 * 60 * 60  # 48 hours
+
+def _make_student_token(student_id: int) -> str:
+    if not STUDENT_AUTH_SECRET:
+        raise RuntimeError("STUDENT_AUTH_SECRET is not configured")
+    expiry = int(time.time()) + _STUDENT_TOKEN_TTL_SECONDS
+    payload = f"{student_id}:{expiry}"
+    signature = hmac.new(
+        STUDENT_AUTH_SECRET.encode('utf-8'),
+        payload.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+    token = base64.urlsafe_b64encode(f"{payload}:{signature}".encode('utf-8')).decode('utf-8').rstrip('=')
+    return token
+
+def _verify_student_token(token: str) -> int | None:
+    if not STUDENT_AUTH_SECRET:
+        return None
+    try:
+        # Restore base64 padding
+        padded = token + '=' * (-len(token) % 4)
+        decoded = base64.urlsafe_b64decode(padded).decode('utf-8')
+        student_id_str, expiry_str, signature = decoded.rsplit(':', 2)
+        student_id = int(student_id_str)
+        expiry = int(expiry_str)
+        if time.time() > expiry:
+            return None
+        expected = hmac.new(
+            STUDENT_AUTH_SECRET.encode('utf-8'),
+            f"{student_id}:{expiry}".encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            return None
+        return student_id
+    except Exception:
+        return None
 
 # ── Cache Management Endpoints ───────────────────────────────────────────────
 # Must be defined AFTER _require_admin_device (default args evaluate at def time).
@@ -333,6 +378,10 @@ class TokenHeader(BaseModel):
 
 class VerifyDeviceSchema(BaseModel):
     device_token: str
+
+class StudentLoginRequest(BaseModel):
+    identifier: str
+    password: str
 
 # ══════════════════════════════════════════════════════
 #  DEVICE CHECK (frontend polls this on load)
@@ -476,12 +525,12 @@ async def request_device(req: DeviceRequestSchema, request: Request, db: Session
 @app.post("/api/login")
 async def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     # Rate limit by IP
-    client_ip = request.client.host if request.client else "0.0.0.0"
+    client_ip = get_client_ip(request)
     _check_rate_limit(client_ip)
 
     # Validate credentials
     admin = db.query(AdminUser).filter(AdminUser.email == req.email).first()
-    if not admin or not _verify_password(req.password, admin.password_hash):
+    if not admin or not verify_password(req.password, admin.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # Validate device
@@ -507,6 +556,59 @@ async def verify_device(req: VerifyDeviceSchema, db: Session = Depends(get_db)):
     return {"status": "ok"}
 
 # ══════════════════════════════════════════════════════
+#  STUDENT LOGIN
+# ══════════════════════════════════════════════════════
+
+@app.post("/api/student/login")
+async def student_login(req: StudentLoginRequest, request: Request, db: Session = Depends(get_db)):
+    if not STUDENT_AUTH_SECRET:
+        raise HTTPException(status_code=503, detail="Student login is not configured")
+
+    client_ip = get_client_ip(request)
+    _check_rate_limit(client_ip)
+
+    # Search by email or phone, treat identifier as email first then phone
+    identifier = req.identifier.strip().lower()
+    student = db.query(Student).filter(Student.email == identifier).first()
+    if not student:
+        student = db.query(Student).filter(Student.phone == req.identifier.strip()).first()
+
+    if not student or not student.password_hash:
+        raise HTTPException(status_code=401, detail="Invalid credentials or account is inactive")
+
+    if not student.is_active:
+        raise HTTPException(status_code=403, detail="Invalid credentials or account is inactive")
+
+    if not verify_password(req.password, student.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials or account is inactive")
+
+    token = _make_student_token(student.id)
+    response = JSONResponse(
+        content={
+            "message": "Login successful",
+            "student": {
+                "id": student.id,
+                "first_name": student.first_name,
+                "last_name": student.last_name,
+                "email": student.email,
+                "phone": student.phone,
+            },
+        },
+        status_code=200,
+    )
+    is_https = request.url.scheme == "https"
+    response.set_cookie(
+        "iinm_student_token",
+        token,
+        max_age=_STUDENT_TOKEN_TTL_SECONDS,
+        httponly=True,
+        secure=is_https,
+        samesite="lax",
+        path="/",
+    )
+    return response
+
+# ══════════════════════════════════════════════════════
 #  DEVICE ADMIN PANEL AUTH
 # ══════════════════════════════════════════════════════
 
@@ -515,7 +617,7 @@ async def device_admin_login(req: DeviceAdminLoginSchema, db: Session = Depends(
     if not DEVICE_ADMIN_SECRET:
         raise HTTPException(status_code=503, detail="Device admin is not configured")
     admin = db.query(DeviceAdminUser).filter(DeviceAdminUser.email == req.email).first()
-    if not admin or not _verify_password(req.password, admin.password_hash):
+    if not admin or not verify_password(req.password, admin.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = _make_device_admin_token()
     return {"token": token, "email": admin.email}

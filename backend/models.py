@@ -578,6 +578,7 @@ class Student(Base):
     phone             = Column(String(50), nullable=True)
     alternative_phone = Column(String(50), nullable=True)
     is_active         = Column(Boolean, default=True)
+    password_hash     = Column(String(255), nullable=True)
 
     # Personal Information
     date_of_birth     = Column(Date, nullable=True)
@@ -718,6 +719,9 @@ class CoursePurchase(Base):
 
     is_active             = Column(Boolean, default=True)
 
+    # Source tracking: slot_booking | admin_created | invoice_pending
+    source                = Column(String(30), nullable=True)
+
     created_at    = Column(DateTime(timezone=True), server_default=func.now())
     updated_at    = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -756,6 +760,7 @@ class InstallmentSchedule(Base):
     paid_amount     = Column(Float, default=0.0)              # how much has been paid
     status          = Column(String(20), default="pending")   # pending|paid|partial|overdue
     admin_seen_overdue = Column(Boolean, default=False)       # whether admin has seen this overdue item
+    name            = Column(String(100), nullable=True)      # custom label e.g. "Booking Amount", "Admission Fee"
 
     payment_method  = Column(String(50), nullable=True)
     reference_no    = Column(String(255), nullable=True)
