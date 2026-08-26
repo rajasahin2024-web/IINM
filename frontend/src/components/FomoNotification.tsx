@@ -37,11 +37,11 @@ export default function FomoNotification() {
   const displayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const currentIndexRef = useRef(0);
 
-  // Do not show on admin pages
-  const isAdminPage = pathname?.startsWith("/admin");
+  // Do not show on admin and auth pages (login, signin)
+  const isHiddenPage = pathname?.startsWith("/admin") || pathname === "/login" || pathname === "/signin";
 
   useEffect(() => {
-    if (isAdminPage) return;
+    if (isHiddenPage) return;
 
     console.log("[FOMO Live] Fetching notification settings on path:", pathname);
 
@@ -64,11 +64,11 @@ export default function FomoNotification() {
     return () => {
       clearAllTimers();
     };
-  }, [pathname, isAdminPage]);
+  }, [pathname, isHiddenPage]);
 
   // Start the notification display cycle once settings are loaded
   useEffect(() => {
-    if (!settings || settings.events.length === 0 || isAdminPage || isDismissed) {
+    if (!settings || settings.events.length === 0 || isHiddenPage || isDismissed) {
       return;
     }
 
@@ -124,7 +124,7 @@ export default function FomoNotification() {
     }, displayDurationMs);
   };
 
-  if (isAdminPage || !settings || !settings.theme.is_active || !currentEvent || isDismissed) {
+  if (isHiddenPage || !settings || !settings.theme.is_active || !currentEvent || isDismissed) {
     // Add silent console notice if settings loaded but conditions not met
     if (settings && !settings.theme.is_active) {
       console.log("[FOMO Live] Not rendering: settings.theme.is_active is FALSE");

@@ -23,6 +23,13 @@ interface ReviewItem {
   star_rating: number;
 }
 
+interface LocationInfo {
+  location: string;
+  lat: number | null;
+  lng: number | null;
+  ip_address: string;
+}
+
 export default function StudentSignIn() {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -41,8 +48,14 @@ export default function StudentSignIn() {
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [activeCourseIndex, setActiveCourseIndex] = useState(0);
   const [activeReviewIndex, setActiveReviewIndex] = useState(0);
+  const [fadeKey, setFadeKey] = useState(0);
 
-  // Fetch Site Settings, Courses, Reviews
+  // Live Location States
+  const [location, setLocation] = useState<LocationInfo | null>(null);
+  const [locationLoading, setLocationLoading] = useState(true);
+  const [publicIp, setPublicIp] = useState<string>("");
+
+  // Fetch Site Settings, Courses, Reviews, Google Maps API key
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -95,11 +108,12 @@ export default function StudentSignIn() {
     document.title = `Student Portal | ${siteName} | ${tagline}`;
   }, [siteSettings]);
 
-  // Seamless auto-slide courses (no manual icons)
+  // Seamless auto-slide courses with smooth fade key
   useEffect(() => {
     if (courses.length <= 1) return;
     const interval = setInterval(() => {
       setActiveCourseIndex((prev) => (prev + 1) % courses.length);
+      setFadeKey((prev) => prev + 1);
     }, 4500);
     return () => clearInterval(interval);
   }, [courses.length]);
@@ -113,7 +127,96 @@ export default function StudentSignIn() {
     return () => clearInterval(interval);
   }, [reviews.length]);
 
-  // Fallback courses if DB empty
+  // ── LIVE LOCATION DETECTION VIA GMAP API / NOMINATIM ──
+  useEffect(() => {
+    let isMounted = true;
+
+    // 1. Fetch real public IP
+    fetch("https://api.ipify.org?format=json")
+      .then((r) => r.json())
+      .then((d) => {
+        if (isMounted && d.ip) setPublicIp(d.ip);
+      })
+      .catch(() => {});
+
+    // 2. Fetch Google Maps API key from admin settings (/api/contact/google-api)
+    const detectLocation = async () => {
+      let gmapKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+      try {
+        const googleRes = await fetch(`${API_BASE_URL}/contact/google-api`);
+        if (googleRes.ok) {
+          const gData = await googleRes.json();
+          if (gData.google_map_api_key) gmapKey = gData.google_map_api_key;
+        }
+      } catch { /* ignore */ }
+
+      const reverseGeocode = async (lat: number, lng: number): Promise<string> => {
+        // Try Google Maps Geocoding first
+        if (gmapKey) {
+          try {
+            const res = await fetch(
+              `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${gmapKey}`
+            );
+            const data = await res.json();
+            if (data.status === "OK" && data.results && data.results.length > 0) {
+              return data.results[0].formatted_address;
+            }
+          } catch { /* fallback to Nominatim */ }
+        }
+
+        // Fallback: OpenStreetMap Nominatim
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+            { headers: { "Accept-Language": "en" } }
+          );
+          const data = await res.json();
+          if (data && data.display_name) return data.display_name;
+        } catch { /* ignore */ }
+
+        return "Location detected";
+      };
+
+      if (!navigator.geolocation) {
+        if (isMounted) setLocationLoading(false);
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          try {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            const address = await reverseGeocode(lat, lng);
+            if (isMounted) {
+              setLocation({
+                location: address,
+                lat,
+                lng,
+                ip_address: "",
+              });
+            }
+          } catch {
+            /* ignore */
+          } finally {
+            if (isMounted) setLocationLoading(false);
+          }
+        },
+        () => {
+          if (isMounted) setLocationLoading(false);
+        },
+        { timeout: 8000, maximumAge: 0 }
+      );
+    };
+
+    detectLocation();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Fallback courses if DB empty (all ratings >= 4.6)
   const displayCourses: CourseCardType[] = courses.length > 0 ? courses : [
     {
       id: 1,
@@ -171,7 +274,7 @@ export default function StudentSignIn() {
     },
   ];
 
-  // Fallback reviews if DB empty
+  // Fallback reviews (all 5-star ratings)
   const displayReviews: ReviewItem[] = reviews.length > 0 ? reviews : [
     {
       id: 1,
@@ -282,9 +385,9 @@ export default function StudentSignIn() {
             </Link>
           </div>
 
-          {/* Section 1: Exact Course Card from /courses (No Wrapper Box, No Title Div) */}
+          {/* Section 1: Exact Course Card with Ultra-Smooth Fade Slide */}
           <div className="spl-course-direct-wrap">
-            <div className="spl-course-direct-frame">
+            <div key={fadeKey} className="spl-course-fade-frame">
               <CourseCard
                 course={currentCourse}
                 baseUrl={BASE_URL}
@@ -311,6 +414,7 @@ export default function StudentSignIn() {
                     <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                   </svg>
                 ))}
+                <span className="spl-stars-num">4.9/5</span>
               </div>
               <span className="spl-verified-tag">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
@@ -347,20 +451,17 @@ export default function StudentSignIn() {
          ════════════════════════════════════════════════════ */}
       <div className="spl-col-4-auth">
         <div className="spl-auth-card-clean">
-          {/* Mobile-Only Drawer Handle & White UI Main Logo */}
-          <div className="spl-mobile-drawer-top">
-            <div className="spl-drawer-handle" />
-            <div className="spl-mobile-logo-bar">
-              <Link href="/" aria-label="Home">
-                {mainLogo ? (
-                  <img src={resolveImage(mainLogo)} alt="Main Logo" className="spl-main-logo-mobile" />
-                ) : (
-                  <div className="spl-logo-badge">
-                    <span>I</span>
-                  </div>
-                )}
-              </Link>
-            </div>
+          {/* Mobile-Only Modal Logo Bar */}
+          <div className="spl-mobile-logo-bar">
+            <Link href="/" aria-label="Home">
+              {mainLogo ? (
+                <img src={resolveImage(mainLogo)} alt="Main Logo" className="spl-main-logo-mobile" />
+              ) : (
+                <div className="spl-logo-badge">
+                  <span>I</span>
+                </div>
+              )}
+            </Link>
           </div>
 
           {/* Login Card Heading */}
@@ -462,14 +563,44 @@ export default function StudentSignIn() {
             </button>
           </form>
 
-          <div className="spl-card-bottom">
-            <div className="spl-security-badge">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.2">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              </svg>
-              <span>Encrypted Academic Session</span>
-            </div>
+          {/* ── LIVE CURRENT LOCATION CARD (Google Maps / Geocoding) ── */}
+          <div className="spl-location-card">
+            {locationLoading ? (
+              <div className="spl-loc-loading">
+                <span className="spl-loc-spinner" />
+                <span>Detecting security location…</span>
+              </div>
+            ) : location && location.location ? (
+              <div className="spl-loc-details">
+                <div className="spl-loc-top">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" strokeWidth="2.5">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                    <circle cx="12" cy="10" r="3" />
+                  </svg>
+                  <span className="spl-loc-address" title={location.location}>
+                    {location.location}
+                  </span>
+                </div>
+                <div className="spl-loc-bottom">
+                  {location.lat !== null && location.lng !== null && (
+                    <span className="spl-loc-coords">
+                      📍 {location.lat.toFixed(4)}°, {location.lng.toFixed(4)}°
+                    </span>
+                  )}
+                  {publicIp && <span className="spl-loc-ip">IP: {publicIp}</span>}
+                </div>
+              </div>
+            ) : (
+              <div className="spl-loc-fallback">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+                <span>Encrypted Academic Session {publicIp ? `• IP: ${publicIp}` : ""}</span>
+              </div>
+            )}
+          </div>
 
+          <div className="spl-card-bottom">
             <div className="spl-admissions-link">
               <span>New to the institute?</span>{" "}
               <Link href="/courses" className="spl-enroll-link">
@@ -549,7 +680,7 @@ export default function StudentSignIn() {
           max-width: 620px;
           display: flex;
           flex-direction: column;
-          gap: 28px;
+          gap: 24px;
         }
 
         .spl-brand-header {
@@ -583,19 +714,26 @@ export default function StudentSignIn() {
           box-shadow: 0 4px 16px rgba(230, 57, 70, 0.3);
         }
 
-        /* Exact CourseCard Direct Frame (No Wrapper Box, Clean Card) */
+        /* Course Direct Frame with Ultra-Smooth Fade Slide */
         .spl-course-direct-wrap {
           width: 100%;
+          min-height: 280px;
         }
 
-        .spl-course-direct-frame {
+        .spl-course-fade-frame {
           width: 100%;
-          animation: splCardFade 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+          animation: splSmoothFade 0.65s cubic-bezier(0.22, 1, 0.36, 1);
         }
 
-        @keyframes splCardFade {
-          from { opacity: 0; transform: translateY(6px); }
-          to { opacity: 1; transform: translateY(0); }
+        @keyframes splSmoothFade {
+          0% {
+            opacity: 0.15;
+            transform: translateY(8px) scale(0.99);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
         }
 
         /* Reviews Dark Card */
@@ -604,10 +742,10 @@ export default function StudentSignIn() {
           border: 1px solid rgba(255, 255, 255, 0.08);
           backdrop-filter: blur(12px);
           border-radius: 8px; /* slight round edge */
-          padding: 20px 22px;
+          padding: 18px 20px;
           display: flex;
           flex-direction: column;
-          gap: 10px;
+          gap: 8px;
         }
 
         .spl-review-top-bar {
@@ -618,7 +756,15 @@ export default function StudentSignIn() {
 
         .spl-stars-row {
           display: flex;
-          gap: 3px;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .spl-stars-num {
+          font-size: 12px;
+          font-weight: 700;
+          color: #f59e0b;
+          margin-left: 4px;
         }
 
         .spl-verified-tag {
@@ -631,8 +777,8 @@ export default function StudentSignIn() {
         }
 
         .spl-review-text {
-          font-size: 13.5px;
-          line-height: 1.55;
+          font-size: 13px;
+          line-height: 1.5;
           color: #cbd5e1;
           font-style: italic;
           margin: 0;
@@ -646,13 +792,13 @@ export default function StudentSignIn() {
         }
 
         .spl-reviewer-avatar {
-          width: 32px;
-          height: 32px;
+          width: 30px;
+          height: 30px;
           border-radius: 50%;
           background: #e63946;
           color: #ffffff;
           font-weight: 700;
-          font-size: 13px;
+          font-size: 12px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -672,7 +818,7 @@ export default function StudentSignIn() {
         }
 
         .spl-reviewer-name {
-          font-size: 13px;
+          font-size: 12.5px;
           font-weight: 600;
           color: #ffffff;
         }
@@ -696,23 +842,23 @@ export default function StudentSignIn() {
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 48px 40px;
+          padding: 44px 36px;
           border-left: 1px solid #e2e8f0;
         }
 
         .spl-auth-card-clean {
           width: 100%;
-          max-width: 400px;
+          max-width: 390px;
           display: flex;
           flex-direction: column;
         }
 
-        .spl-mobile-drawer-top {
+        .spl-mobile-logo-bar {
           display: none;
         }
 
         .spl-auth-heading {
-          margin-bottom: 24px;
+          margin-bottom: 22px;
         }
 
         .spl-portal-title {
@@ -742,7 +888,7 @@ export default function StudentSignIn() {
           border-radius: 6px;
           font-size: 13px;
           font-weight: 500;
-          margin-bottom: 20px;
+          margin-bottom: 18px;
         }
 
         .spl-form {
@@ -885,24 +1031,101 @@ export default function StudentSignIn() {
           cursor: not-allowed;
         }
 
+        /* ── Location Card (GMap API / GPS) ── */
+        .spl-location-card {
+          margin-top: 18px;
+          padding: 10px 12px;
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 6px;
+          font-size: 12px;
+        }
+
+        .spl-loc-loading {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: #94a3b8;
+          font-size: 11.5px;
+        }
+
+        .spl-loc-spinner {
+          width: 12px;
+          height: 12px;
+          border: 2px solid #e2e8f0;
+          border-top-color: #0ea5e9;
+          border-radius: 50%;
+          animation: splSpin 0.8s linear infinite;
+        }
+
+        @keyframes splSpin {
+          to { transform: rotate(360deg); }
+        }
+
+        .spl-loc-details {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .spl-loc-top {
+          display: flex;
+          align-items: flex-start;
+          gap: 6px;
+          color: #0f172a;
+          font-weight: 600;
+          font-size: 11.5px;
+          line-height: 1.4;
+        }
+
+        .spl-loc-address {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+        }
+
+        .spl-loc-bottom {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          font-size: 10.5px;
+          color: #64748b;
+          border-top: 1px solid #f1f5f9;
+          padding-top: 4px;
+          margin-top: 2px;
+        }
+
+        .spl-loc-coords {
+          font-family: inherit;
+        }
+
+        .spl-loc-ip {
+          font-family: monospace;
+          background: #f1f5f9;
+          padding: 1px 5px;
+          border-radius: 3px;
+          color: #334155;
+        }
+
+        .spl-loc-fallback {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          color: #64748b;
+          font-size: 11.5px;
+        }
+
         /* Card Bottom */
         .spl-card-bottom {
-          margin-top: 24px;
-          padding-top: 18px;
+          margin-top: 16px;
+          padding-top: 14px;
           border-top: 1px solid #f1f5f9;
           display: flex;
           flex-direction: column;
-          gap: 10px;
+          gap: 8px;
           text-align: center;
-        }
-
-        .spl-security-badge {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
-          font-size: 11.5px;
-          color: #64748b;
         }
 
         .spl-admissions-link {
@@ -923,14 +1146,16 @@ export default function StudentSignIn() {
         }
 
         /* ════════════════════════════════════════════════════
-            MOBILE VIEW: DRAWER STYLE + WHITE UI MAIN LOGO (< 900px)
+            MOBILE VIEW: MODAL STYLE ZOOM-IN ANIMATION (< 900px)
            ════════════════════════════════════════════════════ */
         @media (max-width: 900px) {
           .spl-split-layout {
             flex-direction: column;
-            justify-content: flex-end;
+            justify-content: center;
+            align-items: center;
             background: #070b14;
             min-height: 100vh;
+            padding: 24px 16px;
           }
 
           .spl-col-8-dark {
@@ -938,56 +1163,49 @@ export default function StudentSignIn() {
           }
 
           .spl-col-4-auth {
-            flex: 1;
+            flex: none;
             width: 100%;
+            max-width: 440px;
             border-left: none;
             padding: 0;
-            display: flex;
-            align-items: flex-end;
             background: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
           }
 
-          /* Bottom Drawer Sheet */
+          /* Modal Zoom-In Animation */
           .spl-auth-card-clean {
             max-width: 100%;
             width: 100%;
-            border-radius: 18px 18px 0 0; /* Drawer top rounded corners */
-            padding: 24px 20px 36px 20px;
-            box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.4);
+            border-radius: 10px; /* slight round edge */
+            padding: 32px 24px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
             background: #ffffff;
-            animation: splDrawerSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+            animation: splModalZoom 0.35s cubic-bezier(0.16, 1, 0.3, 1);
           }
 
-          @keyframes splDrawerSlideUp {
-            from { transform: translateY(100%); }
-            to { transform: translateY(0); }
-          }
-
-          .spl-mobile-drawer-top {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 16px;
-            margin-bottom: 20px;
-          }
-
-          /* Drawer Drag Handle Pill */
-          .spl-drawer-handle {
-            width: 44px;
-            height: 4px;
-            border-radius: 2px;
-            background: #cbd5e1;
+          @keyframes splModalZoom {
+            0% {
+              opacity: 0;
+              transform: scale(0.92);
+            }
+            100% {
+              opacity: 1;
+              transform: scale(1);
+            }
           }
 
           .spl-mobile-logo-bar {
             display: flex;
             align-items: center;
             justify-content: center;
+            margin-bottom: 20px;
           }
 
           /* White UI Main Logo in Mobile View */
           .spl-main-logo-mobile {
-            height: 40px;
+            height: 42px;
             max-width: 160px;
             object-fit: contain;
           }

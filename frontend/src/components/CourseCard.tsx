@@ -81,8 +81,8 @@ export default function CourseCard({
   const displayPrice = hasDiscount ? discPrice : basePrice;
   const discPct = hasDiscount && basePrice ? Math.round((1 - (discPrice! / basePrice!)) * 100) : 0;
 
-  // fake-but-consistent metadata derived from id (clearly labeled as estimated)
-  const fakeRating = 3.5 + (course.id % 15) / 10;
+  // fake-but-consistent metadata derived from id (clearly labeled as estimated, strictly >= 4.6)
+  const fakeRating = 4.6 + ((course.id * 3) % 4) / 10;
   const fakeEnrolled = 120 + (course.id * 37) % 900;
   const fakeDuration = 4 + (course.id % 20);
 
