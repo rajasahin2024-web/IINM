@@ -100,7 +100,7 @@ export default function StudentSignIn() {
     if (courses.length <= 1) return;
     const interval = setInterval(() => {
       setActiveCourseIndex((prev) => (prev + 1) % courses.length);
-    }, 4500);
+    }, 5000);
     return () => clearInterval(interval);
   }, [courses.length]);
 
@@ -212,7 +212,7 @@ export default function StudentSignIn() {
     return url;
   };
 
-  const darkLogo = siteSettings.dark_logo_url || siteSettings.logo_url;
+  // On light background, use main logo
   const mainLogo = siteSettings.logo_url || siteSettings.dark_logo_url;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -254,25 +254,25 @@ export default function StudentSignIn() {
   };
 
   return (
-    <div className="spl-page">
-      {/* ── Background Glows & Ambience ── */}
-      <div className="spl-glow-red" />
-      <div className="spl-glow-blue" />
-      <div className="spl-fine-grid" />
+    <div className="spl-page-light">
+      {/* ── Background Subtle Light Grid & Gradients ── */}
+      <div className="spl-light-glow-1" />
+      <div className="spl-light-glow-2" />
+      <div className="spl-light-grid" />
 
       <div className="spl-container">
         {/* ════════════════════════════════════════════════════
-            LEFT COLUMN: Live Courses & Student Reviews Showcase
+            LEFT COLUMN: Live Courses & Student Reviews Showcase (Light Mode)
            ════════════════════════════════════════════════════ */}
         <div className="spl-showcase-column">
-          {/* Brand Logo (Dark Logo without text name) */}
+          {/* Main Logo (No text name) */}
           <div className="spl-brand-row">
             <Link href="/" className="spl-brand-link" aria-label="Home">
-              {darkLogo ? (
+              {mainLogo ? (
                 <img
-                  src={resolveImage(darkLogo)}
+                  src={resolveImage(mainLogo)}
                   alt="Logo"
-                  className="spl-dark-logo"
+                  className="spl-main-logo"
                 />
               ) : (
                 <div className="spl-logo-badge">
@@ -283,10 +283,10 @@ export default function StudentSignIn() {
           </div>
 
           {/* Section 1: Live Courses Slider (/courses exact cards) */}
-          <div className="spl-courses-section">
+          <div className="spl-courses-section-light">
             <div className="spl-section-header">
               <span className="spl-badge-tag">EXECUTIVE CURRICULUM</span>
-              <h2 className="spl-section-title">Featured Masterclasses</h2>
+              <h2 className="spl-section-title-light">Featured Masterclasses</h2>
             </div>
 
             {/* Exact CourseCard from /courses (Auto-sliding, No Arrow Icons) */}
@@ -303,7 +303,7 @@ export default function StudentSignIn() {
           </div>
 
           {/* Section 2: Home Page Student Reviews / Wall of Love */}
-          <div className="spl-reviews-section">
+          <div className="spl-reviews-section-light">
             <div className="spl-review-top-bar">
               <div className="spl-stars-row">
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -312,13 +312,13 @@ export default function StudentSignIn() {
                     width="14"
                     height="14"
                     viewBox="0 0 24 24"
-                    fill={i < currentReview.star_rating ? "#f59e0b" : "#475569"}
+                    fill={i < currentReview.star_rating ? "#f59e0b" : "#cbd5e1"}
                   >
                     <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                   </svg>
                 ))}
               </div>
-              <span className="spl-verified-tag">
+              <span className="spl-verified-tag-light">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
@@ -326,7 +326,7 @@ export default function StudentSignIn() {
               </span>
             </div>
 
-            <p className="spl-review-text">&ldquo;{currentReview.feedback_text}&rdquo;</p>
+            <p className="spl-review-text-light">&ldquo;{currentReview.feedback_text}&rdquo;</p>
 
             <div className="spl-reviewer-footer">
               <div className="spl-reviewer-avatar">
@@ -337,10 +337,10 @@ export default function StudentSignIn() {
                 )}
               </div>
               <div className="spl-reviewer-info">
-                <div className="spl-reviewer-name">{currentReview.student_name}</div>
-                <div className="spl-reviewer-role">
+                <div className="spl-reviewer-name-light">{currentReview.student_name}</div>
+                <div className="spl-reviewer-role-light">
                   {currentReview.role_title || "Batch Scholar"}{" "}
-                  {currentReview.company_name && <span className="spl-co-name">• {currentReview.company_name}</span>}
+                  {currentReview.company_name && <span className="spl-co-name-light">• {currentReview.company_name}</span>}
                 </div>
               </div>
             </div>
@@ -351,7 +351,7 @@ export default function StudentSignIn() {
             RIGHT COLUMN: Enterprise Student Portal Login Card
            ════════════════════════════════════════════════════ */}
         <div className="spl-auth-column">
-          <div className="spl-auth-card">
+          <div className="spl-auth-card-light">
             {/* Mobile Drawer Top Drag Bar & White UI Main Logo */}
             <div className="spl-mobile-drawer-top">
               <div className="spl-drawer-handle" />
@@ -486,14 +486,14 @@ export default function StudentSignIn() {
         </div>
       </div>
 
-      {/* ── Scoped Layout Styles ── */}
+      {/* ── Scoped Layout Styles (Clean Light Enterprise Mode) ── */}
       <style jsx global>{`
-        /* Viewport Canvas */
-        .spl-page {
+        /* Viewport Canvas (Light Theme) */
+        .spl-page-light {
           min-height: 100vh;
           width: 100%;
-          background: #080c16;
-          color: #f8fafc;
+          background: #f8fafc;
+          color: #0f172a;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -503,35 +503,35 @@ export default function StudentSignIn() {
           -webkit-font-smoothing: antialiased;
         }
 
-        .spl-glow-red {
+        .spl-light-glow-1 {
           position: absolute;
           top: -120px;
           left: -80px;
-          width: 550px;
-          height: 550px;
+          width: 600px;
+          height: 600px;
           border-radius: 50%;
-          background: radial-gradient(circle, rgba(230, 57, 70, 0.14) 0%, rgba(8, 12, 22, 0) 70%);
+          background: radial-gradient(circle, rgba(230, 57, 70, 0.05) 0%, rgba(248, 250, 252, 0) 70%);
           filter: blur(80px);
           pointer-events: none;
         }
 
-        .spl-glow-blue {
+        .spl-light-glow-2 {
           position: absolute;
           bottom: -120px;
           right: -80px;
           width: 650px;
           height: 650px;
           border-radius: 50%;
-          background: radial-gradient(circle, rgba(14, 116, 144, 0.12) 0%, rgba(8, 12, 22, 0) 70%);
+          background: radial-gradient(circle, rgba(14, 165, 233, 0.05) 0%, rgba(248, 250, 252, 0) 70%);
           filter: blur(90px);
           pointer-events: none;
         }
 
-        .spl-fine-grid {
+        .spl-light-grid {
           position: absolute;
           inset: 0;
-          background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+          background-image: linear-gradient(rgba(15, 23, 42, 0.02) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(15, 23, 42, 0.02) 1px, transparent 1px);
           background-size: 32px 32px;
           pointer-events: none;
         }
@@ -568,9 +568,9 @@ export default function StudentSignIn() {
           text-decoration: none;
         }
 
-        .spl-dark-logo {
-          height: 44px;
-          max-width: 170px;
+        .spl-main-logo {
+          height: 46px;
+          max-width: 180px;
           object-fit: contain;
         }
 
@@ -585,19 +585,19 @@ export default function StudentSignIn() {
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 4px 16px rgba(230, 57, 70, 0.3);
+          box-shadow: 0 4px 16px rgba(230, 57, 70, 0.25);
         }
 
-        /* Courses Card Section */
-        .spl-courses-section {
-          background: rgba(13, 22, 40, 0.65);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          backdrop-filter: blur(16px);
+        /* Courses Card Section (Light) */
+        .spl-courses-section-light {
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
           border-radius: 8px; /* slight round edge */
           padding: 22px;
           display: flex;
           flex-direction: column;
           gap: 16px;
+          box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
         }
 
         .spl-section-header {
@@ -614,10 +614,10 @@ export default function StudentSignIn() {
           text-transform: uppercase;
         }
 
-        .spl-section-title {
+        .spl-section-title-light {
           font-size: 20px;
           font-weight: 700;
-          color: #ffffff;
+          color: #0f172a;
           margin: 0;
           letter-spacing: -0.3px;
         }
@@ -632,15 +632,16 @@ export default function StudentSignIn() {
           to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Reviews Section */
-        .spl-reviews-section {
-          background: rgba(13, 22, 40, 0.45);
-          border: 1px solid rgba(255, 255, 255, 0.06);
+        /* Reviews Section (Light) */
+        .spl-reviews-section-light {
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
           border-radius: 8px; /* slight round edge */
           padding: 18px 20px;
           display: flex;
           flex-direction: column;
           gap: 10px;
+          box-shadow: 0 4px 16px rgba(15, 23, 42, 0.03);
         }
 
         .spl-review-top-bar {
@@ -654,19 +655,19 @@ export default function StudentSignIn() {
           gap: 3px;
         }
 
-        .spl-verified-tag {
+        .spl-verified-tag-light {
           display: inline-flex;
           align-items: center;
           gap: 5px;
           font-size: 11px;
-          color: #94a3b8;
+          color: #64748b;
           font-weight: 500;
         }
 
-        .spl-review-text {
+        .spl-review-text-light {
           font-size: 13.5px;
           line-height: 1.55;
-          color: #cbd5e1;
+          color: #334155;
           font-style: italic;
           margin: 0;
         }
@@ -704,22 +705,22 @@ export default function StudentSignIn() {
           flex-direction: column;
         }
 
-        .spl-reviewer-name {
+        .spl-reviewer-name-light {
           font-size: 13px;
           font-weight: 600;
-          color: #ffffff;
+          color: #0f172a;
         }
 
-        .spl-reviewer-role {
+        .spl-reviewer-role-light {
           font-size: 11px;
-          color: #94a3b8;
+          color: #64748b;
         }
 
-        .spl-co-name {
-          color: #38bdf8;
+        .spl-co-name-light {
+          color: #0284c7;
         }
 
-        /* ── Right Column: Auth Card (Slight Round Edge) ── */
+        /* ── Right Column: Auth Card (Light Theme) ── */
         .spl-auth-column {
           flex: 0.95;
           display: flex;
@@ -727,14 +728,14 @@ export default function StudentSignIn() {
           width: 100%;
         }
 
-        .spl-auth-card {
+        .spl-auth-card-light {
           width: 100%;
           max-width: 440px;
           background: #ffffff;
           color: #0f172a;
           border-radius: 8px; /* slight round edge, no heavy rounded pill corners */
           padding: 38px 34px;
-          box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+          box-shadow: 0 10px 40px -10px rgba(15, 23, 42, 0.08), 0 0 0 1px #e2e8f0;
           display: flex;
           flex-direction: column;
         }
@@ -903,12 +904,12 @@ export default function StudentSignIn() {
           cursor: pointer;
           transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
           margin-top: 4px;
-          box-shadow: 0 4px 14px rgba(10, 22, 40, 0.25);
+          box-shadow: 0 4px 14px rgba(10, 22, 40, 0.15);
         }
 
         .spl-btn-submit:hover:not(:disabled) {
           background: #e63946;
-          box-shadow: 0 6px 20px rgba(230, 57, 70, 0.35);
+          box-shadow: 0 6px 20px rgba(230, 57, 70, 0.25);
           transform: translateY(-1px);
         }
 
@@ -958,10 +959,10 @@ export default function StudentSignIn() {
             MOBILE VIEW: DRAWER STYLE + WHITE UI MAIN LOGO (< 768px)
            ════════════════════════════════════════════════════ */
         @media (max-width: 768px) {
-          .spl-page {
+          .spl-page-light {
             align-items: flex-end; /* Drawer anchored at bottom */
             padding: 0;
-            background: #080c16;
+            background: #e2e8f0;
             min-height: 100vh;
           }
 
@@ -985,12 +986,12 @@ export default function StudentSignIn() {
           }
 
           /* Bottom Drawer Sheet */
-          .spl-auth-card {
+          .spl-auth-card-light {
             max-width: 100%;
             width: 100%;
             border-radius: 18px 18px 0 0; /* Drawer top rounded corners */
             padding: 24px 20px 36px 20px;
-            box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.12);
             border: none;
             background: #ffffff;
             animation: splDrawerSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
