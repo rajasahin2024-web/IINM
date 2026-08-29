@@ -17,6 +17,7 @@ export default function InvoicePage() {
   const [showPayModal, setShowPayModal] = useState(false);
   const [payAmount, setPayAmount] = useState("");
   const [selectedPreset, setSelectedPreset] = useState<"full"|"half"|null>("full");
+  const [selectedInstallmentId, setSelectedInstallmentId] = useState<number | null>(null);
   const [paying, setPaying] = useState(false);
   const [paySuccess, setPaySuccess] = useState(false);
   const [upiUploading, setUpiUploading] = useState(false);
@@ -88,6 +89,17 @@ export default function InvoicePage() {
 
   const handlePay = () => {
     if (isPaid) return;
+    setSelectedInstallmentId(null);
+    setPayAmount(data.current_due.toString());
+    setSelectedPreset("full");
+    setShowPayModal(true);
+  };
+
+  const handlePayInstallment = (inst: any) => {
+    const remaining = (inst.amount - inst.paid_amount).toFixed(2);
+    setSelectedInstallmentId(inst.id);
+    setPayAmount(remaining);
+    setSelectedPreset("full");
     setShowPayModal(true);
   };
 
@@ -101,7 +113,7 @@ export default function InvoicePage() {
       const res = await fetch(`${API_BASE_URL}/invoice/create-order`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoice_uuid: uuid, amount: amt })
+        body: JSON.stringify({ invoice_uuid: uuid, amount: amt, installment_id: selectedInstallmentId })
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "Failed to create order"); }
       const order = await res.json();
@@ -112,6 +124,7 @@ export default function InvoicePage() {
         currency: order.currency,
         name: siteName,
         description: data.course.item_title,
+        image: logoUrl || undefined,
         order_id: order.order_id,
         prefill: {
           name: data.student.name,
@@ -130,6 +143,7 @@ export default function InvoicePage() {
               invoice_uuid: uuid,
               amount_paid: amt,
               notes: notesRef.current?.value || null,
+              installment_id: selectedInstallmentId,
             })
           });
           if (!verRes.ok) {
@@ -138,6 +152,7 @@ export default function InvoicePage() {
           } else {
             setPaySuccess(true);
             setShowPayModal(false);
+            setSelectedInstallmentId(null);
             loadData();
           }
         },
@@ -405,27 +420,53 @@ export default function InvoicePage() {
             {/* Installment Schedule */}
             {data.is_installment && data.installments && data.installments.length > 0 && (
               <div style={{marginBottom:16}}>
-                <div style={{fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,color:"#475569",marginBottom:8,borderBottom:"1px solid #cbd5e1",paddingBottom:4}}>INSTALLMENT SCHEDULE</div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                  <div style={{fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,color:"#475569",borderBottom:"1px solid #cbd5e1",paddingBottom:4,flex:1}}>INSTALLMENT SCHEDULE</div>
+                  {!isPaid && !paySuccess && (
+                    <button onClick={handlePay} className="no-print" style={{background:"#0f172a",color:"#fff",border:"none",padding:"6px 14px",borderRadius:0,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+                      <Icon name="credit-card" size={12}/> Pay All Due
+                    </button>
+                  )}
+                </div>
                 <table className="inv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:"'Segoe UI',Arial,sans-serif"}}>
                   <thead>
                     <tr style={{background:"#f1f5f9",borderBottom:"1px solid #cbd5e1"}}>
                       <th style={{padding:"6px 10px",textAlign:"left",fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase"}}>#</th>
+                      <th style={{padding:"6px 10px",textAlign:"left",fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase"}}>Name</th>
                       <th style={{padding:"6px 10px",textAlign:"left",fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase"}}>Due Date</th>
                       <th style={{padding:"6px 10px",textAlign:"right",fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase"}}>Amount</th>
                       <th style={{padding:"6px 10px",textAlign:"right",fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase"}}>Paid</th>
                       <th style={{padding:"6px 10px",textAlign:"center",fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase"}}>Status</th>
+                      <th style={{padding:"6px 10px",textAlign:"right",fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase"}} className="no-print">Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.installments.map((inst: any, i: number) => (
-                      <tr key={i} style={{borderBottom:"1px solid #e2e8f0"}}>
-                        <td style={{padding:"6px 10px",fontFamily:"'Consolas','Courier New',monospace",fontWeight:600}}>{inst.installment_no}</td>
-                        <td style={{padding:"6px 10px"}}>{formatDate(inst.due_date)}</td>
-                        <td style={{padding:"6px 10px",textAlign:"right",fontFamily:"'Consolas','Courier New',monospace",fontWeight:600}}>₹{inst.amount.toFixed(2)}</td>
-                        <td style={{padding:"6px 10px",textAlign:"right",fontFamily:"'Consolas','Courier New',monospace",color:inst.paid_amount>0?"#15803d":"#94a3b8"}}>₹{inst.paid_amount.toFixed(2)}</td>
-                        <td style={{padding:"6px 10px",textAlign:"center"}}>{statusBadge(inst.status)}</td>
-                      </tr>
-                    ))}
+                    {data.installments.map((inst: any, i: number) => {
+                      const instRemaining = inst.amount - inst.paid_amount;
+                      const isInstPaid = inst.status === "paid" || instRemaining <= 0;
+                      return (
+                        <tr key={i} style={{borderBottom:"1px solid #e2e8f0"}}>
+                          <td style={{padding:"6px 10px",fontFamily:"'Consolas','Courier New',monospace",fontWeight:600}}>{inst.installment_no}</td>
+                          <td style={{padding:"6px 10px",fontWeight:600,color:"#0f172a"}}>{inst.name || `Installment #${inst.installment_no}`}</td>
+                          <td style={{padding:"6px 10px"}}>{formatDate(inst.due_date)}</td>
+                          <td style={{padding:"6px 10px",textAlign:"right",fontFamily:"'Consolas','Courier New',monospace",fontWeight:600}}>₹{inst.amount.toFixed(2)}</td>
+                          <td style={{padding:"6px 10px",textAlign:"right",fontFamily:"'Consolas','Courier New',monospace",color:inst.paid_amount>0?"#15803d":"#94a3b8"}}>₹{inst.paid_amount.toFixed(2)}</td>
+                          <td style={{padding:"6px 10px",textAlign:"center"}}>{statusBadge(inst.status)}</td>
+                          <td style={{padding:"6px 10px",textAlign:"right"}} className="no-print">
+                            {!isInstPaid && !isPaid ? (
+                              <button
+                                onClick={() => handlePayInstallment(inst)}
+                                style={{background:"#fef3c7",color:"#b45309",border:"1px solid #fde68a",padding:"5px 12px",borderRadius:0,fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}
+                              >
+                                Pay ₹{instRemaining.toFixed(2)}
+                              </button>
+                            ) : isInstPaid ? (
+                              <span style={{color:"#94a3b8",fontSize:11}}>—</span>
+                            ) : null}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -529,9 +570,18 @@ export default function InvoicePage() {
             <div style={{padding:"24px"}}>
               {/* Amount Selection */}
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:16,padding:"12px 16px",background:"#f8fafc",borderRadius:0}}>
-                <span style={{color:"#64748b",fontSize:14,fontWeight:600}}>Total Due</span>
-                <span style={{fontWeight:800,fontSize:18,color:"#0f172a"}}>₹{data.current_due.toFixed(2)}</span>
+                <span style={{color:"#64748b",fontSize:14,fontWeight:600}}>
+                  {selectedInstallmentId ? "Installment Due" : "Total Due"}
+                </span>
+                <span style={{fontWeight:800,fontSize:18,color:"#0f172a"}}>
+                  ₹{selectedInstallmentId ? parseFloat(payAmount||"0").toFixed(2) : data.current_due.toFixed(2)}
+                </span>
               </div>
+              {selectedInstallmentId && (
+                <div style={{marginBottom:12,padding:"8px 12px",background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:0,fontSize:12,color:"#1d4ed8",fontWeight:600}}>
+                  Paying specific installment. Click "Full Amount" to pay all remaining dues instead.
+                </div>
+              )}
 
               <div style={{marginBottom:20}}>
                 <label style={{display:"block",fontSize:13,fontWeight:700,color:"#334155",marginBottom:8}}>Payment Amount</label>
@@ -545,11 +595,11 @@ export default function InvoicePage() {
                   />
                 </div>
                 <div style={{display:"flex",gap:8,marginTop:10}}>
-                  <button onClick={() => { setPayAmount(data.current_due.toString()); setSelectedPreset("full"); }}
+                  <button onClick={() => { setPayAmount(data.current_due.toString()); setSelectedPreset("full"); setSelectedInstallmentId(null); }}
                     style={{flex:1,padding:"9px",background:selectedPreset==="full"?"#dbeafe":"#f1f5f9",color:selectedPreset==="full"?"#1d4ed8":"#475569",border:selectedPreset==="full"?"1.5px solid #93c5fd":"1.5px solid transparent",borderRadius:0,fontSize:12,fontWeight:700,cursor:"pointer",transition:"all .15s"}}>
                     Full Amount
                   </button>
-                  <button onClick={() => { setPayAmount((data.current_due * 0.5).toFixed(2)); setSelectedPreset("half"); }}
+                  <button onClick={() => { setPayAmount((data.current_due * 0.5).toFixed(2)); setSelectedPreset("half"); setSelectedInstallmentId(null); }}
                     style={{flex:1,padding:"9px",background:selectedPreset==="half"?"#dbeafe":"#f1f5f9",color:selectedPreset==="half"?"#1d4ed8":"#475569",border:selectedPreset==="half"?"1.5px solid #93c5fd":"1.5px solid transparent",borderRadius:0,fontSize:12,fontWeight:700,cursor:"pointer",transition:"all .15s"}}>
                     50%
                   </button>

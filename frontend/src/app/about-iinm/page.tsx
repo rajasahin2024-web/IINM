@@ -4,7 +4,7 @@ import Image from "next/image";
 import PublicNavbar from "@/components/PublicNavbar";
 import PublicFooter from "@/components/PublicFooter";
 import AboutInstitutionalLayout from "@/components/AboutInstitutionalLayout";
-import { API_BASE_URL, BASE_URL } from "@/lib/config";
+import { API_BASE_URL, BASE_URL, BACKEND_BASE_URL } from "@/lib/config";
 import { apiFetch } from "@/lib/apiFetch";
 import "../home.css";
 import "../about-institutional.css";
@@ -119,8 +119,8 @@ interface FormInputProps {
   selectOptions?: SelectOption[] | null;
 }
 
-// Remove /api from API_BASE_URL to get backend root URL for file absolute paths
-const BACKEND_BASE = API_BASE_URL.replace("/api", "");
+// Backend root URL (no /api suffix) for resolving relative upload paths.
+const BACKEND_BASE = BACKEND_BASE_URL;
 
 /* ══════════════════════════════════════════════════════
    ICONS — Premium inline SVG icons to prevent dependency issues

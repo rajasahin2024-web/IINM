@@ -660,6 +660,8 @@ class R2SettingsSchema(BaseModel):
     bucket_name: Optional[str] = None
     public_url: Optional[str] = None
     is_active: bool = True
+    hls_enabled: bool = False
+    hls_qualities: Optional[str] = None
 
 class R2SettingsResponse(BaseModel):
     account_id: Optional[str] = None
@@ -669,13 +671,24 @@ class R2SettingsResponse(BaseModel):
     public_url: Optional[str] = None
     is_active: bool = True
     has_secret: bool = False
+    hls_enabled: bool = False
+    hls_qualities: Optional[str] = None
+    ffmpeg_installed: bool = False
+    ffmpeg_version: Optional[str] = None
+    ffmpeg_install_hint: Optional[str] = None
 
 @router.get("/r2", response_model=R2SettingsResponse)
 async def get_r2_settings(device: str = Depends(require_device), db: Session = Depends(get_db)):
     """Retrieve the R2 Bucket settings. Secret key is masked."""
+    from hls.ffmpeg_check import get_ffmpeg_status
     settings = db.query(R2Settings).first()
+    ffmpeg = get_ffmpeg_status()
     if not settings:
-        return R2SettingsResponse()
+        return R2SettingsResponse(
+            ffmpeg_installed=ffmpeg["installed"],
+            ffmpeg_version=ffmpeg["version"],
+            ffmpeg_install_hint=ffmpeg["install_hint"],
+        )
     return R2SettingsResponse(
         account_id=settings.account_id,
         access_key_id=settings.access_key_id,
@@ -684,6 +697,11 @@ async def get_r2_settings(device: str = Depends(require_device), db: Session = D
         public_url=settings.public_url,
         is_active=settings.is_active,
         has_secret=bool(settings.secret_access_key),
+        hls_enabled=settings.hls_enabled or False,
+        hls_qualities=settings.hls_qualities,
+        ffmpeg_installed=ffmpeg["installed"],
+        ffmpeg_version=ffmpeg["version"],
+        ffmpeg_install_hint=ffmpeg["install_hint"],
     )
 
 @router.put("/r2", response_model=R2SettingsSchema)
@@ -701,6 +719,8 @@ async def update_r2_settings(req: R2SettingsSchema, device: str = Depends(requir
     settings.bucket_name = req.bucket_name
     settings.public_url = req.public_url
     settings.is_active = req.is_active
+    settings.hls_enabled = req.hls_enabled
+    settings.hls_qualities = req.hls_qualities
 
     db.commit()
     db.refresh(settings)
@@ -755,6 +775,12 @@ async def test_r2_connection(req: R2TestRequest, device: str = Depends(require_d
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Connection failed. Please check credentials: {str(e)}"
         )
+
+@router.get("/r2/ffmpeg-status")
+async def get_ffmpeg_status_endpoint(device: str = Depends(require_device)):
+    """Check if FFmpeg is installed on the server (for HLS transcoding)."""
+    from hls.ffmpeg_check import get_ffmpeg_status
+    return get_ffmpeg_status()
 
 def _build_s3_client(settings: R2Settings):
     """Helper: build a boto3 S3 client from saved R2 settings."""

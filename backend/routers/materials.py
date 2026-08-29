@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Header, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
@@ -7,6 +7,8 @@ from datetime import datetime
 import os
 import uuid
 import shutil
+import logging
+import tempfile
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -78,6 +80,92 @@ def _get_r2_client(db: Session):
     except Exception:
         return None, None
 
+
+# ─── HLS Background Transcode ──────────────────────────────────────────────────
+
+def _transcode_video_hls_background(material_id: int, source_bytes: bytes, source_ext: str, r2_key: str):
+    """Background task: transcode a video to HLS and upload to R2.
+
+    Runs after the upload response is sent. Uses its own DB session
+    (the request session is closed by then). Silently skips if FFmpeg
+    is missing or HLS is disabled.
+    """
+    from hls.ffmpeg_check import is_ffmpeg_installed
+    from hls.video_transcode import transcode_to_hls, DEFAULT_QUALITIES
+    from hls.r2_hls_upload import upload_hls_to_r2
+    from database import SessionLocal
+
+    db = SessionLocal()
+    temp_input = None
+    temp_hls_dir = None
+    try:
+        # Check HLS is enabled + FFmpeg installed
+        r2_settings = db.query(models.R2Settings).first()
+        if not r2_settings or not r2_settings.hls_enabled or not r2_settings.is_active:
+            logging.info(f"HLS transcode skipped (disabled) for material {material_id}")
+            return
+        if not is_ffmpeg_installed():
+            logging.warning(f"HLS transcode skipped (no FFmpeg) for material {material_id}")
+            return
+        if not r2_settings.public_url or not r2_settings.bucket_name:
+            logging.warning(f"HLS transcode skipped (no R2 public_url) for material {material_id}")
+            return
+
+        # Parse qualities
+        qualities = [q.strip() for q in (r2_settings.hls_qualities or "").split(",") if q.strip()] or DEFAULT_QUALITIES
+
+        # Write source bytes to temp file
+        temp_input = tempfile.NamedTemporaryFile(delete=False, suffix=source_ext or ".mp4")
+        temp_input.write(source_bytes)
+        temp_input.close()
+
+        # Transcode to HLS
+        hls_uuid = uuid.uuid4().hex
+        temp_hls_dir = os.path.join(tempfile.gettempdir(), f"hls_{hls_uuid}")
+        master_path = transcode_to_hls(temp_input.name, temp_hls_dir, qualities)
+        if not master_path:
+            logging.error(f"HLS transcode failed for material {material_id}")
+            return
+
+        # Build R2 client and upload
+        s3, r2 = _get_r2_client(db)
+        if not s3 or not r2:
+            logging.error(f"R2 client unavailable for HLS upload (material {material_id})")
+            return
+
+        r2_prefix = f"course-materials/hls/{hls_uuid}"
+        master_url = upload_hls_to_r2(
+            s3_client=s3,
+            bucket_name=r2.bucket_name,
+            public_url=r2.public_url,
+            local_dir=temp_hls_dir,
+            r2_prefix=r2_prefix,
+        )
+        # upload_hls_to_r2 already deletes temp_hls_dir
+        temp_hls_dir = None
+
+        if master_url:
+            # Update the material row
+            mat = db.query(models.CourseMaterial).filter(models.CourseMaterial.id == material_id).first()
+            if mat:
+                mat.hls_url = master_url
+                db.commit()
+                logging.info(f"HLS URL saved for material {material_id}: {master_url}")
+        else:
+            logging.error(f"HLS upload returned no master_url for material {material_id}")
+
+    except Exception as e:
+        logging.error(f"HLS background transcode error for material {material_id}: {e}")
+    finally:
+        # Clean up temp input file
+        if temp_input and os.path.exists(temp_input.name):
+            os.unlink(temp_input.name)
+        # Clean up temp HLS dir if still exists (upload failed before cleanup)
+        if temp_hls_dir and os.path.exists(temp_hls_dir):
+            shutil.rmtree(temp_hls_dir, ignore_errors=True)
+        db.close()
+
+
 # ─── SCHEMAS ──────────────────────────────────────────────────────────────────
 
 class MaterialResponse(BaseModel):
@@ -87,6 +175,7 @@ class MaterialResponse(BaseModel):
     tags: Optional[str] = None
     file_type: str
     file_url: Optional[str] = None
+    hls_url: Optional[str] = None
     youtube_url: Optional[str] = None
     thumbnail_url: Optional[str] = None
     file_size: Optional[int] = None
@@ -141,6 +230,7 @@ async def upload_material(
     youtube_url: Optional[str]          = Form(None),
     file:        Optional[UploadFile]   = File(None),
     thumbnail:   Optional[UploadFile]   = File(None),
+    background_tasks: BackgroundTasks   = None,
     device:      str                    = Depends(require_device),
     db: Session = Depends(get_db),
 ):
@@ -190,17 +280,22 @@ async def upload_material(
 
         # ── Try R2 ────────────────────────────────────
         s3, r2 = _get_r2_client(db)
+        r2_uploaded = False
         if s3 and r2:
             r2_key  = f"{R2_MATERIALS_PREFIX}{unique_name}"
-            s3.put_object(
-                Bucket=r2.bucket_name,
-                Key=r2_key,
-                Body=content,
-                ContentType=content_type or "application/octet-stream",
-            )
             pub      = (r2.public_url or "").rstrip("/")
-            file_url = f"{pub}/{r2_key}" if pub else r2_key
-        else:
+            if pub:
+                s3.put_object(
+                    Bucket=r2.bucket_name,
+                    Key=r2_key,
+                    Body=content,
+                    ContentType=content_type or "application/octet-stream",
+                )
+                file_url = f"{pub}/{r2_key}"
+                r2_uploaded = True
+            else:
+                logging.error("R2 upload skipped: public_url is empty — falling back to local storage")
+        if not r2_uploaded:
             # ── Local fallback ────────────────────────
             save_path = os.path.join(UPLOAD_DIR, unique_name)
             with open(save_path, "wb") as buf:
@@ -248,6 +343,17 @@ async def upload_material(
     db.add(material)
     db.commit()
     db.refresh(material)
+
+    # ── Trigger silent HLS transcoding in background (videos only) ──
+    if background_tasks and file_type == "video" and content:
+        background_tasks.add_task(
+            _transcode_video_hls_background,
+            material_id=material.id,
+            source_bytes=content,
+            source_ext=ext or ".mp4",
+            r2_key="",
+        )
+
     return material
 
 

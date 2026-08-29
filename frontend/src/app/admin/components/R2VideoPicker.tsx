@@ -1,12 +1,13 @@
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { apiFetch } from "@/lib/apiFetch";
-import { API_BASE_URL } from "@/lib/config";
+import { API_BASE_URL, resolveAssetUrl } from "@/lib/config";
 
 interface R2Video {
   id: number;
   title: string;
   file_url: string | null;
+  hls_url: string | null;
   thumbnail_url: string | null;
   file_size: number | null;
   file_type: string;
@@ -14,7 +15,7 @@ interface R2Video {
 
 interface R2VideoPickerProps {
   onClose: () => void;
-  onSelect: (material: { file_url: string; title: string; thumbnail_url: string | null }) => void;
+  onSelect: (material: { file_url: string; hls_url?: string | null; title: string; thumbnail_url: string | null }) => void;
 }
 
 function formatBytes(bytes: number | null) {
@@ -63,6 +64,7 @@ export default function R2VideoPicker({ onClose, onSelect }: R2VideoPickerProps)
     if (!selected || !selected.file_url) return;
     onSelect({
       file_url: selected.file_url,
+      hls_url: selected.hls_url || undefined,
       title: selected.title,
       thumbnail_url: selected.thumbnail_url,
     });
@@ -71,7 +73,7 @@ export default function R2VideoPicker({ onClose, onSelect }: R2VideoPickerProps)
 
   const getThumbUrl = (v: R2Video) => {
     if (!v.thumbnail_url) return "";
-    return v.thumbnail_url.startsWith("http") ? v.thumbnail_url : `${API_BASE_URL.replace("/api", "")}${v.thumbnail_url}`;
+    return resolveAssetUrl(v.thumbnail_url);
   };
 
   return (

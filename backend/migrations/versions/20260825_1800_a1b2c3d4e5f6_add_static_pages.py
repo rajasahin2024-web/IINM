@@ -1,6 +1,6 @@
 """add static_pages table
 
-Revision ID: a1b2c3d4e5f6
+Revision ID: 9b1a37d0e67c
 Revises: 23075c17c86f
 Create Date: 2026-08-25 18:00:00.000000
 
@@ -18,7 +18,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'a1b2c3d4e5f6'
+revision: str = '9b1a37d0e67c'
 down_revision: Union[str, Sequence[str], None] = '23075c17c86f'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

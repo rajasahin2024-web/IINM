@@ -66,15 +66,18 @@ const handleViewPaymentReceipt = (t: PaymentTransaction) => {
 function PaymentsLedgerView() {
   const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Filters
   const [search, setSearch] = useState("");
   const [filterMethod, setFilterMethod] = useState("All");
-  
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  
+
   // Modal State
   const [showModal, setShowModal] = useState(false);
   const [showConfirm, setShowConfirm] = useState<PaymentTransaction | null>(null);
@@ -83,9 +86,16 @@ function PaymentsLedgerView() {
   const fetchTransactions = async () => {
     setLoading(true);
     try {
-      const res = await apiFetch(`${API_BASE_URL}/academic/payments?limit=500`);
+      const params = new URLSearchParams();
+      params.append("limit", "500");
+      if (filterStatus !== "all") params.append("status", filterStatus);
+      if (dateFrom) params.append("date_from", dateFrom);
+      if (dateTo) params.append("date_to", dateTo);
+      if (filterMethod !== "All") params.append("payment_method", filterMethod);
+      const res = await apiFetch(`${API_BASE_URL}/academic/payments?${params.toString()}`);
       if (res.ok) {
-        setTransactions(await res.json());
+        const data = await res.json();
+        setTransactions(Array.isArray(data) ? data : (data.items || []));
       }
     } catch (e) {
       console.error(e);
@@ -97,16 +107,17 @@ function PaymentsLedgerView() {
 
   useEffect(() => {
     fetchTransactions();
-  }, []);
+  }, [filterStatus, dateFrom, dateTo, filterMethod]);
 
   const totalProcessed = transactions.filter(t => t.status === "approved").reduce((acc, t) => acc + t.amount, 0);
+  const totalPending = transactions.filter(t => t.status === "pending").reduce((acc, t) => acc + t.amount, 0);
 
   const filteredTxns = transactions.filter(t => {
     if (filterMethod !== "All" && t.payment_method !== filterMethod) return false;
     if (search.trim()) {
       const q = search.toLowerCase();
-      return t.student_name.toLowerCase().includes(q) || 
-             (t.student_contact || "").toLowerCase().includes(q) || 
+      return t.student_name.toLowerCase().includes(q) ||
+             (t.student_contact || "").toLowerCase().includes(q) ||
              (t.reference_no || "").toLowerCase().includes(q);
     }
     return true;
@@ -114,7 +125,12 @@ function PaymentsLedgerView() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, filterMethod]);
+  }, [search, filterMethod, filterStatus, dateFrom, dateTo]);
+
+  const clearDates = () => {
+    setDateFrom("");
+    setDateTo("");
+  };
 
   return (
     <div style={{ padding: "24px 32px", background: "#f8fafc", minHeight: "100vh", fontFamily: "var(--font-inter), sans-serif" }}>
@@ -133,39 +149,73 @@ function PaymentsLedgerView() {
         </button>
       </div>
 
-      <div style={{ display: "flex", gap: 24, marginBottom: 32 }}>
-        <div style={{ flex: 1, background: "#fff", borderRadius: 16, padding: 24, border: "1px solid #e2e8f0", boxShadow: "0 4px 20px rgba(0,0,0,0.03)" }}>
+      <div style={{ display: "flex", gap: 24, marginBottom: 32, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 220, background: "#fff", borderRadius: 16, padding: 24, border: "1px solid #e2e8f0", boxShadow: "0 4px 20px rgba(0,0,0,0.03)" }}>
           <div style={{ color: "#64748b", fontSize: 13, fontWeight: 600, marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ width: 24, height: 24, borderRadius: 6, background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", color: "#475569" }}><Icon name="list" size={14}/></div>
             Total Transactions
           </div>
           <div style={{ fontSize: 32, fontWeight: 800, color: "#0f172a" }}>{transactions.length}</div>
         </div>
-        <div style={{ flex: 1, background: "#fff", borderRadius: 16, padding: 24, border: "1px solid #e2e8f0", boxShadow: "0 4px 20px rgba(0,0,0,0.03)" }}>
+        <div style={{ flex: 1, minWidth: 220, background: "#fff", borderRadius: 16, padding: 24, border: "1px solid #e2e8f0", boxShadow: "0 4px 20px rgba(0,0,0,0.03)" }}>
           <div style={{ color: "#64748b", fontSize: 13, fontWeight: 600, marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ width: 24, height: 24, borderRadius: 6, background: "#10b98115", display: "flex", alignItems: "center", justifyContent: "center", color: "#10b981" }}><Icon name="dollar-sign" size={14}/></div>
             Total Processed (Approved)
           </div>
           <div style={{ fontSize: 32, fontWeight: 800, color: "#10b981" }}>{fmtRs(totalProcessed)}</div>
         </div>
+        <div style={{ flex: 1, minWidth: 220, background: "#fff", borderRadius: 16, padding: 24, border: "1px solid #e2e8f0", boxShadow: "0 4px 20px rgba(0,0,0,0.03)" }}>
+          <div style={{ color: "#64748b", fontSize: 13, fontWeight: 600, marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 24, height: 24, borderRadius: 6, background: "#f59e0b15", display: "flex", alignItems: "center", justifyContent: "center", color: "#d97706" }}><Icon name="clock" size={14}/></div>
+            Total Pending
+          </div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: "#d97706" }}>{fmtRs(totalPending)}</div>
+        </div>
       </div>
 
       <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 4px 20px rgba(0,0,0,0.03)", overflow: "hidden" }}>
-        <div style={{ padding: "20px 24px", borderBottom: "1px solid #f1f5f9", display: "flex", gap: 16, background: "#f8fafc" }}>
-          <div style={{ flex: 1, position: "relative" }}>
+        <div style={{ padding: "20px 24px", borderBottom: "1px solid #f1f5f9", display: "flex", gap: 16, background: "#f8fafc", flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ flex: 1, minWidth: 240, position: "relative" }}>
             <div style={{ position: "absolute", left: 14, top: 10, color: "#94a3b8" }}><Icon name="search" size={16} /></div>
-            <input 
-              type="text" 
-              placeholder="Search by student, contact, or ref no..." 
+            <input
+              type="text"
+              placeholder="Search by student, contact, or ref no..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               style={{ width: "100%", padding: "10px 14px 10px 40px", borderRadius: 8, border: "1px solid #e2e8f0", outline: "none", fontSize: 13, boxSizing: "border-box" }}
             />
           </div>
-          <select 
-            value={filterMethod} 
+          <select
+            value={filterStatus}
+            onChange={e => setFilterStatus(e.target.value)}
+            style={{ width: 160, padding: "10px 14px", borderRadius: 8, border: "1px solid #e2e8f0", outline: "none", fontSize: 13, background: "#fff", cursor: "pointer" }}
+          >
+            <option value="all">All Status</option>
+            <option value="approved">Approved</option>
+            <option value="pending">Pending</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={e => setDateFrom(e.target.value)}
+              style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #e2e8f0", outline: "none", fontSize: 13, background: "#fff", color: "#0f172a" }}
+              aria-label="Date from"
+            />
+            <span style={{ color: "#94a3b8", fontSize: 12 }}>→</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={e => setDateTo(e.target.value)}
+              style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #e2e8f0", outline: "none", fontSize: 13, background: "#fff", color: "#0f172a" }}
+              aria-label="Date to"
+            />
+          </div>
+          <select
+            value={filterMethod}
             onChange={e => setFilterMethod(e.target.value)}
-            style={{ width: 200, padding: "10px 14px", borderRadius: 8, border: "1px solid #e2e8f0", outline: "none", fontSize: 13, background: "#fff", cursor: "pointer" }}
+            style={{ width: 180, padding: "10px 14px", borderRadius: 8, border: "1px solid #e2e8f0", outline: "none", fontSize: 13, background: "#fff", cursor: "pointer" }}
           >
             <option value="All">All Payment Methods</option>
             <option value="Cash">Cash</option>
@@ -174,6 +224,14 @@ function PaymentsLedgerView() {
             <option value="Card">Card</option>
             <option value="Cheque">Cheque</option>
           </select>
+          {(dateFrom !== "" || dateTo !== "") && (
+            <button
+              onClick={clearDates}
+              style={{ background: "#fef2f2", color: "#ef4444", border: "1px solid #fecaca", padding: "10px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+            >
+              <Icon name="x" size={12}/> Clear Dates
+            </button>
+          )}
         </div>
 
         {loading ? (

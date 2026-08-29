@@ -20,7 +20,7 @@ from cache import cache
 from models import (
     SiteSettings, SeoPageMeta, Redirect, CourseFaq, Course,
     GscProperty, GscQueryStat, BlogPost, FAQ, CourseExtendedContent,
-    AISettings,
+    AISettings, SeoFooterDirectory,
 )
 from routers.auth import require_device
 from helpers import rewrite_url
@@ -79,6 +79,27 @@ class RedirectUpdate(BaseModel):
     to_path: Optional[str] = None
     status_code: Optional[int] = None
     is_active: Optional[bool] = None
+
+class SeoDirectoryLinkItem(BaseModel):
+    id: Optional[str] = None
+    label: str
+    url: str
+    is_external: Optional[bool] = False
+    order_index: Optional[int] = 0
+
+class SeoDirectoryCategory(BaseModel):
+    id: Optional[str] = None
+    title: str
+    order_index: Optional[int] = 0
+    is_active: Optional[bool] = True
+    links: List[SeoDirectoryLinkItem] = []
+
+class SeoDirectorySchema(BaseModel):
+    tagline: Optional[str] = "#Create Impact"
+    show_tagline: Optional[bool] = True
+    is_active: Optional[bool] = True
+    categories: List[SeoDirectoryCategory] = []
+
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -997,4 +1018,206 @@ Rules:
         return {"error": "AI returned invalid JSON. Try again.", "raw_response": content[:500]}
     except Exception as e:
         return {"error": f"Failed to generate FAQs: {str(e)}"}
+
+
+# ═══════════════════════════════════════════════════════════════
+#  10. SEO INTERNAL LINKS DIRECTORY (Footer Keyword Cloud Section)
+# ═══════════════════════════════════════════════════════════════
+
+DEFAULT_DIRECTORY_DATA = {
+    "tagline": "#Create Impact",
+    "show_tagline": True,
+    "is_active": True,
+    "categories": [
+        {
+            "id": "top-programs",
+            "title": "Top Programs",
+            "order_index": 0,
+            "is_active": True,
+            "links": [
+                {"id": "tp-1", "label": "Software and AI Engineering", "url": "/courses", "order_index": 0},
+                {"id": "tp-2", "label": "Modern Data Science and ML with Specialization in AI", "url": "/courses", "order_index": 1},
+                {"id": "tp-3", "label": "AI Forward Deployed Engineer Program", "url": "/courses", "order_index": 2},
+                {"id": "tp-4", "label": "DevOps, Cloud & AI Platform Engineering", "url": "/courses", "order_index": 3},
+                {"id": "tp-5", "label": "AI & Machine Learning Program with Agentic AI", "url": "/courses/ai-agentic-software-devlopment", "order_index": 4},
+                {"id": "tp-6", "label": "Online PGP in Business and AI", "url": "/courses", "order_index": 5},
+                {"id": "tp-7", "label": "Global Master's in Computer Science by Woolf, optional Certification from Oxford", "url": "/courses", "order_index": 6},
+                {"id": "tp-8", "label": "Global Master's in Artificial Intelligence by Woolf, optional Certification from Oxford", "url": "/courses", "order_index": 7},
+                {"id": "tp-9", "label": "Executive Certification in Business & Technology Management by IIM Trichy", "url": "/courses", "order_index": 8},
+                {"id": "tp-10", "label": "AI Engineering Advanced Certification by IIT-Roorkee CEC", "url": "/courses", "order_index": 9},
+            ]
+        },
+        {
+            "id": "trending-courses",
+            "title": "Trending Courses",
+            "order_index": 1,
+            "is_active": True,
+            "links": [
+                {"id": "tc-1", "label": "Full Stack Developer Course", "url": "/courses", "order_index": 0},
+                {"id": "tc-2", "label": "Machine Learning Course", "url": "/courses", "order_index": 1},
+                {"id": "tc-3", "label": "Data Structures and Algorithms (DSA) Course", "url": "/courses", "order_index": 2},
+                {"id": "tc-4", "label": "Web Development Course", "url": "/courses", "order_index": 3},
+                {"id": "tc-5", "label": "System Design Course", "url": "/courses", "order_index": 4},
+                {"id": "tc-6", "label": "Excel Automation with AI Agents Mastery", "url": "/courses/excel-automation-with-ai-agents-mastery", "order_index": 5},
+                {"id": "tc-7", "label": "AI Finance Management Mastery (2026)", "url": "/courses/ai-finance-management-mastery-2026", "order_index": 6},
+            ]
+        },
+        {
+            "id": "free-courses",
+            "title": "Free Certification Courses",
+            "order_index": 2,
+            "is_active": True,
+            "links": [
+                {"id": "fc-1", "label": "Python Course for Beginners", "url": "/courses", "order_index": 0},
+                {"id": "fc-2", "label": "Free Agentic AI Course", "url": "/courses", "order_index": 1},
+                {"id": "fc-3", "label": "DBMS Course", "url": "/courses", "order_index": 2},
+                {"id": "fc-4", "label": "Java Course", "url": "/courses", "order_index": 3},
+                {"id": "fc-5", "label": "React JS Course", "url": "/courses", "order_index": 4},
+                {"id": "fc-6", "label": "Python & SQL For Data Science", "url": "/courses", "order_index": 5},
+                {"id": "fc-7", "label": "Computer Networking Course", "url": "/courses", "order_index": 6},
+                {"id": "fc-8", "label": "Operating System Course", "url": "/courses", "order_index": 7},
+                {"id": "fc-9", "label": "SQL using MySQL Course", "url": "/courses", "order_index": 8},
+                {"id": "fc-10", "label": "C++ Course", "url": "/courses", "order_index": 9},
+                {"id": "fc-11", "label": "Javascript Course", "url": "/courses", "order_index": 10},
+                {"id": "fc-12", "label": "DSA Java Course", "url": "/courses", "order_index": 11},
+            ]
+        },
+        {
+            "id": "tutorials",
+            "title": "Tutorial",
+            "order_index": 3,
+            "is_active": True,
+            "links": [
+                {"id": "tut-1", "label": "Data Structure Tutorial", "url": "/blog", "order_index": 0},
+                {"id": "tut-2", "label": "Agentic AI Tutorial", "url": "/blog", "order_index": 1},
+                {"id": "tut-3", "label": "Python Tutorial", "url": "/blog", "order_index": 2},
+                {"id": "tut-4", "label": "Java Tutorial", "url": "/blog", "order_index": 3},
+                {"id": "tut-5", "label": "DBMS Tutorial", "url": "/blog", "order_index": 4},
+                {"id": "tut-6", "label": "C Tutorial", "url": "/blog", "order_index": 5},
+                {"id": "tut-7", "label": "JavaScript Tutorial", "url": "/blog", "order_index": 6},
+                {"id": "tut-8", "label": "C++ Tutorial", "url": "/blog", "order_index": 7},
+                {"id": "tut-9", "label": "Data Science Tutorial", "url": "/blog", "order_index": 8},
+                {"id": "tut-10", "label": "CSS Tutorial", "url": "/blog", "order_index": 9},
+                {"id": "tut-11", "label": "Software Engineering Tutorial", "url": "/blog", "order_index": 10},
+                {"id": "tut-12", "label": "HTML Tutorial", "url": "/blog", "order_index": 11},
+            ]
+        },
+        {
+            "id": "career-resources",
+            "title": "Career Advice Resources",
+            "order_index": 4,
+            "is_active": True,
+            "links": [
+                {"id": "car-1", "label": "Machine Learning Roadmap", "url": "/career", "order_index": 0},
+                {"id": "car-2", "label": "SDE Roadmap", "url": "/career", "order_index": 1},
+                {"id": "car-3", "label": "Web Development Roadmap", "url": "/career", "order_index": 2},
+                {"id": "car-4", "label": "Python Developer Roadmap", "url": "/career", "order_index": 3},
+                {"id": "car-5", "label": "AI Engineer Roadmap", "url": "/career", "order_index": 4},
+                {"id": "car-6", "label": "MLOps Roadmap", "url": "/career", "order_index": 5},
+                {"id": "car-7", "label": "Data Engineer Roadmap", "url": "/career", "order_index": 6},
+                {"id": "car-8", "label": "Agentic AI Roadmap", "url": "/career", "order_index": 7},
+                {"id": "car-9", "label": "React Roadmap", "url": "/career", "order_index": 8},
+                {"id": "car-10", "label": "DevOps Roadmap", "url": "/career", "order_index": 9},
+            ]
+        }
+    ]
+}
+
+
+@router.get("/directory-links")
+def get_seo_directory_links(db: Session = Depends(get_db)):
+    """Public: returns structured internal linking directory for footer keyword cloud."""
+    cached_val = cache.get("seo:directory_links")
+    if cached_val:
+        return cached_val
+
+    entry = db.query(SeoFooterDirectory).first()
+    if not entry:
+        # Seed default entry on first request
+        entry = SeoFooterDirectory(
+            tagline=DEFAULT_DIRECTORY_DATA.get("tagline", "#Create Impact"),
+            show_tagline=DEFAULT_DIRECTORY_DATA.get("show_tagline", True),
+            is_active=DEFAULT_DIRECTORY_DATA.get("is_active", True),
+            data_json=json.dumps(DEFAULT_DIRECTORY_DATA.get("categories", [])),
+        )
+        db.add(entry)
+        db.commit()
+        db.refresh(entry)
+
+    categories = []
+    if entry.data_json:
+        try:
+            categories = json.loads(entry.data_json)
+        except Exception:
+            categories = DEFAULT_DIRECTORY_DATA.get("categories", [])
+
+    result = {
+        "tagline": entry.tagline or "#Create Impact",
+        "show_tagline": entry.show_tagline if entry.show_tagline is not None else True,
+        "is_active": entry.is_active if entry.is_active is not None else True,
+        "categories": categories,
+    }
+    cache.set("seo:directory_links", result, ttl=300)
+    return result
+
+
+@router.put("/directory-links")
+def update_seo_directory_links(
+    payload: SeoDirectorySchema,
+    device: str = Depends(require_device),
+    db: Session = Depends(get_db),
+):
+    """Admin: updates structured internal linking directory."""
+    entry = db.query(SeoFooterDirectory).first()
+    if not entry:
+        entry = SeoFooterDirectory()
+        db.add(entry)
+
+    entry.tagline = payload.tagline or "#Create Impact"
+    entry.show_tagline = payload.show_tagline if payload.show_tagline is not None else True
+    entry.is_active = payload.is_active if payload.is_active is not None else True
+    entry.data_json = json.dumps([c.dict() for c in payload.categories])
+
+    db.commit()
+    db.refresh(entry)
+    cache.invalidate("seo:directory_links")
+
+    return {
+        "status": "success",
+        "message": "SEO Directory Links updated successfully",
+        "data": {
+            "tagline": entry.tagline,
+            "show_tagline": entry.show_tagline,
+            "is_active": entry.is_active,
+            "categories": [c.dict() for c in payload.categories],
+        }
+    }
+
+
+@router.post("/directory-links/reset-default")
+def reset_seo_directory_links(
+    device: str = Depends(require_device),
+    db: Session = Depends(get_db),
+):
+    """Admin: resets SEO directory links to comprehensive default structure."""
+    entry = db.query(SeoFooterDirectory).first()
+    if not entry:
+        entry = SeoFooterDirectory()
+        db.add(entry)
+
+    entry.tagline = DEFAULT_DIRECTORY_DATA["tagline"]
+    entry.show_tagline = DEFAULT_DIRECTORY_DATA["show_tagline"]
+    entry.is_active = DEFAULT_DIRECTORY_DATA["is_active"]
+    entry.data_json = json.dumps(DEFAULT_DIRECTORY_DATA["categories"])
+
+    db.commit()
+    db.refresh(entry)
+    cache.invalidate("seo:directory_links")
+
+    return {
+        "status": "success",
+        "message": "Reset to default directory links successfully",
+        "data": DEFAULT_DIRECTORY_DATA,
+    }
+
 

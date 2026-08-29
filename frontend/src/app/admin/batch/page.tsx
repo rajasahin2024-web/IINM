@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Icon } from "../icons";
 import { useToast } from "../components/ToastProvider";
 import { apiFetch } from "@/lib/apiFetch";
-import { API_BASE_URL } from "@/lib/config";
+import { API_BASE_URL, resolveAssetUrl } from "@/lib/config";
 import { AdminProvider } from "../components/ProtectedAdmin";
 import { useRouter } from "next/navigation";
 import CourseManager from "../components/CourseManager";
@@ -960,7 +960,7 @@ function BatchManagerInner() {
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
                             {inst.avatar_url ? (
                               <img
-                                src={inst.avatar_url.startsWith("http") ? inst.avatar_url : `${API_BASE_URL.replace("/api", "")}${inst.avatar_url}`}
+                                src={resolveAssetUrl(inst.avatar_url)}
                                 alt={inst.name}
                                 style={{
                                   width: 44, height: 44, borderRadius: "50%",

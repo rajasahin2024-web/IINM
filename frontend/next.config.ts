@@ -41,6 +41,8 @@ const nextConfig: NextConfig = {
               // so we must allow that origin explicitly — otherwise every API call
               // is blocked by CSP and surfaces as "Failed to fetch" TypeErrors.
               `connect-src 'self' https: https://api.razorpay.com${isDev ? ` ${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:2007"}` : ""}`,
+              // Allow worker-src for html2pdf.js canvas rendering
+              "worker-src 'self' blob:",
               "font-src 'self' data:",
               "object-src 'none'",
               "base-uri 'self'",

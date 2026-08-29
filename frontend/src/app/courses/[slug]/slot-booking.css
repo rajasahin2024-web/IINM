@@ -1448,6 +1448,86 @@
   }
 }
 
+/* ── Collapsible Location Section (merged into Details step) ── */
+.sb-location-collapse-wrap {
+  margin-top: 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 0;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.sb-location-collapse-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: #f1f5f9;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0a1628;
+  transition: background-color 0.2s ease;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+
+.sb-location-collapse-header:hover {
+  background: #e2e8f0;
+}
+
+.sb-location-collapse-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sb-location-collapse-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s ease;
+  color: #64748b;
+}
+
+.sb-location-collapse-chevron.open {
+  transform: rotate(180deg);
+}
+
+.sb-location-collapse-body {
+  padding: 16px;
+  animation: sb-collapse-expand 0.3s ease;
+}
+
+@keyframes sb-collapse-expand {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 800px;
+  }
+}
+
+.sb-location-collapse-body .sb-detect-btn {
+  margin-bottom: 12px;
+}
+
+.sb-location-collapse-body .sb-location-detected {
+  margin-bottom: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sb-location-collapse-chevron,
+  .sb-location-collapse-body {
+    transition: none;
+    animation: none;
+  }
+}
+
 @keyframes sb-confetti-fly {
   0% {
     transform: translate(0, 0) rotate(0deg) scale(1);

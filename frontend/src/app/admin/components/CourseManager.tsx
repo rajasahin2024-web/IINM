@@ -4,9 +4,10 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useToast } from "./ToastProvider";
 import DeleteModal from "./DeleteModal";
 import { Icon } from "../icons";
-import { API_BASE_URL } from "@/lib/config";
+import { API_BASE_URL, resolveAssetUrl } from "@/lib/config";
 import AICourseAgent from "./AICourseAgent";
 import UploadModal from "./UploadModal";
+import AdminPdfPreview from "./AdminPdfPreview";
 
 const API = `${API_BASE_URL}`;
 
@@ -183,7 +184,7 @@ function ImageDropzoneField({
   const [showPreview, setShowPreview] = React.useState(false);
 
   const isPdf = value && value.toLowerCase().endsWith(".pdf");
-  const fullUrl = value && value.startsWith("http") ? value : value ? `${API_BASE_URL.replace('/api', '')}${value}` : "";
+  const fullUrl = resolveAssetUrl(value);
 
   const handleFile = async (file: File) => {
     if (!file) return;
@@ -286,71 +287,11 @@ function ImageDropzoneField({
       </div>
 
       {showPreview && isPdf && fullUrl && (
-        <div
-          onClick={() => setShowPreview(false)}
-          style={{
-            position: "fixed",
-            top: 0, left: 0, right: 0, bottom: 0,
-            background: "rgba(0,0,0,0.85)",
-            zIndex: 100000,
-            display: "flex",
-            flexDirection: "column",
-            animation: "fadeIn 0.15s ease-out",
-          }}
-        >
-          {/* Toolbar */}
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "12px 24px",
-              background: "#1e293b",
-              color: "#fff",
-              flexShrink: 0,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <Icon name="file-text" size={20} />
-              <span style={{ fontSize: 14, fontWeight: 700 }}>Syllabus PDF Preview</span>
-            </div>
-            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              <a
-                href={fullUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  fontSize: 12, fontWeight: 700, color: "#38bdf8",
-                  textDecoration: "none", display: "flex", alignItems: "center", gap: 6,
-                  background: "rgba(56,189,248,0.1)", padding: "6px 14px", borderRadius: 6,
-                  border: "1px solid rgba(56,189,248,0.3)",
-                }}
-              >
-                <Icon name="external-link" size={14} /> Open in new tab
-              </a>
-              <button
-                type="button"
-                onClick={() => setShowPreview(false)}
-                style={{
-                  background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)",
-                  color: "#fca5a5", cursor: "pointer", fontSize: 13, fontWeight: 700,
-                  padding: "6px 14px", borderRadius: 6, display: "flex", alignItems: "center", gap: 6,
-                }}
-              >
-                <Icon name="x" size={16} /> Close
-              </button>
-            </div>
-          </div>
-          {/* PDF iframe fills remaining space */}
-          <div style={{ flex: 1, overflow: "hidden" }} onClick={e => e.stopPropagation()}>
-            <iframe
-              src={fullUrl}
-              title="Syllabus PDF Preview"
-              style={{ width: "100%", height: "100%", border: "none", display: "block" }}
-            />
-          </div>
-        </div>
+        <AdminPdfPreview
+          url={fullUrl}
+          title="Syllabus PDF Preview"
+          onClose={() => setShowPreview(false)}
+        />
       )}
     </div>
   );
@@ -1418,7 +1359,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                   <td style={{ padding: "16px 20px" }}>
                     <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
                       {c.thumbnail_url ? (
-                        <img src={c.thumbnail_url.startsWith("http") ? c.thumbnail_url : `${API_BASE_URL.replace("/api", "")}${c.thumbnail_url}`} alt="" style={{ width: 64, height: 48, objectFit: "cover", borderRadius: 8, boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }} />
+                        <img src={resolveAssetUrl(c.thumbnail_url)} alt="" style={{ width: 64, height: 48, objectFit: "cover", borderRadius: 8, boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }} />
                       ) : (
                         <div style={{ width: 64, height: 48, background: "#f1f5f9", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b", border: "1px solid #e2e8f0" }}><Icon name="monitor" size={20}/></div>
                       )}
@@ -1598,7 +1539,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
               <div>
                 <h4 style={{ margin: "0 0 12px 0", fontSize: 12, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>Course Syllabus</h4>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <a href={viewTarget.upload_syllabus.startsWith("http") ? viewTarget.upload_syllabus : `${API_BASE_URL.replace("/api", "")}${viewTarget.upload_syllabus}`} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, background: "#fef3c7", color: "#d97706", border: "1px solid #fde68a", fontSize: 13, fontWeight: 700, padding: "8px 16px", borderRadius: 8, textDecoration: "none", transition: "all 0.2s" }} onMouseEnter={e => e.currentTarget.style.background = "#fde68a"} onMouseLeave={e => e.currentTarget.style.background = "#fef3c7"}>
+                  <a href={resolveAssetUrl(viewTarget.upload_syllabus)} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, background: "#fef3c7", color: "#d97706", border: "1px solid #fde68a", fontSize: 13, fontWeight: 700, padding: "8px 16px", borderRadius: 8, textDecoration: "none", transition: "all 0.2s" }} onMouseEnter={e => e.currentTarget.style.background = "#fde68a"} onMouseLeave={e => e.currentTarget.style.background = "#fef3c7"}>
                     <Icon name="file-text" size={16} /> View Syllabus PDF
                   </a>
                 </div>
@@ -2484,7 +2425,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                                    )}
                                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                                      {inst.avatar_url ? (
-                                       <img src={inst.avatar_url.startsWith("http") ? inst.avatar_url : `${API_BASE_URL.replace("/api", "")}${inst.avatar_url}`} alt={inst.name} style={{ width: 36, height: 36, borderRadius: 18, objectFit: "cover", border: `2px solid ${isSelected ? "#0ea5e9" : "#e2e8f0"}`, flexShrink: 0 }} />
+                                       <img src={resolveAssetUrl(inst.avatar_url)} alt={inst.name} style={{ width: 36, height: 36, borderRadius: 18, objectFit: "cover", border: `2px solid ${isSelected ? "#0ea5e9" : "#e2e8f0"}`, flexShrink: 0 }} />
                                      ) : (
                                        <div style={{ width: 36, height: 36, borderRadius: 18, background: isSelected ? "#0ea5e9" : "#f1f5f9", color: isSelected ? "#fff" : "#94a3b8", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 800, flexShrink: 0, transition: "all 0.15s" }}>
                                          {inst.name.charAt(0).toUpperCase()}

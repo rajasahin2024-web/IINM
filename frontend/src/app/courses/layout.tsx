@@ -14,7 +14,7 @@ export async function generateMetadata(): Promise<Metadata> {
     : "https://iinmedu.com";
   const siteName = (site && !isDbDown(site) && (site as any).site_name) || "IINM";
 
-  const title = (pageMeta && !isDbDown(pageMeta) && (pageMeta as any).seo_title) || `Courses | ${siteName}`;
+  const title = (pageMeta && !isDbDown(pageMeta) && (pageMeta as any).seo_title) || "Courses";
   const description = (pageMeta && !isDbDown(pageMeta) && (pageMeta as any).seo_description) || "Explore our AI-powered courses designed to help you master the skills of tomorrow.";
 
   return {

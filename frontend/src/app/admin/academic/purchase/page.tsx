@@ -9,7 +9,7 @@ import {CSS,FI,FS,SummaryRow,Toggle} from "./components";
 import {downloadReceiptPdf,ReceiptData} from "@/lib/receipt";
 import "../../admin.css";
 
-const COLS="1.8fr 1.4fr 1fr 1fr 1fr 1.2fr 100px 160px";
+const COLS="1.8fr 1.4fr 1fr 1fr 1fr 1.2fr 100px 110px 160px";
 const MTHS=["Generate Invoice Link (Pending)","Cash","UPI","Bank Transfer","Card"];
 
 const handleDownloadReceipt=async(data:any)=>{
@@ -369,13 +369,14 @@ function PurchaseDetailModal({purchaseId,onClose,onSuccess}:{purchaseId:number;o
               </div>
 
               <div style={{border:"1px solid #e2e8f0",borderRadius:0,overflow:"hidden"}}>
-                <div style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 1fr 1fr 120px",background:"#f8fafc",padding:"12px 16px",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",borderBottom:"1px solid #e2e8f0"}}>
-                  <div>#</div><div>Due Date</div><div>Amount</div><div>Paid</div><div>Status</div><div style={{textAlign:"right"}}>Action</div>
+                <div style={{display:"grid",gridTemplateColumns:"60px 1.4fr 1fr 1fr 1fr 1fr 120px",background:"#f8fafc",padding:"12px 16px",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",borderBottom:"1px solid #e2e8f0"}}>
+                  <div>#</div><div>Name</div><div>Due Date</div><div>Amount</div><div>Paid</div><div>Status</div><div style={{textAlign:"right"}}>Action</div>
                 </div>
                 {data.installments.map((inst:any)=>(
                   <div key={inst.id}>
-                    <div style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 1fr 1fr 120px",padding:"14px 16px",borderBottom:"1px solid #f1f5f9",alignItems:"center",fontSize:13,background:inst.status==="overdue"?"#fffafa":"#fff"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"60px 1.4fr 1fr 1fr 1fr 1fr 120px",padding:"14px 16px",borderBottom:"1px solid #f1f5f9",alignItems:"center",fontSize:13,background:inst.status==="overdue"?"#fffafa":"#fff"}}>
                       <div style={{fontWeight:700,color:"#64748b"}}>{inst.installment_no}</div>
+                      <div style={{fontWeight:600,color:"#0f172a",fontSize:12}}>{inst.name||`Installment #${inst.installment_no}`}</div>
                       <div style={{fontWeight:600,color:"#0f172a"}}>{new Date(inst.due_date).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</div>
                       <div style={{fontWeight:700,color:"#0f172a"}}>₹{inst.amount.toFixed(2)}</div>
                       <div style={{fontWeight:600,color:"#16a34a"}}>₹{inst.paid_amount.toFixed(2)}</div>
@@ -613,6 +614,7 @@ function PurchaseModal({students,courses,loadingData,onClose,onSuccess,editPurch
   const [isInst,setIsInst]=useState(()=>editPurchase?.is_installment||false);
   const [instCountStr,setInstCountStr]=useState(()=>String(Math.max((editPurchase?.total_installments||2)-1,1)));
   const [customDates,setCustomDates]=useState<string[]>([new Date().toISOString().split("T")[0]]);
+  const [customNames,setCustomNames]=useState<string[]>(["Booking Amount"]);
 
   const sel=courses.find(c=>String(c.id)===form.course_id);
   const fee=sel?.price||0;
@@ -716,6 +718,7 @@ function PurchaseModal({students,courses,loadingData,onClose,onSuccess,editPurch
           body.total_installments=count+1;
           body.installment_frequency="custom";
           body.custom_installment_dates=customDates.slice(0,count);
+          body.custom_installment_names=customNames.slice(0,count+1);
           body.first_payment_date=customDates[0]||new Date().toISOString().split("T")[0];
         }else{
           body.is_installment=false;
@@ -735,7 +738,8 @@ function PurchaseModal({students,courses,loadingData,onClose,onSuccess,editPurch
           reference_no:form.ref||null,notes:finalNotes||null,
           coupon_code:promoCode.trim()||null,
           is_installment:isInst,total_installments:count+1,
-          custom_installment_dates:customDates.slice(0,count)
+          custom_installment_dates:customDates.slice(0,count),
+          custom_installment_names:isInst?customNames.slice(0,count+1):undefined
         };
         const r=await apiFetch(`${API_BASE_URL}/academic/purchase`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
         if(!r.ok){const e=await r.json();throw new Error(e.detail||"Failed");}
@@ -964,17 +968,36 @@ function PurchaseModal({students,courses,loadingData,onClose,onSuccess,editPurch
                         }
                         setCustomDates(newDates);
                       }
+                      if(customNames.length < c + 1) {
+                        const newNames = [...customNames];
+                        for(let i=newNames.length; i<c + 1; i++){
+                          newNames.push(i===1 ? "Admission Fee" : `${i-1}Installment`);
+                        }
+                        setCustomNames(newNames);
+                      }
                       setForm(p=>({...p, paying: getInitPay(sel, net, isInst, c)}));
                     }} type="text"/>
-                    
+
+                    {/* Installment 1 name (booking/down payment) */}
+                    <div style={{marginTop:14}}>
+                      <FI label="Installment 1 Name (Down Payment)" value={customNames[0]||""} onChange={v=>{
+                        const nn=[...customNames]; nn[0]=v; setCustomNames(nn);
+                      }} type="text"/>
+                    </div>
+
                     {parseInt(instCountStr)>0 && (
                       <div className="installment-date-grid" style={{marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 14px"}}>
                         {Array.from({length: parseInt(instCountStr)}).map((_, i) => (
-                          <FI key={i} label={`Installment ${i+2} Date`} value={customDates[i]||""} onChange={v=>{
-                            const newDates = [...customDates];
-                            newDates[i] = v;
-                            setCustomDates(newDates);
-                          }} type="date" required/>
+                          <div key={i} style={{display:"flex",flexDirection:"column",gap:6,background:"#fff",padding:10,border:"1px solid #e2e8f0"}}>
+                            <FI label={`Installment ${i+2} Name`} value={customNames[i+1]||""} onChange={v=>{
+                              const nn=[...customNames]; nn[i+1]=v; setCustomNames(nn);
+                            }} type="text"/>
+                            <FI label={`Installment ${i+2} Date`} value={customDates[i]||""} onChange={v=>{
+                              const newDates = [...customDates];
+                              newDates[i] = v;
+                              setCustomDates(newDates);
+                            }} type="date" required/>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -990,13 +1013,14 @@ function PurchaseModal({students,courses,loadingData,onClose,onSuccess,editPurch
                 <div className="cp-card" style={{margin:0,background:"#f8fafc"}}>
                   <div className="cp-section-label" style={{color:"#6366f1"}}><Icon name="calendar" size={13}/> Installment Schedule Preview</div>
                   <div style={{border:"1px solid #e2e8f0",borderRadius:0,overflow:"hidden",background:"#fff"}}>
-                    <div style={{display:"grid",gridTemplateColumns:"40px 1fr 1fr 100px",background:"#f1f5f9",padding:"8px 12px",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase"}}>
-                      <div>#</div><div>Due Date</div><div>Amount</div><div>Status</div>
+                    <div style={{display:"grid",gridTemplateColumns:"40px 1.4fr 1fr 1fr 100px",background:"#f1f5f9",padding:"8px 12px",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase"}}>
+                      <div>#</div><div>Name</div><div>Due Date</div><div>Amount</div><div>Status</div>
                     </div>
                     <div style={{maxHeight:220,overflowY:"auto"}}>
                       {sched.map(s=>(
-                        <div key={s.no} style={{display:"grid",gridTemplateColumns:"40px 1fr 1fr 100px",padding:"10px 12px",borderBottom:"1px solid #f1f5f9",fontSize:13,alignItems:"center"}}>
+                        <div key={s.no} style={{display:"grid",gridTemplateColumns:"40px 1.4fr 1fr 1fr 100px",padding:"10px 12px",borderBottom:"1px solid #f1f5f9",fontSize:13,alignItems:"center"}}>
                           <div style={{fontWeight:700,color:"#64748b"}}>{s.no}</div>
+                          <div style={{fontWeight:600,color:"#0f172a",fontSize:12}}>{customNames[s.no-1]||`Installment #${s.no}`}</div>
                           <div>{new Date(s.date).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</div>
                           <div style={{fontWeight:700}}>₹{s.amt.toFixed(2)}</div>
                           <div>{s.no===1?<span className="badge badge-green">Paying Now</span>:<span className="badge" style={{background:"#f1f5f9",color:"#475569"}}>Pending</span>}</div>
@@ -1060,11 +1084,13 @@ function CoursePurchaseInner(){
   const [search,setSearch]=useState("");
   const [filterCourse,setFilterCourse]=useState("all");
   const [filterStatus,setFilterStatus]=useState("all");
+  const [filterPaymentType,setFilterPaymentType]=useState("all");
+  const [filterSource,setFilterSource]=useState("all");
   const [overdueList,setOverdueList]=useState<any[]>([]);
   const [currentPage,setCurrentPage]=useState(1);
   const itemsPerPage=10;
 
-  useEffect(()=>{setCurrentPage(1);},[search,filterCourse,filterStatus]);
+  useEffect(()=>{setCurrentPage(1);},[search,filterCourse,filterStatus,filterPaymentType,filterSource]);
 
   const fetchAll=useCallback(async()=>{
     try{
@@ -1131,16 +1157,27 @@ function CoursePurchaseInner(){
     const matchCourse=filterCourse==="all"||p.course_id.toString()===filterCourse;
     const derivedStatus=p.status==="completed"?"completed":p.due_amount<p.net_fee?"active":"pending";
     const matchStatus=filterStatus==="all"||derivedStatus===filterStatus;
-    return matchSearch&&matchCourse&&matchStatus;
+    // Payment type filter
+    const isFullPayment=(p.paid_amount||0)>=(p.net_fee||0);
+    const isBookingOnly=p.source==="slot_booking"&&(p.due_amount||0)>0;
+    const matchPaymentType=
+      filterPaymentType==="all"||
+      (filterPaymentType==="full_payment"&&isFullPayment)||
+      (filterPaymentType==="booking_only"&&isBookingOnly)||
+      (filterPaymentType==="has_installments"&&p.is_installment);
+    // Source filter
+    const matchSource=filterSource==="all"||p.source===filterSource;
+    return matchSearch&&matchCourse&&matchStatus&&matchPaymentType&&matchSource;
   });
 
   const exportCSV=()=>{
     if(filteredPurchases.length===0){showToast("No data to export","warning");return;}
-    const headers=["ID","Student","Email","Course","Total Fee","Discount","Net Fee","Paid","Due","Installments","Status"];
+    const headers=["ID","Student","Email","Course","Total Fee","Discount","Net Fee","Paid","Due","Installments","Source","Status"];
     const rows=filteredPurchases.map(p=>[
-      p.id, `"${p.student_name}"`, p.student_email, `"${p.course_title}"`, 
-      p.total_fee, p.discount, p.net_fee, p.paid_amount, p.due_amount, 
+      p.id, `"${p.student_name}"`, p.student_email, `"${p.course_title}"`,
+      p.total_fee, p.discount, p.net_fee, p.paid_amount, p.due_amount,
       p.is_installment?`${p.installments_paid}/${p.total_installments}`:"No",
+      p.source||"unknown",
       p.status==="completed"?"Completed":p.due_amount<p.net_fee?"Active":"Pending"
     ]);
     const csv=[headers.join(","),...rows.map(r=>r.join(","))].join("\n");
@@ -1158,7 +1195,16 @@ function CoursePurchaseInner(){
     setSearch("");
     setFilterCourse("all");
     setFilterStatus("all");
+    setFilterPaymentType("all");
+    setFilterSource("all");
     setCurrentPage(1);
+  };
+
+  const sourceBadge=(src?:string|null)=>{
+    if(src==="slot_booking") return <span style={{background:"#dcfce7",color:"#15803d",padding:"3px 8px",borderRadius:0,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.3px"}}>Slot Booking</span>;
+    if(src==="invoice_pending") return <span style={{background:"#fef3c7",color:"#b45309",padding:"3px 8px",borderRadius:0,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.3px"}}>Invoice Pending</span>;
+    if(src==="admin_created") return <span style={{background:"#dbeafe",color:"#1d4ed8",padding:"3px 8px",borderRadius:0,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.3px"}}>Admin</span>;
+    return <span style={{background:"#f1f5f9",color:"#64748b",padding:"3px 8px",borderRadius:0,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.3px"}}>Unknown</span>;
   };
 
   return(
@@ -1245,8 +1291,20 @@ function CoursePurchaseInner(){
           <option value="active">Active</option>
           <option value="pending">Pending</option>
         </select>
-        {(search!==""||filterCourse!=="all"||filterStatus!=="all")&&(
-          <button onClick={()=>{setSearch("");setFilterCourse("all");setFilterStatus("all");setCurrentPage(1);}} style={{background:"#fef2f2",color:"#ef4444",border:"1px solid #fecaca",padding:"10px 16px",borderRadius:0,fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+        <select value={filterPaymentType} onChange={e=>setFilterPaymentType(e.target.value)} style={{padding:"10px 14px",borderRadius:0,border:"1px solid #e2e8f0",outline:"none",fontSize:13,color:"#0f172a",background:"#fff",cursor:"pointer",minWidth:160}}>
+          <option value="all">All Payment Types</option>
+          <option value="booking_only">Booking Only Paid</option>
+          <option value="full_payment">Full Payment</option>
+          <option value="has_installments">Has Installments</option>
+        </select>
+        <select value={filterSource} onChange={e=>setFilterSource(e.target.value)} style={{padding:"10px 14px",borderRadius:0,border:"1px solid #e2e8f0",outline:"none",fontSize:13,color:"#0f172a",background:"#fff",cursor:"pointer",minWidth:150}}>
+          <option value="all">All Sources</option>
+          <option value="slot_booking">Slot Booking</option>
+          <option value="admin_created">Admin Created</option>
+          <option value="invoice_pending">Invoice Pending</option>
+        </select>
+        {(search!==""||filterCourse!=="all"||filterStatus!=="all"||filterPaymentType!=="all"||filterSource!=="all")&&(
+          <button onClick={resetFilters} style={{background:"#fef2f2",color:"#ef4444",border:"1px solid #fecaca",padding:"10px 16px",borderRadius:0,fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
             <Icon name="x" size={14}/> Reset
           </button>
         )}
@@ -1256,12 +1314,12 @@ function CoursePurchaseInner(){
       <div style={{background:"#fff",borderRadius:0,boxShadow:"0 1px 3px rgba(0,0,0,.06)",border:"1px solid #f1f5f9",overflow:"hidden"}}>
         <div style={{padding:"16px 20px",borderBottom:"1px solid #f1f5f9",fontSize:12,fontWeight:700,color:"#64748b",display:"flex",justifyContent:"space-between"}}>
           <span>{filteredPurchases.length} records found</span>
-          {filteredPurchases.length!==purchases.length&&<span style={{color:"#38bdf8",cursor:"pointer"}} onClick={()=>{setSearch("");setFilterCourse("all");setFilterStatus("all");}}>Clear Filters</span>}
+          {filteredPurchases.length!==purchases.length&&<span style={{color:"#38bdf8",cursor:"pointer"}} onClick={resetFilters}>Clear Filters</span>}
         </div>
 
         <div style={{overflowX:"auto"}}>
-          <div className="tbl-head" style={{gridTemplateColumns:COLS,minWidth:860}}>
-            {["Student","Course","Total Fee","Paid","Due","Installments","Status","Actions"].map(h=><span key={h}>{h}</span>)}
+          <div className="tbl-head" style={{gridTemplateColumns:COLS,minWidth:960}}>
+            {["Student","Course","Total Fee","Paid","Due","Installments","Status","Source","Actions"].map(h=><span key={h}>{h}</span>)}
           </div>
           {loadingPurchases?(
             <div style={{padding:"40px",textAlign:"center",color:"#94a3b8",fontSize:14}}>Loading records…</div>
@@ -1280,7 +1338,7 @@ function CoursePurchaseInner(){
             const badge=p.status==="completed"?"badge-green":p.due_amount<p.net_fee?"badge-amber":"badge-red";
             const label=p.status==="completed"?"Completed":p.due_amount<p.net_fee?"Active":"Pending";
             return(
-              <div key={p.id} className="tbl-row" style={{gridTemplateColumns:COLS,minWidth:860,cursor:"pointer",opacity:p.is_active?1:0.6,background:p.is_active?"#fff":"#f8fafc"}} onClick={()=>p.is_installment?setDetailId(p.id):setGenDetailId(p.id)}>
+              <div key={p.id} className="tbl-row" style={{gridTemplateColumns:COLS,minWidth:960,cursor:"pointer",opacity:p.is_active?1:0.6,background:p.is_active?"#fff":"#f8fafc"}} onClick={()=>p.is_installment?setDetailId(p.id):setGenDetailId(p.id)}>
                 <div>
                   <div style={{fontWeight:700,fontSize:13,color:"#0f172a"}}>{p.student_name}</div>
                   <div style={{fontSize:11,color:"#64748b"}}>{p.student_email}</div>
@@ -1301,6 +1359,7 @@ function CoursePurchaseInner(){
                   )}
                 </div>
                 <div><span className={`badge ${badge}`}>{label}</span></div>
+                <div>{sourceBadge(p.source)}</div>
                 <div onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:8}}>
                   <button onClick={(e)=>{e.stopPropagation();p.due_amount>0?(p.is_installment?setDetailId(p.id):setGenDetailId(p.id)):showToast("No due amount to record payment","error");}} title="Record Payment" style={{border:"none",background:"#fef3c7",color:"#b45309",width:30,height:30,borderRadius:0,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                     <Icon name="credit-card" size={14}/>

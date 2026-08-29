@@ -41,6 +41,12 @@ export async function generateMetadata(): Promise<Metadata> {
     description: site.meta_description || "AI-Powered Connected Learning Platform",
     keywords: site.meta_description ? undefined : undefined,
     icons: faviconUrl ? { icon: faviconUrl } : undefined,
+    alternates: {
+      canonical: baseUrl,
+      languages: {
+        "en-IN": baseUrl,
+      },
+    },
     verification: {
       google: site.google_site_verification || undefined,
       other: site.bing_webmaster_id
@@ -51,16 +57,28 @@ export async function generateMetadata(): Promise<Metadata> {
       title: site.site_name || "IINM",
       description: site.meta_description || "",
       siteName: site.site_name || "IINM",
-      images: ogImage ? [{ url: ogImage }] : undefined,
+      url: baseUrl,
+      images: ogImage ? [{ url: ogImage, width: 1200, height: 630 }] : undefined,
       type: "website",
+      locale: "en_IN",
     },
     twitter: {
       card: "summary_large_image",
       site: site.twitter_handle || undefined,
+      title: site.site_name || "IINM",
+      description: site.meta_description || "",
+      images: ogImage ? [ogImage] : undefined,
     },
     robots: {
       index: site.default_robots_index !== false,
       follow: site.default_robots_index !== false,
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+        "max-video-preview": -1,
+      },
     },
   };
 }

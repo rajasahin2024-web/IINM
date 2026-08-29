@@ -251,7 +251,7 @@ export default function BrochureModal({ open, onClose, courseTitle, onSubmit, su
               className="cd-brochure-submit"
               disabled={submitting || !name || !phone || !leadType}
             >
-              {submitting ? "Submitting..." : "Send OTP"}
+              {submitting ? "Submitting..." : "View Brochure"}
             </button>
           </form>
         </div>

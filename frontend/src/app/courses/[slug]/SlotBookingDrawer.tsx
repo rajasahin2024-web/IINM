@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { apiFetch } from "@/lib/apiFetch";
-import { API_BASE_URL } from "@/lib/config";
+import { resolveAssetUrl } from "@/lib/config";
 import { uploadWithProgress } from "@/lib/uploadWithProgress";
 import { INDIAN_STATE_NAMES, INDIAN_STATES_CITIES, isCityInStateList } from "@/lib/indianLocations";
 import { ReceiptData, downloadReceiptPdf, getReceiptPublicUrl } from "@/lib/receipt";
@@ -62,7 +62,7 @@ const STUDENT_CATEGORIES = [
   "Others",
 ];
 
-const STEPS = ["Details", "Location", "Batch", "Pay", "Done"];
+const STEPS = ["Details", "Batch", "Pay", "Done"];
 
 /* ─────────────────────────────────────────
    Icons
@@ -190,6 +190,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
   const [allowEmail, setAllowEmail] = useState(true);
   const [allowPush, setAllowPush] = useState(true);
   const [selectedBatchId, setSelectedBatchId] = useState<number | "">("");
+  const [showLocation, setShowLocation] = useState(true);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const razorpayScriptLoaded = useRef(false);
@@ -214,20 +215,20 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
     }
   }, [open, course]);
 
-  // Fetch batches when course changes or step=2 (Batch step)
+  // Fetch batches when course changes or step=1 (Batch step)
   useEffect(() => {
-    if (open && step === 2 && selectedCourseId) {
+    if (open && step === 1 && selectedCourseId) {
       fetchBatches(selectedCourseId);
     }
   }, [open, step, selectedCourseId]);
 
-  // Auto-detect location once when entering the Location step
+  // Auto-detect location once when the drawer opens and config is loaded
   useEffect(() => {
-    if (open && step === 1 && !locating && config && !locationAutoTriggeredRef.current) {
+    if (open && !locating && config && !locationAutoTriggeredRef.current) {
       locationAutoTriggeredRef.current = true;
       handleDetectLocation();
     }
-  }, [open, step, locating, config]);
+  }, [open, locating, config]);
 
   // Lock body scroll when open
   useEffect(() => {
@@ -488,11 +489,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
     if (!category) { setError("Please select a student category."); return false; }
     if (category === "Others" && !otherCategory.trim()) { setError("Please specify your category."); return false; }
     if (!agreeTerms) { setError("You must agree to the Terms & Conditions."); return false; }
-    setError("");
-    return true;
-  };
-
-  const validateStep1 = (): boolean => {
+    // Location validation (merged from former step 1)
     if (!address.trim()) { setError("Please enter your address."); return false; }
     if (!stateName) { setError("Please select your state."); return false; }
     if (!city.trim()) { setError("Please select your city."); return false; }
@@ -501,7 +498,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
     return true;
   };
 
-  const validateStep2 = (): boolean => {
+  const validateStep1 = (): boolean => {
     if (!selectedBatchId) { setError("Please select a batch."); return false; }
     setError("");
     return true;
@@ -521,8 +518,6 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
       }
     } else if (step === 1) {
       if (!validateStep1()) return;
-    } else if (step === 2) {
-      if (!validateStep2()) return;
     }
     setStep(step + 1);
   };
@@ -645,6 +640,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
         order_id: order.order_id,
         name: config.site_name || "IINM",
         description: `Slot Booking — ${selectedCourse?.title || "Course"}`,
+        image: config.logo_url || undefined,
         prefill: {
           name: `${firstName} ${lastName}`.trim(),
           email: email,
@@ -708,7 +704,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
         throw new Error(data.detail || "Registration failed. Please contact support.");
       }
       setReceipt(data);
-      setStep(4);
+      setStep(3);
     } catch (err: any) {
       setError(err.message || "Registration failed. Please contact support.");
     } finally {
@@ -729,7 +725,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
   if (!open) return null;
 
   // Success modal shown after successful payment
-  if (step === 4 && receipt) {
+  if (step === 3 && receipt) {
     return (
       <div className="sb-overlay sb-success-modal-overlay" onClick={onClose}>
         <div className="sb-success-modal" onClick={(e) => e.stopPropagation()}>
@@ -840,7 +836,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
                 <div className="sb-photo-upload">
                   <div className="sb-photo-preview">
                     {photoUrl ? (
-                      <img src={photoUrl.startsWith("http") ? photoUrl : `${API_BASE_URL.replace("/api", "")}${photoUrl}`} alt="Profile" />
+                      <img src={resolveAssetUrl(photoUrl)} alt="Profile" />
                     ) : (
                       <span className="sb-photo-placeholder"><Icon.Camera /></span>
                     )}
@@ -939,140 +935,150 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
                   I agree to the <a href="/terms" target="_blank">Terms & Conditions</a> and <a href="/privacy" target="_blank">Privacy Policy</a>
                 </span>
               </label>
-            </div>
-          )}
 
-          {/* ── Step 1: Location ── */}
-          {step === 1 && (
-            <div className="sb-step-content">
-              <div className="sb-location-intro">
-                <h3 className="sb-location-intro-title">
-                  <Icon.Location /> Your Location
-                </h3>
-                <p className="sb-location-intro-desc">
-                  We need your accurate location for admission records. Your current location is fetched automatically, or you can enter it manually below.
-                </p>
-
-                {/* Detect Button */}
-                <button className="sb-detect-btn" onClick={handleDetectLocation} disabled={locating} type="button">
-                  {locating ? (
-                    <><span className="sb-detect-spinner" /> Detecting…</>
-                  ) : (
-                    <><Icon.Location /> Detect My Location</>
-                  )}
+              {/* ── Collapsible Location Section (merged from former Location step) ── */}
+              <div className="sb-location-collapse-wrap">
+                <button
+                  type="button"
+                  className="sb-location-collapse-header"
+                  onClick={() => setShowLocation(s => !s)}
+                  aria-expanded={showLocation}
+                >
+                  <span className="sb-location-collapse-title">
+                    <Icon.Location /> Location Details
+                  </span>
+                  <span className={`sb-location-collapse-chevron ${showLocation ? "open" : ""}`}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                  </span>
                 </button>
-              </div>
+                {showLocation && (
+                  <div className="sb-location-collapse-body">
+                    <p className="sb-location-intro-desc">
+                      We need your accurate location for admission records. Your current location is fetched automatically, or you can enter it manually below.
+                    </p>
 
-              {/* Detected Info */}
-              {(address || city || stateName || pinCode) && !locating && (
-                <div className="sb-location-detected">
-                  <Icon.Location />
-                  <div>
-                    <strong>Location Detected</strong>
-                    <div className="sb-location-detected-address">
-                      {address && <>{address}<br /></>}
-                      {city}{stateName ? `, ${stateName}` : ""}{pinCode ? ` — ${pinCode}` : ""}
+                    {/* Detect Button */}
+                    <button className="sb-detect-btn" onClick={handleDetectLocation} disabled={locating} type="button">
+                      {locating ? (
+                        <><span className="sb-detect-spinner" /> Detecting…</>
+                      ) : (
+                        <><Icon.Location /> Detect My Location</>
+                      )}
+                    </button>
+
+                    {/* Detected Info */}
+                    {(address || city || stateName || pinCode) && !locating && (
+                      <div className="sb-location-detected">
+                        <Icon.Location />
+                        <div>
+                          <strong>Location Detected</strong>
+                          <div className="sb-location-detected-address">
+                            {address && <>{address}<br /></>}
+                            {city}{stateName ? `, ${stateName}` : ""}{pinCode ? ` — ${pinCode}` : ""}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Address */}
+                    <div className="sb-field">
+                      <label className="sb-label">Full Address<span className="sb-req">*</span></label>
+                      <textarea
+                        className="sb-textarea"
+                        value={address}
+                        onChange={e => setAddress(e.target.value)}
+                        placeholder="House/Flat no, Street, Area, Landmark…"
+                        rows={2}
+                      />
+                    </div>
+
+                    {/* State + City */}
+                    <div className="sb-row">
+                      <div className="sb-field">
+                        <label className="sb-label">State<span className="sb-req">*</span></label>
+                        <select
+                          className="sb-select"
+                          value={stateName}
+                          onChange={e => {
+                            setStateName(e.target.value);
+                            setCity("");
+                            setCityNotInList(false);
+                          }}
+                        >
+                          <option value="" disabled>Select state…</option>
+                          {INDIAN_STATE_NAMES.map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="sb-field">
+                        <label className="sb-label">City<span className="sb-req">*</span></label>
+                        {cityNotInList || !stateName || INDIAN_STATES_CITIES[stateName]?.length === 0 ? (
+                          <input
+                            className="sb-input"
+                            type="text"
+                            value={city}
+                            onChange={e => setCity(e.target.value)}
+                            placeholder="Type your city…"
+                          />
+                        ) : (
+                          <select
+                            className="sb-select"
+                            value={city}
+                            onChange={e => setCity(e.target.value)}
+                          >
+                            <option value="" disabled>Select city…</option>
+                            {INDIAN_STATES_CITIES[stateName]?.map(c => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                            {/* If geocode city not in list, show it as an extra option */}
+                            {city && !isCityInStateList(stateName, city) && (
+                              <option value={city}>{city}</option>
+                            )}
+                          </select>
+                        )}
+                        {!cityNotInList && stateName && (
+                          <button
+                            type="button"
+                            className="sb-city-toggle"
+                            onClick={() => setCityNotInList(true)}
+                          >
+                            City not in list? Type manually
+                          </button>
+                        )}
+                        {cityNotInList && (
+                          <button
+                            type="button"
+                            className="sb-city-toggle"
+                            onClick={() => { setCityNotInList(false); setCity(""); }}
+                          >
+                            ← Back to dropdown
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Pincode */}
+                    <div className="sb-field">
+                      <label className="sb-label">Pincode<span className="sb-req">*</span></label>
+                      <input
+                        className="sb-input"
+                        type="text"
+                        value={pinCode}
+                        onChange={e => setPinCode(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
+                        placeholder="6-digit pincode"
+                        inputMode="numeric"
+                        maxLength={6}
+                      />
                     </div>
                   </div>
-                </div>
-              )}
-
-              {/* Address */}
-              <div className="sb-field">
-                <label className="sb-label">Full Address<span className="sb-req">*</span></label>
-                <textarea
-                  className="sb-textarea"
-                  value={address}
-                  onChange={e => setAddress(e.target.value)}
-                  placeholder="House/Flat no, Street, Area, Landmark…"
-                  rows={2}
-                />
-              </div>
-
-              {/* State + City */}
-              <div className="sb-row">
-                <div className="sb-field">
-                  <label className="sb-label">State<span className="sb-req">*</span></label>
-                  <select
-                    className="sb-select"
-                    value={stateName}
-                    onChange={e => {
-                      setStateName(e.target.value);
-                      setCity("");
-                      setCityNotInList(false);
-                    }}
-                  >
-                    <option value="" disabled>Select state…</option>
-                    {INDIAN_STATE_NAMES.map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="sb-field">
-                  <label className="sb-label">City<span className="sb-req">*</span></label>
-                  {cityNotInList || !stateName || INDIAN_STATES_CITIES[stateName]?.length === 0 ? (
-                    <input
-                      className="sb-input"
-                      type="text"
-                      value={city}
-                      onChange={e => setCity(e.target.value)}
-                      placeholder="Type your city…"
-                    />
-                  ) : (
-                    <select
-                      className="sb-select"
-                      value={city}
-                      onChange={e => setCity(e.target.value)}
-                    >
-                      <option value="" disabled>Select city…</option>
-                      {INDIAN_STATES_CITIES[stateName]?.map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                      {/* If geocode city not in list, show it as an extra option */}
-                      {city && !isCityInStateList(stateName, city) && (
-                        <option value={city}>{city}</option>
-                      )}
-                    </select>
-                  )}
-                  {!cityNotInList && stateName && (
-                    <button
-                      type="button"
-                      className="sb-city-toggle"
-                      onClick={() => setCityNotInList(true)}
-                    >
-                      City not in list? Type manually
-                    </button>
-                  )}
-                  {cityNotInList && (
-                    <button
-                      type="button"
-                      className="sb-city-toggle"
-                      onClick={() => { setCityNotInList(false); setCity(""); }}
-                    >
-                      ← Back to dropdown
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Pincode */}
-              <div className="sb-field">
-                <label className="sb-label">Pincode<span className="sb-req">*</span></label>
-                <input
-                  className="sb-input"
-                  type="text"
-                  value={pinCode}
-                  onChange={e => setPinCode(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
-                  placeholder="6-digit pincode"
-                  inputMode="numeric"
-                  maxLength={6}
-                />
+                )}
               </div>
             </div>
           )}
 
-          {/* ── Step 2: Batch Selection ── */}
-          {step === 2 && (
+          {/* ── Step 1: Batch Selection ── */}
+          {step === 1 && (
             <div className="sb-step-content">
               {batchesLoading ? (
                 <>
@@ -1165,8 +1171,8 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
             </div>
           )}
 
-          {/* ── Step 3: Payment ── */}
-          {step === 3 && (
+          {/* ── Step 2: Payment ── */}
+          {step === 2 && (
             <div className="sb-step-content">
               <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: "0 0 16px" }}>Review & Pay</h3>
 
@@ -1310,23 +1316,23 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
             </div>
           )}
 
-          {/* ── Step 4: Success is rendered as a centered modal above ── */}
+          {/* ── Step 3: Success is rendered as a centered modal above ── */}
         </div>
 
         {/* ── Footer ── */}
-        {step < 4 && (
+        {step < 3 && (
           <div className="sb-footer">
             {step > 0 && (
               <button className="sb-btn sb-btn-back" onClick={handleBack} disabled={submitting}>
                 <Icon.ArrowLeft /> Back
               </button>
             )}
-            {step < 3 && (
+            {step < 2 && (
               <button className="sb-btn sb-btn-next" onClick={handleNext} disabled={submitting || checking}>
                 {checking ? "Checking…" : "Next"} <Icon.ArrowRight />
               </button>
             )}
-            {step === 3 && (
+            {step === 2 && (
               <button className="sb-btn sb-btn-pay" onClick={handlePay} disabled={submitting}>
                 {submitting ? "Processing…" : `Pay ${formatCurrency(bookingAmount, currency)}`}
               </button>
@@ -1335,11 +1341,11 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
         )}
 
         {/* ── Loading Overlay ── */}
-        {submitting && step !== 4 && (
+        {submitting && step !== 3 && (
           <div className="sb-loading-overlay">
             <div className="sb-spinner" />
             <div className="sb-loading-text">
-              {step === 3 ? "Processing payment & registering…" : "Please wait…"}
+              {step === 2 ? "Processing payment & registering…" : "Please wait…"}
             </div>
           </div>
         )}

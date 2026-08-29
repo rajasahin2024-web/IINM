@@ -44,16 +44,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   // ── Courses ──
-  if (coursesData && !("__dbDown" in coursesData) && Array.isArray(coursesData.items)) {
-    for (const course of coursesData.items) {
-      if (!course.slug) continue;
-      entries.push({
-        url: `${baseUrl}/courses/${course.slug}`,
-        lastModified: course.updated_at ? new Date(course.updated_at) : new Date(),
-        changeFrequency: "weekly",
-        priority: 0.8,
-      });
-    }
+  // /courses/public/courses returns a flat array (not {items: [...]}), so handle both shapes
+  const courseList = coursesData && !("__dbDown" in coursesData)
+    ? (Array.isArray(coursesData) ? coursesData : (Array.isArray(coursesData.items) ? coursesData.items : []))
+    : [];
+  for (const course of courseList) {
+    if (!course.slug) continue;
+    entries.push({
+      url: `${baseUrl}/courses/${course.slug}`,
+      lastModified: course.updated_at ? new Date(course.updated_at) : new Date(),
+      changeFrequency: "weekly" as const,
+      priority: 0.8,
+    });
   }
 
   // ── Blog posts ──

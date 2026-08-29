@@ -4,7 +4,7 @@ import React, { useEffect, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { BASE_URL, API_BASE_URL } from "@/lib/config";
+import { BASE_URL, API_BASE_URL, resolveAssetUrl } from "@/lib/config";
 import { apiFetch } from "@/lib/apiFetch";
 import { uploadWithProgress } from "@/lib/uploadWithProgress";
 import R2VideoPicker from "@/app/admin/components/R2VideoPicker";
@@ -15,6 +15,7 @@ import PublicNavbar from "../../../components/PublicNavbar";
 import PublicFooter from "../../../components/PublicFooter";
 import SlotBookingDrawer from "./SlotBookingDrawer";
 import BrochureModal from "./BrochureModal";
+import HlsVideoPlayer from "./HlsVideoPlayer";
 
 // Lazy-load BrochurePreview (PDF.js is heavy, client-only)
 const BrochurePreview = dynamic(() => import("./BrochurePreview"), { ssr: false });
@@ -127,7 +128,7 @@ function VideoDropzoneField({
   const [dragOver, setDragOver] = useState(false);
 
   const isVideo = accept.includes("video");
-  const fullUrl = value && value.startsWith("http") ? value : value ? `${API_BASE_URL.replace("/api", "")}${value}` : "";
+  const fullUrl = resolveAssetUrl(value);
 
   const handleFile = async (file: File) => {
     if (!file || !uploadEndpoint) return;
@@ -623,6 +624,9 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
   const [heroEditorOpen, setHeroEditorOpen] = useState(false);
   const [heroForm, setHeroForm] = useState<HeroContent>({ badges: [], stats: [], cta_primary: "", cta_secondary: "", ...DEFAULT_HERO_COLORS });
 
+  // Mobile collapsible live-preview toggle (shared by all full-screen editors)
+  const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
+
   // Market Stats Full-Screen Editor State
   const [marketEditorOpen, setMarketEditorOpen] = useState(false);
   const [marketForm, setMarketForm] = useState({
@@ -645,7 +649,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
     section_title: "",
     section_desc: "",
     bg_image_url: "",
-    videos: [] as Array<{ video_type: string; video_url: string; title: string; thumbnail_url: string; duration: string }>
+    videos: [] as Array<{ video_type: string; video_url: string; hls_url?: string; title: string; thumbnail_url: string; duration: string }>
   });
   const [ytFetchingIdx, setYtFetchingIdx] = useState<number | null>(null);
   const [ytFetchedIdx, setYtFetchedIdx] = useState<Set<number>>(new Set());
@@ -764,6 +768,13 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
       setActiveFaqCategory(cats[0]);
     }
   }, [course, activeFaqCategory]);
+
+  // Reset mobile preview toggle whenever all full-screen editors are closed
+  useEffect(() => {
+    if (!heroEditorOpen && !marketEditorOpen && !videoPlaylistEditorOpen && !toolsEditorOpen && !whoEditorOpen && !outcomesEditorOpen && !projectsEditorOpen && !compareEditorOpen && !certificatesEditorOpen && !faqEditorOpen && !editSection) {
+      setMobilePreviewOpen(false);
+    }
+  }, [heroEditorOpen, marketEditorOpen, videoPlaylistEditorOpen, toolsEditorOpen, whoEditorOpen, outcomesEditorOpen, projectsEditorOpen, compareEditorOpen, certificatesEditorOpen, faqEditorOpen, editSection]);
 
   const showToast = (msg: string) => {
     const tId = Date.now();
@@ -1211,7 +1222,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
           <div className="cd-partners-track">
             {alumniLogos.length > 0
               ? [...alumniLogos, ...alumniLogos].map((logo, idx) => {
-                  const imgSrc = logo.image_url.startsWith("http") ? logo.image_url : `${API_BASE_URL.replace("/api", "")}${logo.image_url}`;
+                  const imgSrc = resolveAssetUrl(logo.image_url);
                   return (
                     <div key={`${logo.id}-${idx}`} className="cd-partner-logo-cell">
                       <Image
@@ -1248,6 +1259,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               videos: (vp.videos || []).map((v: any) => ({
                 video_type: v.video_type || "youtube",
                 video_url: v.video_url || "",
+                hls_url: v.hls_url || "",
                 title: v.title || "",
                 thumbnail_url: v.thumbnail_url || "",
                 duration: v.duration || ""
@@ -1277,8 +1289,8 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                 <div className="cd-video-player-main">
                   {(() => {
                     const v = videoPlaylist.videos[activeVideoIdx] || videoPlaylist.videos[0];
-                    const rawUrl = v.video_url && v.video_url.startsWith("http") ? v.video_url : `${baseUrl}${v.video_url}`;
-                    const thumbSrc = v.thumbnail_url && v.thumbnail_url.startsWith("http") ? v.thumbnail_url : (v.thumbnail_url ? `${baseUrl}${v.thumbnail_url}` : "");
+                    const rawUrl = resolveAssetUrl(v.video_url);
+                    const thumbSrc = resolveAssetUrl(v.thumbnail_url) || "";
                     if (v.video_type === "youtube") {
                       // Convert any YouTube URL format to embed format
                       const embedUrl = getYouTubeEmbedUrl(rawUrl);
@@ -1299,12 +1311,12 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                       );
                     }
                     return (
-                      <video
+                      <HlsVideoPlayer
                         key={activeVideoIdx}
                         src={rawUrl}
-                        controls
-                        autoPlay={videoUserClicked}
+                        hlsUrl={v.hls_url ? resolveAssetUrl(v.hls_url) : undefined}
                         poster={thumbSrc || undefined}
+                        autoPlay={videoUserClicked}
                         className="cd-video-player-video"
                       />
                     );
@@ -1320,7 +1332,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                   </div>
                   <div className="cd-video-playlist-sidebar-list">
                     {videoPlaylist.videos.map((v: any, i: number) => {
-                      const thumbSrc = v.thumbnail_url && v.thumbnail_url.startsWith("http") ? v.thumbnail_url : (v.thumbnail_url ? `${baseUrl}${v.thumbnail_url}` : "");
+                      const thumbSrc = resolveAssetUrl(v.thumbnail_url);
                       return (
                         <div
                           key={i}
@@ -2201,14 +2213,14 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
 
       {/* ── HERO FULL-SCREEN EDITOR MODAL ── */}
       {heroEditorOpen && (
-        <div className="cd-hero-editor-overlay">
-          <div className="cd-hero-editor-header">
+        <div className="cd-fs-editor-overlay">
+          <div className="cd-fs-editor-header">
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 600, color: "#fef08a", margin: 0 }}>Edit Hero Section</h2>
               <p style={{ fontSize: 13, color: "#94a3b8", margin: "4px 0 0" }}>Customize badges, stats, and CTA button text</p>
             </div>
             <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => setHeroEditorOpen(false)} className="cd-btn-secondary" style={{ padding: "10px 20px" }}>Cancel</button>
+              <button onClick={() => setHeroEditorOpen(false)} className="cd-editor-btn-cancel">Cancel</button>
               <button onClick={async () => {
                 setSavingEdit(true);
                 try {
@@ -2238,17 +2250,17 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                   setSavingEdit(false);
                   showToast("Save error: " + err.message);
                 }
-              }} className="cd-btn-primary" style={{ padding: "10px 28px" }} disabled={savingEdit}>
+              }} className="cd-editor-btn-save" disabled={savingEdit}>
                 {savingEdit ? "Saving..." : "Save Hero Content"}
               </button>
             </div>
           </div>
 
-          <div className="cd-hero-editor-body">
-            <div className="cd-hero-editor-form">
+          <div className="cd-fs-editor-body">
+            <div className="cd-fs-editor-form">
               {/* Badges */}
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">Badge Pills</h3>
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">Badge Pills</h3>
                 {heroForm.badges?.map((badge, i) => (
                   <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                     <input
@@ -2264,15 +2276,15 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                     <button onClick={() => {
                       const updated = (heroForm.badges || []).filter((_, j) => j !== i);
                       setHeroForm(p => ({ ...p, badges: updated }));
-                    }} className="cd-hero-editor-remove">×</button>
+                    }} className="cd-fs-editor-remove">×</button>
                   </div>
                 ))}
-                <button onClick={() => setHeroForm(p => ({ ...p, badges: [...(p.badges || []), ""] }))} className="cd-hero-editor-add">+ Add Badge</button>
+                <button onClick={() => setHeroForm(p => ({ ...p, badges: [...(p.badges || []), ""] }))} className="cd-fs-editor-add">+ Add Badge</button>
               </div>
 
               {/* Stats */}
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">Hero Stats</h3>
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">Hero Stats</h3>
                 {heroForm.stats?.map((stat, i) => (
                   <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                     <input
@@ -2300,15 +2312,15 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                     <button onClick={() => {
                       const updated = (heroForm.stats || []).filter((_, j) => j !== i);
                       setHeroForm(p => ({ ...p, stats: updated }));
-                    }} className="cd-hero-editor-remove">×</button>
+                    }} className="cd-fs-editor-remove">×</button>
                   </div>
                 ))}
-                <button onClick={() => setHeroForm(p => ({ ...p, stats: [...(p.stats || []), { value: "", label: "" }] }))} className="cd-hero-editor-add">+ Add Stat</button>
+                <button onClick={() => setHeroForm(p => ({ ...p, stats: [...(p.stats || []), { value: "", label: "" }] }))} className="cd-fs-editor-add">+ Add Stat</button>
               </div>
 
               {/* CTA Buttons */}
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">CTA Button Text</h3>
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">CTA Button Text</h3>
                 <div className="cd-form-group">
                   <label className="cd-form-label">Primary Button</label>
                   <input
@@ -2330,8 +2342,8 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               </div>
 
               {/* Hero Background Colors */}
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">Hero Background Colors</h3>
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">Hero Background Colors</h3>
                 <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 12px" }}>Customize the hero section background, gradient, and mouse spotlight color for this course.</p>
                 {([
                   { key: "bg_color" as const, label: "Background Color" },
@@ -2358,10 +2370,14 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               </div>
             </div>
 
+            <button type="button" className="cd-fs-editor-preview-toggle" onClick={() => setMobilePreviewOpen(v => !v)}>
+              {mobilePreviewOpen ? "✕ Hide preview" : "👁 Show live preview"}
+            </button>
+
             {/* Live Preview */}
-            <div className="cd-hero-editor-preview">
+            <div className={`cd-fs-editor-preview${mobilePreviewOpen ? " is-open" : ""}`}>
               <div
-                className="cd-hero-editor-preview-inner"
+                className="cd-fs-editor-preview-inner"
                 style={{
                   background: `radial-gradient(circle at 50% 20%, ${heroForm.gradient_from || DEFAULT_HERO_COLORS.gradient_from} 0%, ${heroForm.gradient_to || DEFAULT_HERO_COLORS.gradient_to} 80%)`,
                 }}
@@ -2424,10 +2440,10 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
             </div>
 
             <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
-              <button onClick={() => setActiveEditSection(null)} className="cd-btn-secondary" style={{ padding: "10px 20px" }}>
+              <button onClick={() => setActiveEditSection(null)} className="cd-editor-btn-cancel">
                 Cancel
               </button>
-              <button onClick={handleSaveSectionEdit} className="cd-btn-primary" style={{ padding: "10px 24px" }} disabled={savingEdit}>
+              <button onClick={handleSaveSectionEdit} className="cd-editor-btn-save" disabled={savingEdit}>
                 {savingEdit ? "Saving..." : "Save Section Content"}
               </button>
             </div>
@@ -2437,14 +2453,14 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
 
       {/* ── MARKET STATS FULL-SCREEN EDITOR MODAL ── */}
       {marketEditorOpen && (
-        <div className="cd-hero-editor-overlay">
-          <div className="cd-hero-editor-header">
+        <div className="cd-fs-editor-overlay">
+          <div className="cd-fs-editor-header">
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 600, color: "#fef08a", margin: 0 }}>Edit Market Stats Section</h2>
               <p style={{ fontSize: 13, color: "#94a3b8", margin: "4px 0 0" }}>Update the quote, subcards, and featured stat card — no technical knowledge needed.</p>
             </div>
             <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => setMarketEditorOpen(false)} className="cd-btn-secondary" style={{ padding: "10px 20px" }}>Cancel</button>
+              <button onClick={() => setMarketEditorOpen(false)} className="cd-editor-btn-cancel">Cancel</button>
               <button onClick={async () => {
                 setSavingEdit(true);
                 try {
@@ -2474,17 +2490,17 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                   setSavingEdit(false);
                   showToast("Save error: " + err.message);
                 }
-              }} className="cd-btn-primary" style={{ padding: "10px 28px" }} disabled={savingEdit}>
+              }} className="cd-editor-btn-save" disabled={savingEdit}>
                 {savingEdit ? "Saving..." : "Save Market Stats"}
               </button>
             </div>
           </div>
 
-          <div className="cd-hero-editor-body">
-            <div className="cd-hero-editor-form">
+          <div className="cd-fs-editor-body">
+            <div className="cd-fs-editor-form">
               {/* Section Header */}
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">Section Header</h3>
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">Section Header</h3>
                 <div className="cd-form-group">
                   <label className="cd-form-label">Eyebrow Text</label>
                   <input
@@ -2516,8 +2532,8 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               </div>
 
               {/* Quote Banner */}
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">Quote Banner (Top Left Card)</h3>
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">Quote Banner (Top Left Card)</h3>
                 <div className="cd-form-group">
                   <label className="cd-form-label">Quote Text</label>
                   <textarea
@@ -2541,8 +2557,8 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               </div>
 
               {/* Subcards */}
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">Subcards (Bottom Left Cards)</h3>
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">Subcards (Bottom Left Cards)</h3>
                 {marketForm.cards.map((card, i) => (
                   <div key={i} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: i < marketForm.cards.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -2550,7 +2566,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                       <button onClick={() => {
                         const updated = marketForm.cards.filter((_, j) => j !== i);
                         setMarketForm(p => ({ ...p, cards: updated }));
-                      }} className="cd-hero-editor-remove">Remove</button>
+                      }} className="cd-fs-editor-remove-text">Remove</button>
                     </div>
                     <div className="cd-form-group">
                       <label className="cd-form-label">Card Title</label>
@@ -2594,12 +2610,12 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                     </div>
                   </div>
                 ))}
-                <button onClick={() => setMarketForm(p => ({ ...p, cards: [...p.cards, { title: "", value: "", desc: "" }] }))} className="cd-hero-editor-add">+ Add Subcard</button>
+                <button onClick={() => setMarketForm(p => ({ ...p, cards: [...p.cards, { title: "", value: "", desc: "" }] }))} className="cd-fs-editor-add">+ Add Subcard</button>
               </div>
 
               {/* Featured Stat Card */}
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">Featured Blue Stat Card (Right Side)</h3>
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">Featured Blue Stat Card (Right Side)</h3>
                 <div className="cd-form-group">
                   <label className="cd-form-label">Big Stat Number</label>
                   <input
@@ -2623,9 +2639,13 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               </div>
             </div>
 
+            <button type="button" className="cd-fs-editor-preview-toggle" onClick={() => setMobilePreviewOpen(v => !v)}>
+              {mobilePreviewOpen ? "✕ Hide preview" : "👁 Show live preview"}
+            </button>
+
             {/* Live Preview */}
-            <div className="cd-hero-editor-preview">
-              <div className="cd-hero-editor-preview-inner" style={{ maxWidth: 520, padding: 0, border: "none", background: "transparent" }}>
+            <div className={`cd-fs-editor-preview${mobilePreviewOpen ? " is-open" : ""}`}>
+              <div className="cd-fs-editor-preview-inner" style={{ maxWidth: 520, padding: 0, border: "none", background: "transparent" }}>
                 {/* Quote Banner Preview */}
                 <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 16, padding: "32px 28px", marginBottom: 16, textAlign: "center", position: "relative", overflow: "hidden" }}>
                   <span style={{ position: "absolute", top: -8, left: 12, fontSize: 90, fontFamily: "Georgia, serif", color: "rgba(15,23,42,0.03)", lineHeight: 1 }}>&ldquo;</span>
@@ -2687,14 +2707,14 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
 
       {/* ── VIDEO PLAYLIST FULL-SCREEN EDITOR MODAL ── */}
       {videoPlaylistEditorOpen && (
-        <div className="cd-hero-editor-overlay">
-          <div className="cd-hero-editor-header">
+        <div className="cd-fs-editor-overlay">
+          <div className="cd-fs-editor-header">
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 600, color: "#fef08a", margin: 0 }}>Edit Video Playlist Section</h2>
               <p style={{ fontSize: 13, color: "#94a3b8", margin: "4px 0 0" }}>Update section header, background image, and video playlist items. Supports R2 bucket videos and YouTube.</p>
             </div>
             <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => setVideoPlaylistEditorOpen(false)} className="cd-btn-secondary" style={{ padding: "10px 20px" }}>Cancel</button>
+              <button onClick={() => setVideoPlaylistEditorOpen(false)} className="cd-editor-btn-cancel">Cancel</button>
               <button onClick={async () => {
                 setSavingEdit(true);
                 try {
@@ -2721,17 +2741,17 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                   setSavingEdit(false);
                   showToast("Save error: " + err.message);
                 }
-              }} className="cd-btn-primary" style={{ padding: "10px 28px" }} disabled={savingEdit}>
+              }} className="cd-editor-btn-save" disabled={savingEdit}>
                 {savingEdit ? "Saving..." : "Save Video Playlist"}
               </button>
             </div>
           </div>
 
-          <div className="cd-hero-editor-body">
-            <div className="cd-hero-editor-form">
+          <div className="cd-fs-editor-body">
+            <div className="cd-fs-editor-form">
               {/* Section Header */}
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">Section Header</h3>
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">Section Header</h3>
                 <div className="cd-form-group">
                   <label className="cd-form-label">Eyebrow Text</label>
                   <input
@@ -2763,8 +2783,8 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               </div>
 
               {/* Background Image */}
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">Background Image (Optional)</h3>
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">Background Image (Optional)</h3>
                 <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 12px" }}>Upload an abstract AI/network themed image. Leave empty to use the default SVG pattern. Shown at very low opacity over the dark background.</p>
                 <VideoDropzoneField
                   label="Background Image URL"
@@ -2822,8 +2842,8 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               </div>
 
               {/* Playlist Videos — drag & drop reorderable */}
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">
                   Playlist Videos
                   <span style={{ fontSize: 11, color: "#64748b", fontWeight: 400, marginLeft: 8 }}>Drag to reorder</span>
                 </h3>
@@ -2863,7 +2883,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                       <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", flexShrink: 0, minWidth: 20 }}>#{i + 1}</span>
                       {/* Thumbnail preview */}
                       {(() => {
-                        const thumb = v.thumbnail_url && v.thumbnail_url.startsWith("http") ? v.thumbnail_url : (v.thumbnail_url ? `${baseUrl}${v.thumbnail_url}` : "");
+                        const thumb = resolveAssetUrl(v.thumbnail_url);
                         return thumb ? (
                           <img src={thumb} alt="" style={{ width: 48, height: 30, borderRadius: 5, objectFit: "cover", flexShrink: 0 }} />
                         ) : (
@@ -2881,7 +2901,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                         const updated = videoPlaylistForm.videos.filter((_, j) => j !== i);
                         setVideoPlaylistForm(p => ({ ...p, videos: updated }));
                         setActiveVideoIdx(prev => Math.min(prev, updated.length - 1));
-                      }} className="cd-hero-editor-remove" style={{ flexShrink: 0 }}>Remove</button>
+                      }} className="cd-fs-editor-remove-text">Remove</button>
                     </div>
 
                     {/* Compact 2-column layout: type + title on top, URL + thumbnail + duration below */}
@@ -3037,13 +3057,17 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                     </div>
                   </div>
                 ))}
-                <button onClick={() => setVideoPlaylistForm(p => ({ ...p, videos: [...p.videos, { video_type: "youtube", video_url: "", title: "", thumbnail_url: "", duration: "" }] }))} className="cd-hero-editor-add">+ Add Video</button>
+                <button onClick={() => setVideoPlaylistForm(p => ({ ...p, videos: [...p.videos, { video_type: "youtube", video_url: "", title: "", thumbnail_url: "", duration: "" }] }))} className="cd-fs-editor-add">+ Add Video</button>
               </div>
             </div>
 
+            <button type="button" className="cd-fs-editor-preview-toggle" onClick={() => setMobilePreviewOpen(v => !v)}>
+              {mobilePreviewOpen ? "✕ Hide preview" : "👁 Show live preview"}
+            </button>
+
             {/* Live Preview */}
-            <div className="cd-hero-editor-preview">
-              <div className="cd-hero-editor-preview-inner" style={{ maxWidth: 560, padding: 0, border: "none", background: "transparent" }}>
+            <div className={`cd-fs-editor-preview${mobilePreviewOpen ? " is-open" : ""}`}>
+              <div className="cd-fs-editor-preview-inner" style={{ maxWidth: 560, padding: 0, border: "none", background: "transparent" }}>
                 <div style={{ textAlign: "center", marginBottom: 20 }}>
                   <div style={{ fontSize: 11, color: "#e63946", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>
                     {videoPlaylistForm.section_eyebrow || "Watch & Learn"}
@@ -3079,7 +3103,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                       {/* Playlist items */}
                       <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 200, overflowY: "auto" }}>
                         {validVideos.slice(0, 5).map((v, i) => {
-                          const thumb = v.thumbnail_url && v.thumbnail_url.startsWith("http") ? v.thumbnail_url : (v.thumbnail_url ? `${baseUrl}${v.thumbnail_url}` : "");
+                          const thumb = resolveAssetUrl(v.thumbnail_url);
                           return (
                             <div key={i} style={{ display: "flex", gap: 6, padding: 4, borderRadius: 4, border: `1px solid ${i === 0 ? "rgba(230,57,70,0.4)" : "rgba(255,255,255,0.08)"}`, background: i === 0 ? "rgba(230,57,70,0.1)" : "rgba(15,31,56,0.6)", alignItems: "center" }}>
                               {thumb ? (
@@ -3108,14 +3132,14 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
 
       {/* ── TOOLS COVERED EDITOR ── */}
       {toolsEditorOpen && (
-        <div className="cd-hero-editor-overlay">
-          <div className="cd-hero-editor-header">
+        <div className="cd-fs-editor-overlay">
+          <div className="cd-fs-editor-header">
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 600, color: "#fef08a", margin: 0 }}>Edit Tools Covered Section</h2>
               <p style={{ fontSize: 13, color: "#94a3b8", margin: "4px 0 0" }}>Update section header and tool icons. Each tool has a name + icon image (optional).</p>
             </div>
             <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => setToolsEditorOpen(false)} className="cd-btn-secondary" style={{ padding: "10px 20px" }}>Cancel</button>
+              <button onClick={() => setToolsEditorOpen(false)} className="cd-editor-btn-cancel">Cancel</button>
               <button onClick={async () => {
                 setSavingEdit(true);
                 try {
@@ -3141,17 +3165,17 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                   setSavingEdit(false);
                   showToast("Save error: " + err.message);
                 }
-              }} className="cd-btn-primary" style={{ padding: "10px 28px" }} disabled={savingEdit}>
+              }} className="cd-editor-btn-save" disabled={savingEdit}>
                 {savingEdit ? "Saving..." : "Save Tools"}
               </button>
             </div>
           </div>
 
-          <div className="cd-hero-editor-body">
-            <div className="cd-hero-editor-form">
+          <div className="cd-fs-editor-body">
+            <div className="cd-fs-editor-form">
               {/* Section Header */}
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">Section Header</h3>
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">Section Header</h3>
                 <div className="cd-form-group">
                   <label className="cd-form-label">Eyebrow Text</label>
                   <input
@@ -3182,8 +3206,8 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               </div>
 
               {/* Tools — drag & drop reorderable */}
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">
                   Tools
                   <span style={{ fontSize: 11, color: "#64748b", fontWeight: 400, marginLeft: 8 }}>Drag to reorder</span>
                 </h3>
@@ -3236,7 +3260,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                       <button onClick={() => {
                         const updated = toolsForm.tools.filter((_, j) => j !== i);
                         setToolsForm(p => ({ ...p, tools: updated }));
-                      }} className="cd-hero-editor-remove" style={{ flexShrink: 0 }}>Remove</button>
+                      }} className="cd-fs-editor-remove-text">Remove</button>
                     </div>
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -3272,13 +3296,17 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                     </div>
                   </div>
                 ))}
-                <button onClick={() => setToolsForm(p => ({ ...p, tools: [...p.tools, { name: "", icon_url: "" }] }))} className="cd-hero-editor-add">+ Add Tool</button>
+                <button onClick={() => setToolsForm(p => ({ ...p, tools: [...p.tools, { name: "", icon_url: "" }] }))} className="cd-fs-editor-add">+ Add Tool</button>
               </div>
             </div>
 
+            <button type="button" className="cd-fs-editor-preview-toggle" onClick={() => setMobilePreviewOpen(v => !v)}>
+              {mobilePreviewOpen ? "✕ Hide preview" : "👁 Show live preview"}
+            </button>
+
             {/* Live Preview */}
-            <div className="cd-hero-editor-preview">
-              <div className="cd-hero-editor-preview-inner" style={{ maxWidth: 560, padding: 0, border: "none", background: "transparent" }}>
+            <div className={`cd-fs-editor-preview${mobilePreviewOpen ? " is-open" : ""}`}>
+              <div className="cd-fs-editor-preview-inner" style={{ maxWidth: 560, padding: 0, border: "none", background: "transparent" }}>
                 <div style={{ textAlign: "center", marginBottom: 20 }}>
                   <div style={{ fontSize: 11, color: "#e63946", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>
                     {toolsForm.section_eyebrow || "Tools & Technologies"}
@@ -3332,7 +3360,9 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               const vids = [...prev.videos];
               vids[i] = {
                 ...vids[i],
+                video_type: "r2",
                 video_url: material.file_url,
+                hls_url: material.hls_url || "",
                 title: material.title || vids[i].title,
                 thumbnail_url: material.thumbnail_url || vids[i].thumbnail_url,
               };
@@ -3344,14 +3374,14 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
 
       {/* ── WHO IS FOR FULL-SCREEN EDITOR MODAL ── */}
       {whoEditorOpen && (
-        <div className="cd-hero-editor-overlay">
-          <div className="cd-hero-editor-header">
+        <div className="cd-fs-editor-overlay">
+          <div className="cd-fs-editor-header">
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 600, color: "#fef08a", margin: 0 }}>Edit Target Audience Section</h2>
               <p style={{ fontSize: 13, color: "#94a3b8", margin: "4px 0 0" }}>Update headline, subtitle, description, and persona cards — no technical knowledge needed.</p>
             </div>
             <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => setWhoEditorOpen(false)} className="cd-btn-secondary" style={{ padding: "10px 20px" }}>Cancel</button>
+              <button onClick={() => setWhoEditorOpen(false)} className="cd-editor-btn-cancel">Cancel</button>
               <button onClick={async () => {
                 setSavingEdit(true);
                 try {
@@ -3381,17 +3411,17 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                   setSavingEdit(false);
                   showToast("Save error: " + err.message);
                 }
-              }} className="cd-btn-primary" style={{ padding: "10px 28px" }} disabled={savingEdit}>
+              }} className="cd-editor-btn-save" disabled={savingEdit}>
                 {savingEdit ? "Saving..." : "Save Target Audience"}
               </button>
             </div>
           </div>
 
-          <div className="cd-hero-editor-body">
-            <div className="cd-hero-editor-form">
+          <div className="cd-fs-editor-body">
+            <div className="cd-fs-editor-form">
               {/* Section Text */}
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">Section Text</h3>
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">Section Text</h3>
                 <div className="cd-form-group">
                   <label className="cd-form-label">Headline</label>
                   <input
@@ -3423,8 +3453,8 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               </div>
 
               {/* Persona Cards */}
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">Target Audience Cards</h3>
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">Target Audience Cards</h3>
                 {whoForm.personas.map((persona, i) => (
                   <div key={i} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: i < whoForm.personas.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -3432,7 +3462,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                       <button onClick={() => {
                         const updated = whoForm.personas.filter((_, j) => j !== i);
                         setWhoForm(p => ({ ...p, personas: updated }));
-                      }} className="cd-hero-editor-remove">Remove</button>
+                      }} className="cd-fs-editor-remove-text">Remove</button>
                     </div>
                     <div className="cd-form-group">
                       <label className="cd-form-label">Experience Tag</label>
@@ -3476,13 +3506,17 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                     </div>
                   </div>
                 ))}
-                <button onClick={() => setWhoForm(p => ({ ...p, personas: [...p.personas, { experience: "", title: "", desc: "" }] }))} className="cd-hero-editor-add">+ Add Persona Card</button>
+                <button onClick={() => setWhoForm(p => ({ ...p, personas: [...p.personas, { experience: "", title: "", desc: "" }] }))} className="cd-fs-editor-add">+ Add Persona Card</button>
               </div>
             </div>
 
+            <button type="button" className="cd-fs-editor-preview-toggle" onClick={() => setMobilePreviewOpen(v => !v)}>
+              {mobilePreviewOpen ? "✕ Hide preview" : "👁 Show live preview"}
+            </button>
+
             {/* Live Preview */}
-            <div className="cd-hero-editor-preview">
-              <div className="cd-hero-editor-preview-inner" style={{ maxWidth: 480, padding: 0, border: "none", background: "transparent" }}>
+            <div className={`cd-fs-editor-preview${mobilePreviewOpen ? " is-open" : ""}`}>
+              <div className="cd-fs-editor-preview-inner" style={{ maxWidth: 480, padding: 0, border: "none", background: "transparent" }}>
                 <div style={{ marginBottom: 24 }}>
                   <span style={{ fontSize: 13, fontWeight: 500, color: "#6f8bb5", letterSpacing: 2, textTransform: "uppercase", fontFamily: "Georgia, serif", fontStyle: "italic" }}>
                     AI Agentic Software Development Course
@@ -3522,14 +3556,14 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
 
       {/* ── OUTCOMES / HOW THIS COURSE WILL HELP FULL-SCREEN EDITOR MODAL ── */}
       {outcomesEditorOpen && (
-        <div className="cd-hero-editor-overlay">
-          <div className="cd-hero-editor-header">
+        <div className="cd-fs-editor-overlay">
+          <div className="cd-fs-editor-header">
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 600, color: "#fef08a", margin: 0 }}>Edit Placement Stories Section</h2>
               <p style={{ fontSize: 13, color: "#94a3b8", margin: "4px 0 0" }}>Update section header, card content, and CTA bar — no technical knowledge needed.</p>
             </div>
             <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => setOutcomesEditorOpen(false)} className="cd-btn-secondary" style={{ padding: "10px 20px" }}>Cancel</button>
+              <button onClick={() => setOutcomesEditorOpen(false)} className="cd-editor-btn-cancel">Cancel</button>
               <button onClick={async () => {
                 setSavingEdit(true);
                 try {
@@ -3556,17 +3590,17 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                   setSavingEdit(false);
                   showToast("Save error: " + err.message);
                 }
-              }} className="cd-btn-primary" style={{ padding: "10px 28px" }} disabled={savingEdit}>
+              }} className="cd-editor-btn-save" disabled={savingEdit}>
                 {savingEdit ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </div>
 
-          <div className="cd-hero-editor-body">
-            <div className="cd-hero-editor-form">
+          <div className="cd-fs-editor-body">
+            <div className="cd-fs-editor-form">
               {/* Section Header */}
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">Section Header</h3>
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">Section Header</h3>
                 <div className="cd-form-group">
                   <label className="cd-form-label">Eyebrow Text</label>
                   <input
@@ -3588,8 +3622,8 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               </div>
 
               {/* Cards */}
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">Content Cards</h3>
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">Content Cards</h3>
                 {outcomesForm.cards.map((card, i) => (
                   <div key={i} style={{ marginBottom: 16, paddingBottom: 16, borderBottom: i < outcomesForm.cards.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -3597,7 +3631,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                       <button onClick={() => {
                         const updated = outcomesForm.cards.filter((_, j) => j !== i);
                         setOutcomesForm(p => ({ ...p, cards: updated }));
-                      }} className="cd-hero-editor-remove">Remove</button>
+                      }} className="cd-fs-editor-remove-text">Remove</button>
                     </div>
                     <div className="cd-form-group">
                       <label className="cd-form-label">Card Title</label>
@@ -3628,12 +3662,12 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                     </div>
                   </div>
                 ))}
-                <button onClick={() => setOutcomesForm(p => ({ ...p, cards: [...p.cards, { title: "", desc: "" }] }))} className="cd-hero-editor-add">+ Add Card</button>
+                <button onClick={() => setOutcomesForm(p => ({ ...p, cards: [...p.cards, { title: "", desc: "" }] }))} className="cd-fs-editor-add">+ Add Card</button>
               </div>
 
               {/* CTA Bar */}
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">Bottom CTA Bar</h3>
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">Bottom CTA Bar</h3>
                 <div className="cd-form-group">
                   <label className="cd-form-label">CTA Text</label>
                   <input
@@ -3655,9 +3689,13 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               </div>
             </div>
 
+            <button type="button" className="cd-fs-editor-preview-toggle" onClick={() => setMobilePreviewOpen(v => !v)}>
+              {mobilePreviewOpen ? "✕ Hide preview" : "👁 Show live preview"}
+            </button>
+
             {/* Live Preview */}
-            <div className="cd-hero-editor-preview">
-              <div className="cd-hero-editor-preview-inner" style={{ maxWidth: 480, padding: 0, border: "none", background: "transparent" }}>
+            <div className={`cd-fs-editor-preview${mobilePreviewOpen ? " is-open" : ""}`}>
+              <div className="cd-fs-editor-preview-inner" style={{ maxWidth: 480, padding: 0, border: "none", background: "transparent" }}>
                 <div style={{ textAlign: "center", marginBottom: 28 }}>
                   <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 3, color: "#4f46e5", textTransform: "uppercase" }}>
                     {outcomesForm.eyebrow || <span style={{ color: "#94a3b8" }}>EYEBROW</span>}
@@ -3699,14 +3737,14 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
 
       {/* ── CAPSTONE PROJECTS FULL-SCREEN EDITOR MODAL ── */}
       {projectsEditorOpen && (
-        <div className="cd-hero-editor-overlay">
-          <div className="cd-hero-editor-header">
+        <div className="cd-fs-editor-overlay">
+          <div className="cd-fs-editor-header">
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 600, color: "#fef08a", margin: 0 }}>Edit Capstone Projects</h2>
               <p style={{ fontSize: 13, color: "#94a3b8", margin: "4px 0 0" }}>Update the project cards — title, category, image, description, and tags.</p>
             </div>
             <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => setProjectsEditorOpen(false)} className="cd-btn-secondary" style={{ padding: "10px 20px" }}>Cancel</button>
+              <button onClick={() => setProjectsEditorOpen(false)} className="cd-editor-btn-cancel">Cancel</button>
               <button onClick={async () => {
                 setSavingEdit(true);
                 try {
@@ -3727,17 +3765,17 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                   setSavingEdit(false);
                   showToast("Save error: " + err.message);
                 }
-              }} className="cd-btn-primary" style={{ padding: "10px 28px" }} disabled={savingEdit}>
+              }} className="cd-editor-btn-save" disabled={savingEdit}>
                 {savingEdit ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </div>
 
-          <div className="cd-hero-editor-body">
-            <div className="cd-hero-editor-form" style={{ maxWidth: 720 }}>
+          <div className="cd-fs-editor-body">
+            <div className="cd-fs-editor-form cd-fs-editor-form--wide">
               {projectsForm.map((proj, i) => (
-                <div key={i} className="cd-hero-editor-group">
-                  <h3 className="cd-hero-editor-group-title">Project {i + 1}</h3>
+                <div key={i} className="cd-fs-editor-group">
+                  <h3 className="cd-fs-editor-group-title">Project {i + 1}</h3>
                   <div className="cd-form-group">
                     <label className="cd-form-label">Image URL</label>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -3830,9 +3868,13 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               ))}
             </div>
 
+            <button type="button" className="cd-fs-editor-preview-toggle" onClick={() => setMobilePreviewOpen(v => !v)}>
+              {mobilePreviewOpen ? "✕ Hide preview" : "👁 Show live preview"}
+            </button>
+
             {/* Live Preview */}
-            <div className="cd-hero-editor-preview">
-              <div className="cd-hero-editor-preview-inner" style={{ maxWidth: 720, width: "100%" }}>
+            <div className={`cd-fs-editor-preview${mobilePreviewOpen ? " is-open" : ""}`}>
+              <div className="cd-fs-editor-preview-inner" style={{ maxWidth: 720, width: "100%" }}>
                 <div className="cd-projects-grid">
                   {projectsForm.map((proj, i) => (
                     <div key={i} className="cd-project-card">
@@ -3858,14 +3900,14 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
 
       {/* ── COMPARISON MATRIX FULL-SCREEN EDITOR MODAL ── */}
       {compareEditorOpen && (
-        <div className="cd-hero-editor-overlay">
-          <div className="cd-hero-editor-header">
+        <div className="cd-fs-editor-overlay">
+          <div className="cd-fs-editor-header">
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 600, color: "#fef08a", margin: 0 }}>Edit Comparison Table</h2>
               <p style={{ fontSize: 13, color: "#94a3b8", margin: "4px 0 0" }}>Add, remove, and reorder comparison rows. Toggle IINM / Others status for each feature.</p>
             </div>
             <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => setCompareEditorOpen(false)} className="cd-btn-secondary" style={{ padding: "10px 20px" }}>Cancel</button>
+              <button onClick={() => setCompareEditorOpen(false)} className="cd-editor-btn-cancel">Cancel</button>
               <button onClick={async () => {
                 setSavingEdit(true);
                 try {
@@ -3886,15 +3928,15 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                   setSavingEdit(false);
                   showToast("Save error: " + err.message);
                 }
-              }} className="cd-btn-primary" style={{ padding: "10px 28px" }} disabled={savingEdit}>
+              }} className="cd-editor-btn-save" disabled={savingEdit}>
                 {savingEdit ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </div>
 
-          <div className="cd-hero-editor-body">
+          <div className="cd-fs-editor-body">
             {/* Form Panel */}
-            <div className="cd-hero-editor-form" style={{ maxWidth: 720 }}>
+            <div className="cd-fs-editor-form cd-fs-editor-form--wide">
               {/* Add Row Button */}
               <div style={{ marginBottom: 24, display: "flex", gap: 12 }}>
                 <button
@@ -3907,9 +3949,9 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               </div>
 
               {compareForm.map((row, i) => (
-                <div key={i} className="cd-hero-editor-group">
+                <div key={i} className="cd-fs-editor-group">
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                    <h3 className="cd-hero-editor-group-title">Row {i + 1}</h3>
+                    <h3 className="cd-fs-editor-group-title">Row {i + 1}</h3>
                     <div style={{ display: "flex", gap: 8 }}>
                       <button
                         onClick={() => {
@@ -4023,9 +4065,13 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               )}
             </div>
 
+            <button type="button" className="cd-fs-editor-preview-toggle" onClick={() => setMobilePreviewOpen(v => !v)}>
+              {mobilePreviewOpen ? "✕ Hide preview" : "👁 Show live preview"}
+            </button>
+
             {/* Live Preview */}
-            <div className="cd-hero-editor-preview" style={{ background: "#ffffff" }}>
-              <div className="cd-hero-editor-preview-inner" style={{ maxWidth: 600, width: "100%", background: "#ffffff", border: "1px dashed #cbd5e1" }}>
+            <div className={`cd-fs-editor-preview cd-fs-editor-preview--light${mobilePreviewOpen ? " is-open" : ""}`}>
+              <div className="cd-fs-editor-preview-inner cd-fs-editor-preview-inner--light" style={{ maxWidth: 600, width: "100%" }}>
                 <div className="cd-compare-card">
                   <div className="cd-compare-header">
                     <div className="cd-col-feature">Features</div>
@@ -4081,14 +4127,14 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
 
       {/* ── CERTIFICATES FULL-SCREEN EDITOR MODAL ── */}
       {certificatesEditorOpen && (
-        <div className="cd-hero-editor-overlay">
-          <div className="cd-hero-editor-header">
+        <div className="cd-fs-editor-overlay">
+          <div className="cd-fs-editor-header">
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 600, color: "#fef08a", margin: 0 }}>Edit Certificates</h2>
               <p style={{ fontSize: 13, color: "#94a3b8", margin: "4px 0 0" }}>Update section title and upload certificate images to R2.</p>
             </div>
             <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => setCertificatesEditorOpen(false)} className="cd-btn-secondary" style={{ padding: "10px 20px" }}>Cancel</button>
+              <button onClick={() => setCertificatesEditorOpen(false)} className="cd-editor-btn-cancel">Cancel</button>
               <button onClick={async () => {
                 setSavingEdit(true);
                 try {
@@ -4109,17 +4155,17 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                   setSavingEdit(false);
                   showToast("Save error: " + err.message);
                 }
-              }} className="cd-btn-primary" style={{ padding: "10px 28px" }} disabled={savingEdit}>
+              }} className="cd-editor-btn-save" disabled={savingEdit}>
                 {savingEdit ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </div>
 
-          <div className="cd-hero-editor-body">
+          <div className="cd-fs-editor-body">
             {/* Form Panel */}
-            <div className="cd-hero-editor-form" style={{ maxWidth: 720 }}>
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">Section Text</h3>
+            <div className="cd-fs-editor-form cd-fs-editor-form--wide">
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">Section Text</h3>
                 <div className="cd-form-group">
                   <label className="cd-form-label">Eyebrow</label>
                   <input
@@ -4149,8 +4195,8 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                 </div>
               </div>
 
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">Certificate Images</h3>
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">Certificate Images</h3>
                 {certificatesForm.items.map((cert, i) => (
                   <div key={i} className="cd-form-group" style={{ marginBottom: 20 }}>
                     <label className="cd-form-label">Certificate {i + 1}</label>
@@ -4204,9 +4250,13 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               </div>
             </div>
 
+            <button type="button" className="cd-fs-editor-preview-toggle" onClick={() => setMobilePreviewOpen(v => !v)}>
+              {mobilePreviewOpen ? "✕ Hide preview" : "👁 Show live preview"}
+            </button>
+
             {/* Live Preview */}
-            <div className="cd-hero-editor-preview" style={{ background: "#0a0f24" }}>
-              <div className="cd-hero-editor-preview-inner" style={{ maxWidth: 720, width: "100%", background: "#0a0f24", border: "1px dashed rgba(255,255,255,0.15)" }}>
+            <div className={`cd-fs-editor-preview${mobilePreviewOpen ? " is-open" : ""}`}>
+              <div className="cd-fs-editor-preview-inner" style={{ maxWidth: 720, width: "100%" }}>
                 <div className="cd-certificates-header">
                   <span className="cd-certificates-eyebrow">{certificatesForm.eyebrow}</span>
                   <h2 className="cd-certificates-title">
@@ -4228,24 +4278,24 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
 
       {/* ── FAQ FULL-SCREEN EDITOR MODAL ── */}
       {faqEditorOpen && (
-        <div className="cd-hero-editor-overlay">
-          <div className="cd-hero-editor-header">
+        <div className="cd-fs-editor-overlay">
+          <div className="cd-fs-editor-header">
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 600, color: "#fef08a", margin: 0 }}>Edit FAQs</h2>
               <p style={{ fontSize: 13, color: "#94a3b8", margin: "4px 0 0" }}>Manage per-course FAQ categories and questions.</p>
             </div>
             <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => setFaqEditorOpen(false)} className="cd-btn-secondary" style={{ padding: "10px 20px" }}>Cancel</button>
-              <button onClick={saveFaqEditor} className="cd-btn-primary" style={{ padding: "10px 28px" }} disabled={savingEdit}>
+              <button onClick={() => setFaqEditorOpen(false)} className="cd-editor-btn-cancel">Cancel</button>
+              <button onClick={saveFaqEditor} className="cd-editor-btn-save" disabled={savingEdit}>
                 {savingEdit ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </div>
 
-          <div className="cd-hero-editor-body">
-            <div className="cd-hero-editor-form" style={{ maxWidth: 720 }}>
-              <div className="cd-hero-editor-group">
-                <h3 className="cd-hero-editor-group-title">Add Category</h3>
+          <div className="cd-fs-editor-body">
+            <div className="cd-fs-editor-form cd-fs-editor-form--wide">
+              <div className="cd-fs-editor-group">
+                <h3 className="cd-fs-editor-group-title">Add Category</h3>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input
                     className="cd-form-input"
@@ -4264,13 +4314,13 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               </div>
 
               {Object.keys(faqForm).map(cat => (
-                <div key={cat} className="cd-hero-editor-group">
+                <div key={cat} className="cd-fs-editor-group">
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                    <h3 className="cd-hero-editor-group-title">{cat}</h3>
+                    <h3 className="cd-fs-editor-group-title">{cat}</h3>
                     <button onClick={() => {
                       const { [cat]: _, ...rest } = faqForm;
                       setFaqForm(rest);
-                    }} className="cd-hero-editor-remove">×</button>
+                    }} className="cd-fs-editor-remove">×</button>
                   </div>
                   {faqForm[cat].map((q, idx) => (
                     <div key={idx} style={{ marginBottom: 16, padding: 14, background: "rgba(15,23,42,0.5)", borderRadius: 8 }}>
@@ -4286,7 +4336,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                           })}
                           placeholder="Question"
                         />
-                        <button onClick={() => setFaqForm(p => ({ ...p, [cat]: p[cat].filter((_, j) => j !== idx) }))} className="cd-hero-editor-remove">×</button>
+                        <button onClick={() => setFaqForm(p => ({ ...p, [cat]: p[cat].filter((_, j) => j !== idx) }))} className="cd-fs-editor-remove">×</button>
                       </div>
                       <textarea
                         className="cd-form-input"
@@ -4301,12 +4351,16 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                       />
                     </div>
                   ))}
-                  <button onClick={() => setFaqForm(p => ({ ...p, [cat]: [...p[cat], { question: "", answer: "" }] }))} className="cd-hero-editor-add">+ Add Question</button>
+                  <button onClick={() => setFaqForm(p => ({ ...p, [cat]: [...p[cat], { question: "", answer: "" }] }))} className="cd-fs-editor-add">+ Add Question</button>
                 </div>
               ))}
             </div>
 
-            <div className="cd-hero-editor-preview" style={{ background: "#ffffff" }}>
+            <button type="button" className="cd-fs-editor-preview-toggle" onClick={() => setMobilePreviewOpen(v => !v)}>
+              {mobilePreviewOpen ? "✕ Hide preview" : "👁 Show live preview"}
+            </button>
+
+            <div className={`cd-fs-editor-preview cd-fs-editor-preview--light${mobilePreviewOpen ? " is-open" : ""}`}>
               <div className="cd-faq-card" style={{ width: "100%", maxWidth: 600 }}>
                 <h3 className="cd-faq-card-title">{faqPreviewCategory}</h3>
                 <div className="cd-faq-list">

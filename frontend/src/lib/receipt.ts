@@ -169,7 +169,7 @@ export function renderReceiptHtml(
           <div style="flex: 1; min-width: 0;">
             ${logoUrl ? `
               <div style="margin-bottom: 8px;">
-                <img src="${logoUrl}" style="max-height: 54px; max-width: 240px; object-fit: contain; display: block;" alt="${siteName}" onerror="this.parentElement.style.display='none'" />
+                <img src="${logoUrl}" style="max-height: 54px; max-width: 240px; object-fit: contain; display: block;" alt="${siteName}" referrerpolicy="no-referrer" onerror="this.parentElement.style.display='none'" />
               </div>
             ` : `
               <div style="font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: -0.3px; margin-bottom: 6px;">${siteName}</div>
@@ -238,13 +238,19 @@ export function renderReceiptHtml(
               </tr>
             </tbody>
             <tfoot>
-              <tr style="border-top: 2px solid #0f172a; background: #f8fafc;">
-                <td colspan="3" style="padding: 10px 12px; text-align: right; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">TOTAL AMOUNT PAID:</td>
-                <td style="padding: 10px 12px; text-align: right; font-family: 'Consolas', 'Courier New', monospace; font-size: 16px; font-weight: 800; color: #0f172a;">${bookingAmount}</td>
+              <tr style="border-top: 2px solid #0f172a; background: #ecfdf5;">
+                <td colspan="3" style="padding: 10px 12px; text-align: right; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #065f46;">BOOKING AMOUNT PAID:</td>
+                <td style="padding: 10px 12px; text-align: right; font-family: 'Consolas', 'Courier New', monospace; font-size: 16px; font-weight: 800; color: #047857;">${bookingAmount}</td>
               </tr>
-              <tr style="background: #ffffff; border-top: 1px solid #e2e8f0;">
-                <td colspan="3" style="padding: 8px 12px; text-align: right; font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">REMAINING DUE BALANCE:</td>
-                <td style="padding: 8px 12px; text-align: right; font-family: 'Consolas', 'Courier New', monospace; font-size: 13px; font-weight: 700; color: #dc2626;">${dueAmount}</td>
+              <tr style="background: #fffbeb; border-top: 1px solid #fcd34d;">
+                <td colspan="3" style="padding: 10px 12px; text-align: right; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #92400e;">
+                  <span style="display: inline-block; background: #d97706; color: #ffffff; font-size: 9px; font-weight: 800; padding: 1px 6px; margin-right: 6px; border-radius: 2px;">!</span>ADMISSION FEE:
+                </td>
+                <td style="padding: 10px 12px; text-align: right; font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; font-weight: 700; color: #92400e; font-style: italic;">Need Before Starting the Class</td>
+              </tr>
+              <tr style="background: #fef2f2; border-top: 1px solid #fca5a5;">
+                <td colspan="3" style="padding: 10px 12px; text-align: right; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #991b1b;">TOTAL OUTSTANDING:</td>
+                <td style="padding: 10px 12px; text-align: right; font-family: 'Consolas', 'Courier New', monospace; font-size: 15px; font-weight: 800; color: #dc2626;">${dueAmount}</td>
               </tr>
             </tfoot>
           </table>
@@ -269,7 +275,7 @@ export function renderReceiptHtml(
             <span style="font-weight: 700; color: #92400e; font-size: 11.5px;">Admission &amp; Fee Policy</span>
           </div>
           <div style="color: #92400e;">
-            This is a computer-generated official receipt for slot booking. Admission confirmation and batch access credentials are strictly subject to clearance of the remaining balance before class commencement date (<strong>${startDate}</strong>).
+            This is a computer-generated official receipt for slot booking. <strong>Admission Fee must be paid before class commencement date (${startDate}).</strong> Admission confirmation and batch access credentials are strictly subject to clearance of the total outstanding balance before class start.
           </div>
           ${(termsUrl || termsText) ? `
             <div style="margin-top: 6px; padding-top: 6px; border-top: 1px dashed #fcd34d; color: #78350f;">
@@ -288,7 +294,7 @@ export function renderReceiptHtml(
             <div style="font-family: 'Consolas', 'Courier New', monospace; font-size: 9.5px; color: #64748b; margin-top: 2px;">SECURE HASH: ${invoiceUuid.replace(/-/g, "").toUpperCase()}</div>
           </div>
           <div style="text-align: center; min-width: 170px;">
-            ${founderSig ? `<img src="${founderSig}" style="height: 38px; max-width: 150px; object-fit: contain; margin-bottom: 2px; display: block; margin-left: auto; margin-right: auto;" alt="Signature" onerror="this.style.display='none'" />` : `<div style="height: 38px;"></div>`}
+            ${founderSig ? `<img src="${founderSig}" style="height: 38px; max-width: 150px; object-fit: contain; margin-bottom: 2px; display: block; margin-left: auto; margin-right: auto;" alt="Signature" referrerpolicy="no-referrer" onerror="this.style.display='none'" />` : `<div style="height: 38px;"></div>`}
             <div style="border-top: 1.5px solid #0f172a; padding-top: 4px;">
               <div style="font-size: 11.5px; font-weight: 700; color: #0f172a;">${founderName}</div>
               <div style="font-size: 10px; color: #475569;">${founderDesignation}</div>
@@ -302,8 +308,23 @@ export function renderReceiptHtml(
 }
 
 async function fetchImageAsDataUrl(url: string): Promise<string | null> {
+  if (!url) return null;
   try {
-    const res = await fetch(url, { mode: "cors" });
+    // For cross-origin URLs, use the backend proxy to avoid CORS issues
+    let fetchUrl = url;
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+      try {
+        const parsed = new URL(url);
+        if (parsed.hostname !== window.location.hostname) {
+          // Use the backend proxy for cross-origin images
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "";
+          fetchUrl = `${baseUrl}/api/public/slot-booking/proxy-image?url=${encodeURIComponent(url)}`;
+        }
+      } catch {
+        // URL parsing failed, use original
+      }
+    }
+    const res = await fetch(fetchUrl, { mode: "cors" });
     if (!res.ok) return null;
     const blob = await res.blob();
     return await new Promise<string>((resolve, reject) => {

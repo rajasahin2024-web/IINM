@@ -172,6 +172,7 @@ export const adminMenuData: MenuItem[] = [
       { label: "Blog SEO",        href: "/admin/seo/blogs",        icon: "edit" },
       { label: "Sitemap",         href: "/admin/seo/sitemap",      icon: "map" },
       { label: "Schema.org",      href: "/admin/seo/schema",       icon: "code" },
+      { label: "Footer Directory", href: "/admin/seo/directory",    icon: "layout" },
       { label: "FAQs (AEO)",      href: "/admin/seo/faqs",         icon: "help-circle" },
       { label: "llms.txt (AEO)",  href: "/admin/seo/llms",         icon: "cpu" },
       { label: "Redirects",       href: "/admin/seo/redirects",    icon: "link" },

@@ -27,30 +27,40 @@ def compute_installment_status(inst: models.InstallmentSchedule) -> str:
     return "pending"
 
 
-def build_schedule(net_fee: float, n: int, frequency: str, freq_days: Optional[int], first_date: date, paying_amount: float = 0.0, custom_dates: Optional[List[date]] = None) -> list:
-    """Return list of (installment_no, due_date, amount) tuples."""
+def build_schedule(net_fee: float, n: int, frequency: str, freq_days: Optional[int], first_date: date, paying_amount: float = 0.0, custom_dates: Optional[List[date]] = None, custom_names: Optional[List[str]] = None) -> list:
+    """Return list of (installment_no, due_date, amount, name) tuples.
+
+    custom_names (optional): list of length `n` providing a custom label per
+    installment (index 0 = installment #1, etc.). If not supplied, defaults to
+    "Installment #N".
+    """
     remaining = max(net_fee - paying_amount, 0.0)
     future_n = n - 1
-    
+
+    def _name(idx: int) -> str:
+        if custom_names and 0 <= idx - 1 < len(custom_names) and custom_names[idx - 1]:
+            return custom_names[idx - 1].strip()
+        return f"Installment #{idx}"
+
     rows = []
     # Row 1 is the initial down payment (dated today)
-    rows.append((1, date.today(), paying_amount))
-    
+    rows.append((1, date.today(), paying_amount, _name(1)))
+
     if future_n > 0:
         per = math.floor(remaining / future_n * 100) / 100
         last = round(remaining - per * (future_n - 1), 2)
-        
+
         current = first_date
         for i in range(1, future_n + 1):
             amt = last if i == future_n else per
-            
+
             if custom_dates and len(custom_dates) >= i:
                 due_dt = custom_dates[i-1]
             else:
                 due_dt = current
-                
-            rows.append((i + 1, due_dt, amt))
-            
+
+            rows.append((i + 1, due_dt, amt, _name(i + 1)))
+
             if not custom_dates:
                 if frequency == "monthly":
                     current = current + relativedelta(months=1)
@@ -101,6 +111,7 @@ class PurchaseCreate(BaseModel):
     frequency_days: Optional[int] = None
     first_payment_date: Optional[date] = None
     custom_installment_dates: Optional[List[date]] = None
+    custom_installment_names: Optional[List[str]] = None
 
 
 class InstallmentPaymentCreate(BaseModel):
@@ -133,6 +144,7 @@ class PurchaseEdit(BaseModel):
     frequency_days: Optional[int] = None
     first_payment_date: Optional[date] = None
     custom_installment_dates: Optional[List[date]] = None
+    custom_installment_names: Optional[List[str]] = None
 
 
 class InstallmentOut(BaseModel):
@@ -142,6 +154,7 @@ class InstallmentOut(BaseModel):
     amount: float
     paid_amount: float
     status: str
+    name: Optional[str] = None
     payment_method: Optional[str]
     reference_no: Optional[str]
     notes: Optional[str]
@@ -282,6 +295,12 @@ def create_purchase(
                 raise HTTPException(status_code=400, detail="Installment frequency or custom dates are required.")
             if data.installment_frequency == "custom" and not data.frequency_days:
                 raise HTTPException(status_code=400, detail="Custom frequency requires frequency_days.")
+        if data.custom_installment_names:
+            if len(data.custom_installment_names) != data.total_installments:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Number of custom installment names must match the total installment count.",
+                )
 
     # 7. paying amount cannot exceed net_fee
     if data.paying_amount > net_fee:
@@ -314,6 +333,7 @@ def create_purchase(
         installment_frequency=data.installment_frequency if data.is_installment else None,
         frequency_days=data.frequency_days if data.is_installment else None,
         first_payment_date=first_date if data.is_installment else None,
+        source="admin_created" if data.record_payment else "invoice_pending",
     )
     db.add(purchase)
     db.flush()  # get purchase.id
@@ -343,8 +363,9 @@ def create_purchase(
             first_date=first_date,
             paying_amount=data.paying_amount,
             custom_dates=data.custom_installment_dates,
+            custom_names=data.custom_installment_names,
         )
-        for (inst_no, due_dt, amt) in schedule:
+        for (inst_no, due_dt, amt, inst_name) in schedule:
             if inst_no == 1:
                 paid = data.paying_amount if data.record_payment else 0.0
             else:
@@ -358,6 +379,7 @@ def create_purchase(
                 paid_amount=paid,
                 status=st,
                 paid_at=datetime.utcnow() if st == "paid" else None,
+                name=inst_name,
             )
             db.add(inst)
 
@@ -379,17 +401,35 @@ def create_purchase(
 def list_purchases(
     student_id: Optional[int] = None,
     course_id: Optional[int] = None,
+    source: Optional[str] = None,
+    payment_type: Optional[str] = None,
     device: str = Depends(require_device),
     db: Session = Depends(get_db),
 ):
-    """List all purchases, optionally filtered by student or course."""
+    """List all purchases, optionally filtered by student, course, source, or payment type.
+
+    payment_type options:
+      - booking_only : slot_booking source with outstanding dues
+      - full_payment : fully paid purchases (paid_amount >= net_fee)
+      - has_installments : purchases with installment plan enabled
+    """
     auto_deactivate_overdue_purchases(db)
     query = db.query(models.CoursePurchase)
     if student_id:
         query = query.filter(models.CoursePurchase.student_id == student_id)
     if course_id:
         query = query.filter(models.CoursePurchase.course_id == course_id)
+    if source:
+        query = query.filter(models.CoursePurchase.source == source)
+    if payment_type == "has_installments":
+        query = query.filter(models.CoursePurchase.is_installment == True)
     purchases = query.order_by(models.CoursePurchase.id.desc()).all()
+
+    # payment_type filters that need Python-side computation
+    if payment_type == "booking_only":
+        purchases = [p for p in purchases if p.source == "slot_booking" and (p.due_amount or 0) > 0]
+    elif payment_type == "full_payment":
+        purchases = [p for p in purchases if (p.paid_amount or 0) >= (p.net_fee or 0)]
 
     result = []
     for p in purchases:
@@ -419,6 +459,7 @@ def list_purchases(
             "total_installments": inst_total,
             "installments_paid": inst_paid,
             "notes": p.notes,
+            "source": p.source,
             "transactions": [
                 {
                     "id": t.id,
@@ -518,6 +559,7 @@ def get_installments(
             "amount": inst.amount,
             "paid_amount": inst.paid_amount,
             "status": compute_installment_status(inst),
+            "name": inst.name,
             "payment_method": inst.payment_method,
             "reference_no": inst.reference_no,
             "notes": inst.notes,
@@ -639,6 +681,7 @@ def get_purchase_details(
         "status": p.status,
         "is_active": p.is_active,
         "invoice_uuid": p.invoice_uuid,
+        "source": p.source,
         "transactions": [
             {
                 "id": t.id,
@@ -906,6 +949,11 @@ def edit_purchase(
             n = data.total_installments or 2
             if n < 2 or n > 24:
                 raise HTTPException(status_code=400, detail="Installment count must be between 2 and 24.")
+            if data.custom_installment_names and len(data.custom_installment_names) != n:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Number of custom installment names must match the total installment count.",
+                )
             p.is_installment = True
             p.total_installments = n
             p.installment_frequency = data.installment_frequency or "monthly"
@@ -931,8 +979,9 @@ def edit_purchase(
                 first_date=first_date,
                 paying_amount=p.paid_amount,
                 custom_dates=data.custom_installment_dates,
+                custom_names=data.custom_installment_names,
             )
-            for (inst_no, due_dt, amt) in schedule:
+            for (inst_no, due_dt, amt, inst_name) in schedule:
                 paid = existing_paid.get(inst_no, 0.0)
                 if inst_no == 1:
                     paid = p.paid_amount
@@ -945,6 +994,7 @@ def edit_purchase(
                     paid_amount=paid,
                     status=st,
                     paid_at=datetime.utcnow() if st == "paid" else None,
+                    name=inst_name,
                 )
                 db.add(inst)
         else:
@@ -1149,18 +1199,34 @@ class PaymentRecordRequest(BaseModel):
 def list_payments(
     skip: int = 0,
     limit: int = 100,
+    status: Optional[str] = None,
+    payment_method: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
     device: str = Depends(require_device),
     db: Session = Depends(get_db)
 ):
-    """Fetch all payment transactions for the ledger."""
-    txns = db.query(models.PaymentTransaction).order_by(models.PaymentTransaction.id.desc()).offset(skip).limit(limit).all()
-    
+    """Fetch all payment transactions for the ledger, with optional filters."""
+    query = db.query(models.PaymentTransaction)
+    if status:
+        query = query.filter(models.PaymentTransaction.status == status)
+    if payment_method:
+        query = query.filter(models.PaymentTransaction.payment_method == payment_method)
+    if date_from:
+        query = query.filter(models.PaymentTransaction.created_at >= datetime.combine(date_from, datetime.min.time()))
+    if date_to:
+        # inclusive end-of-day
+        query = query.filter(models.PaymentTransaction.created_at <= datetime.combine(date_to, datetime.max.time()))
+
+    total_count = query.count()
+    txns = query.order_by(models.PaymentTransaction.id.desc()).offset(skip).limit(limit).all()
+
     result = []
     for t in txns:
         p = t.purchase
         student = p.student if p else None
         course = p.course if p else None
-        
+
         result.append({
             "id": t.id,
             "purchase_id": t.purchase_id,
@@ -1175,7 +1241,12 @@ def list_payments(
             "student_contact": student.phone or student.email if student else "",
             "course_title": course.title if course else "Unknown",
         })
-    return result
+    return {
+        "items": result,
+        "total": total_count,
+        "skip": skip,
+        "limit": limit,
+    }
 
 @router.post("/payments/record")
 def record_payment(

@@ -586,12 +586,19 @@ def verify_and_register(req: VerifyAndRegisterRequest, request: Request, db: Ses
 
     # 1. Verify Razorpay signature
     pay_settings = db.query(models.PaymentSettings).first()
-    if not pay_settings or not pay_settings.razorpay_key_secret:
+    if not pay_settings:
         raise HTTPException(status_code=503, detail="Razorpay not configured.")
+    # Use the SAME key secret that was used to create the order (test vs live)
+    if pay_settings.is_test_mode:
+        key_secret = pay_settings.razorpay_test_key_secret or pay_settings.razorpay_key_secret
+    else:
+        key_secret = pay_settings.razorpay_live_key_secret or pay_settings.razorpay_key_secret
+    if not key_secret:
+        raise HTTPException(status_code=503, detail="Razorpay key secret is not configured.")
 
     body = f"{req.razorpay_order_id}|{req.razorpay_payment_id}"
     expected_sig = hmac.new(
-        pay_settings.razorpay_key_secret.encode("utf-8"),
+        key_secret.encode("utf-8"),
         body.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
@@ -722,6 +729,7 @@ def verify_and_register(req: VerifyAndRegisterRequest, request: Request, db: Ses
         invoice_uuid=inv_uuid,
         is_installment=False,
         is_active=True,
+        source="slot_booking",
     )
     db.add(purchase)
     db.flush()
@@ -828,6 +836,43 @@ def verify_and_register(req: VerifyAndRegisterRequest, request: Request, db: Ses
             "terms_url": contact.terms_url if contact else None,
         },
     }
+
+
+@router.get("/proxy-image")
+def proxy_image(url: str, request: Request):
+    """Public: proxy an external image URL to avoid CORS issues during PDF generation.
+    Only allows image content types."""
+    import urllib.request
+    import urllib.error
+    client_ip = get_client_ip(request)
+    check_public_rate_limit(client_ip, limit=60, window=60)
+
+    if not url or not url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="Invalid URL")
+
+    # Only allow known CDN/own domains
+    allowed_hosts = ["cdn.iinmedu.com", "iinmedu.com", "www.iinmedu.com"]
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.hostname not in allowed_hosts:
+        raise HTTPException(status_code=403, detail="Domain not allowed")
+
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "IINM-Receipt-Proxy/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            content_type = resp.headers.get("Content-Type", "")
+            if not content_type.startswith("image/"):
+                raise HTTPException(status_code=400, detail="URL is not an image")
+            data = resp.read()
+        from fastapi import Response
+        return Response(content=data, media_type=content_type, headers={
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "public, max-age=3600",
+        })
+    except urllib.error.HTTPError as e:
+        raise HTTPException(status_code=e.code, detail=f"Failed to fetch image: {e.reason}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch image: {str(e)}")
 
 
 @router.get("/receipt/{invoice_uuid}")

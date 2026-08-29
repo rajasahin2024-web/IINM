@@ -2,6 +2,7 @@
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import "../app/home.css";
+import SeoFooterDirectory from "./SeoFooterDirectory";
 
 import { BASE_URL } from "@/lib/config";
 import { getSiteSettings } from "@/lib/siteSettingsCache";
@@ -173,12 +174,16 @@ export default function PublicFooter({
   };
 
   return (
-    <footer className="hp-footer">
-      {/* Subtle gradient orbs */}
-      <div className="hp-footer-glow hp-footer-glow--tl" />
-      <div className="hp-footer-glow hp-footer-glow--br" />
+    <>
+      {/* ── SEO Internal Links Directory (Above Footer on All Pages) ── */}
+      <SeoFooterDirectory />
 
-      <div className="hp-footer-inner">
+      <footer className="hp-footer">
+        {/* Subtle gradient orbs */}
+        <div className="hp-footer-glow hp-footer-glow--tl" />
+        <div className="hp-footer-glow hp-footer-glow--br" />
+
+        <div className="hp-footer-inner">
 
         {/* ── LEFT: Logo + Multi-column Links ── */}
         <div className="hp-footer-left">
@@ -279,6 +284,7 @@ export default function PublicFooter({
         </div>
       </div>
     </footer>
+    </>
   );
 }
 

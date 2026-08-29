@@ -1,10 +1,10 @@
 "use client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useToast } from "../../components/ToastProvider";
-import { API_BASE_URL } from "@/lib/config";
+import { API_BASE_URL, BACKEND_BASE_URL } from "@/lib/config";
 import { apiFetch } from "@/lib/apiFetch";
 
-const BACKEND_BASE = API_BASE_URL.replace("/api", "");
+const BACKEND_BASE = BACKEND_BASE_URL;
 
 /* ─── Floating Label Input ─── */
 function FloatInput({ id, label, value, onChange, type = "text", as: As = "input", rows = 3 }: any) {

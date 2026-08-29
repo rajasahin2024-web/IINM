@@ -45,6 +45,7 @@ class CreateOrderRequest(BaseModel):
     invoice_uuid: str
     amount: float  # amount in INR (e.g. 1500.00)
     notes: Optional[str] = None
+    installment_id: Optional[int] = None
 
 
 class VerifyPaymentRequest(BaseModel):
@@ -54,6 +55,7 @@ class VerifyPaymentRequest(BaseModel):
     invoice_uuid: str
     amount_paid: float
     notes: Optional[str] = None
+    installment_id: Optional[int] = None
 
 
 @router.get("/public/{invoice_uuid}")
@@ -103,6 +105,7 @@ def get_public_invoice(invoice_uuid: str, db: Session = Depends(get_db)):
                 "amount": inst.amount,
                 "paid_amount": inst.paid_amount,
                 "status": inst.status,
+                "name": inst.name,
                 "payment_method": inst.payment_method,
                 "reference_no": inst.reference_no,
                 "paid_at": inst.paid_at.isoformat() if inst.paid_at else None,
@@ -235,19 +238,42 @@ def create_razorpay_order(req: CreateOrderRequest, request: Request, db: Session
     if req.amount > purchase.due_amount + 0.01:
         raise HTTPException(status_code=400, detail=f"Amount exceeds due amount ₹{purchase.due_amount:.2f}")
 
+    # Validate installment_id if provided
+    target_installment = None
+    if req.installment_id is not None:
+        target_installment = db.query(models.InstallmentSchedule).filter(
+            models.InstallmentSchedule.id == req.installment_id,
+            models.InstallmentSchedule.purchase_id == purchase.id,
+        ).first()
+        if not target_installment:
+            raise HTTPException(status_code=404, detail="Installment not found for this invoice")
+        remaining_inst = round(target_installment.amount - target_installment.paid_amount, 2)
+        if remaining_inst <= 0:
+            raise HTTPException(status_code=400, detail="This installment is already fully paid")
+        if req.amount > remaining_inst + 0.01:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Amount exceeds installment remaining due ₹{remaining_inst:.2f}",
+            )
+
     client = _get_razorpay_client(db)
 
     amount_paise = int(round(req.amount * 100))  # Razorpay uses paise
+    notes = {
+        "invoice_uuid": req.invoice_uuid,
+        "purchase_id": str(purchase.id),
+        "student": f"{purchase.student.first_name} {purchase.student.last_name or ''}".strip(),
+        "course": purchase.course.title,
+    }
+    if target_installment is not None:
+        notes["installment_id"] = str(target_installment.id)
+        notes["installment_no"] = str(target_installment.installment_no)
+
     order_data = {
         "amount": amount_paise,
         "currency": "INR",
         "receipt": f"inv_{purchase.id}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
-        "notes": {
-            "invoice_uuid": req.invoice_uuid,
-            "purchase_id": str(purchase.id),
-            "student": f"{purchase.student.first_name} {purchase.student.last_name or ''}".strip(),
-            "course": purchase.course.title,
-        }
+        "notes": notes,
     }
 
     try:
@@ -298,22 +324,34 @@ def verify_razorpay_payment(req: VerifyPaymentRequest, request: Request, db: Ses
     # Record payment
     amount = req.amount_paid
     if purchase.is_installment:
-        # Find next pending installment
-        next_inst = db.query(models.InstallmentSchedule).filter(
-            models.InstallmentSchedule.purchase_id == purchase.id,
-            models.InstallmentSchedule.status.in_(["pending", "partial"])
-        ).order_by(models.InstallmentSchedule.installment_no).first()
+        # If a specific installment_id was provided, pay that one.
+        # Otherwise, fall back to the next pending installment.
+        target_inst = None
+        if req.installment_id is not None:
+            target_inst = db.query(models.InstallmentSchedule).filter(
+                models.InstallmentSchedule.id == req.installment_id,
+                models.InstallmentSchedule.purchase_id == purchase.id,
+            ).first()
+            if target_inst and target_inst.paid_amount >= target_inst.amount:
+                # Already fully paid — fall back to next pending
+                target_inst = None
 
-        if next_inst:
-            next_inst.paid_amount = round(next_inst.paid_amount + amount, 2)
-            next_inst.payment_method = "Razorpay"
-            next_inst.reference_no = req.razorpay_payment_id
-            next_inst.notes = req.notes
-            if next_inst.paid_amount >= next_inst.amount:
-                next_inst.status = "paid"
-                next_inst.paid_at = datetime.utcnow()
-            elif next_inst.paid_amount > 0:
-                next_inst.status = "partial"
+        if target_inst is None:
+            target_inst = db.query(models.InstallmentSchedule).filter(
+                models.InstallmentSchedule.purchase_id == purchase.id,
+                models.InstallmentSchedule.status.in_(["pending", "partial"])
+            ).order_by(models.InstallmentSchedule.installment_no).first()
+
+        if target_inst:
+            target_inst.paid_amount = round(target_inst.paid_amount + amount, 2)
+            target_inst.payment_method = "Razorpay"
+            target_inst.reference_no = req.razorpay_payment_id
+            target_inst.notes = req.notes
+            if target_inst.paid_amount >= target_inst.amount:
+                target_inst.status = "paid"
+                target_inst.paid_at = datetime.utcnow()
+            elif target_inst.paid_amount > 0:
+                target_inst.status = "partial"
     
     purchase.paid_amount = round(purchase.paid_amount + amount, 2)
     purchase.due_amount = round(purchase.net_fee - purchase.paid_amount, 2)

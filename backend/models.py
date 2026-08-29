@@ -221,6 +221,7 @@ class CourseMaterial(Base):
     tags         = Column(Text, nullable=True)
     file_type    = Column(String(50))          # video | pdf | image | document | youtube
     file_url     = Column(Text, nullable=True)  # uploaded file URL
+    hls_url      = Column(Text, nullable=True)  # HLS master playlist URL (adaptive bitrate)
     youtube_url  = Column(Text, nullable=True)  # YouTube video link
     thumbnail_url = Column(Text, nullable=True)  # custom thumbnail for videos
     file_size    = Column(Integer, nullable=True)  # bytes
@@ -456,6 +457,8 @@ class R2Settings(Base):
     bucket_name       = Column(String(255), nullable=True)
     public_url        = Column(String(255), nullable=True)
     is_active         = Column(Boolean, default=True)
+    hls_enabled       = Column(Boolean, default=False)
+    hls_qualities     = Column(String(255), nullable=True)
     created_at        = Column(DateTime(timezone=True), server_default=func.now())
     updated_at        = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -1647,6 +1650,19 @@ class GscQueryStat(Base):
     ctr         = Column(Float, default=0)
     position    = Column(Float, default=0)
     date        = Column(Date, index=True)
+
+
+class SeoFooterDirectory(Base):
+    """SEO Internal Links Directory (Footer Keyword Cloud Section) above the footer on all pages."""
+    __tablename__ = "seo_footer_directories"
+    id           = Column(Integer, primary_key=True, index=True)
+    tagline      = Column(String(255), default="#Create Impact", nullable=True)
+    show_tagline = Column(Boolean, default=True)
+    is_active    = Column(Boolean, default=True)
+    data_json    = Column(Text, nullable=True)  # JSON formatted categories and link items
+    created_at   = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at   = Column(DateTime(timezone=True), onupdate=func.now())
+
 
 
 # ══════════════════════════════════════════════════════
