@@ -59,11 +59,13 @@ function BlogsPage() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [confirm, setConfirm] = useState<BlogPost | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(false);
     try {
       const params = new URLSearchParams({ limit: "100" });
       if (tab !== "all") params.set("status", tab);
@@ -75,8 +77,12 @@ function BlogsPage() {
       if (postsRes.ok) {
         const data = await postsRes.json();
         setPosts(data.items ?? []);
+      } else {
+        setError(true);
       }
       if (statsRes.ok) setStats(await statsRes.json());
+    } catch {
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -195,6 +201,13 @@ function BlogsPage() {
 
           {loading ? (
             <div style={{ padding: "48px 20px", textAlign: "center", color: "#94a3b8" }}>Loading…</div>
+          ) : error ? (
+            <div style={{ padding: "60px 20px", textAlign: "center" }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+              <div style={{ fontSize: 15, color: "#991b1b", fontWeight: 500, marginBottom: 4 }}>Network error</div>
+              <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 16 }}>Could not reach the server. Please check your connection and try again.</div>
+              <button onClick={() => load()} style={{ background: "#6366f1", color: "#fff", border: "none", borderRadius: 8, padding: "8px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Retry</button>
+            </div>
           ) : posts.length === 0 ? (
             <div style={{ padding: "60px 20px", textAlign: "center" }}>
               <div style={{ fontSize: 40, marginBottom: 12 }}>📝</div>

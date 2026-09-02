@@ -177,20 +177,55 @@ const FL = ({ children }: { children: React.ReactNode }) => (
 const inputSx: React.CSSProperties = { width: "100%", border: "1.5px solid #e2e8f0", borderRadius: 8, padding: "9px 12px", fontSize: 13.5, outline: "none", fontFamily: "inherit", boxSizing: "border-box", transition: "border-color 0.15s" };
 
 /* ─── Featured Image Drag & Drop ─── */
-function FeaturedImagePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+/* Uploads to R2 via /settings/site/upload (same endpoint used by the rich
+ * editor's insertImage). Storing base64 in blog_posts.featured_image caused
+ * an 11.6MB response that broke Next.js data cache (>2MB limit) and made the
+ * homepage take 2–34s to load. We now store only the returned URL. */
+function FeaturedImagePicker({ value, onChange, onAlert }: { value: string; onChange: (v: string) => void; onAlert: (msg: string) => void }) {
   const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const readFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = e => onChange(e.target?.result as string);
-    reader.readAsDataURL(file);
+  const uploadFile = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      onAlert("Please choose an image file.");
+      return;
+    }
+    // Guard against accidental base64 storage: reject very large images that
+    // would bloat the DB even if we did store them inline.
+    if (file.size > 5 * 1024 * 1024) {
+      onAlert("Image is larger than 5MB. Please use a smaller image.");
+      return;
+    }
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await apiFetch(`${API_BASE_URL}/settings/site/upload`, {
+        method: "POST",
+        body: formData,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) {
+          onChange(data.url);
+        } else {
+          onAlert("Upload succeeded but no URL was returned.");
+        }
+      } else {
+        onAlert("Image upload failed. Please try again.");
+      }
+    } catch {
+      onAlert("Image upload failed (network error). Please try again.");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault(); setDragging(false);
     const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith("image/")) readFile(file);
+    if (file) uploadFile(file);
   };
 
   return (
@@ -199,16 +234,22 @@ function FeaturedImagePicker({ value, onChange }: { value: string; onChange: (v:
         onDragOver={e => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
-        onClick={() => !value && fileRef.current?.click()}
+        onClick={() => !value && !uploading && fileRef.current?.click()}
         style={{
           border: `2px dashed ${dragging ? "#6366f1" : "#cbd5e1"}`,
           borderRadius: 10, padding: value ? 0 : "20px 12px",
-          textAlign: "center", cursor: value ? "default" : "pointer",
+          textAlign: "center", cursor: value || uploading ? "default" : "pointer",
           background: dragging ? "#ede9fe" : "#f8fafc",
           transition: "all 0.2s", overflow: "hidden",
+          opacity: uploading ? 0.6 : 1,
         }}
       >
-        {value ? (
+        {uploading ? (
+          <div style={{ padding: "20px 12px" }}>
+            <div style={{ width: 24, height: 24, border: "3px solid #e2e8f0", borderTopColor: "#6366f1", borderRadius: "50%", animation: "aib-spin 0.8s linear infinite", margin: "0 auto 8px" }} />
+            <div style={{ fontSize: 12.5, color: "#64748b", fontWeight: 500 }}>Uploading to R2…</div>
+          </div>
+        ) : value ? (
           <div style={{ position: "relative" }}>
             <img src={value} alt="" style={{ width: "100%", maxHeight: 150, objectFit: "cover", display: "block" }} />
             <button
@@ -224,16 +265,25 @@ function FeaturedImagePicker({ value, onChange }: { value: string; onChange: (v:
           <>
             <div style={{ fontSize: 28, marginBottom: 6 }}>🖼️</div>
             <div style={{ fontSize: 12.5, color: "#64748b", fontWeight: 500 }}>Drag & drop image here</div>
-            <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 2 }}>or click to browse</div>
+            <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 2 }}>or click to browse (uploads to R2)</div>
           </>
         )}
       </div>
       <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
-        onChange={e => { const f = e.target.files?.[0]; if (f) readFile(f); }} />
+        onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); }} />
       <input
         value={value.startsWith("data:") ? "" : value}
-        onChange={e => onChange(e.target.value)}
-        placeholder="…or paste image URL"
+        onChange={e => {
+          const v = e.target.value;
+          // Block base64 data URIs from being pasted directly — they bloat
+          // the DB and break Next.js caching. Only real URLs are allowed.
+          if (v.startsWith("data:")) {
+            onAlert("Base64 data URIs are not allowed. Please upload the image file or paste an https URL.");
+            return;
+          }
+          onChange(v);
+        }}
+        placeholder="…or paste image URL (https://…)"
         style={{ ...inputSx, fontSize: 12, marginTop: 8, color: "#64748b" }}
       />
     </div>
@@ -248,6 +298,9 @@ function BlogEditor() {
   const isNew = postId === "new";
 
   const tinyMceRef = useRef<any>(null);
+  // dirtyRef tracks whether the post has unsaved changes — auto-save only
+  // fires when dirty, avoiding empty revisions and unnecessary DB writes every 60s.
+  const dirtyRef = useRef(false);
   const [content, setContent] = useState("");
   const [categories, setCategories] = useState<BlogCategory[]>([]);
   const [subcategories, setSubcategories] = useState<BlogSubCategory[]>([]);
@@ -257,20 +310,38 @@ function BlogEditor() {
   const [showAIModal, setShowAIModal] = useState(false);
 
   /* Form state */
-  const [title, setTitle]           = useState("");
-  const [excerpt, setExcerpt]       = useState("");
-  const [featImg, setFeatImg]       = useState("");
-  const [catId, setCatId]           = useState<number | "">("");
-  const [subCatId, setSubCatId]     = useState<number | "">("");
-  const [tags, setTags]             = useState("");
-  const [authorId, setAuthorId]     = useState<number | "">("");
-  const [status, setStatus]         = useState<"draft"|"published"|"archived">("draft");
-  const [publishedAt, setPublishedAt]= useState("");
-  const [isFeatured, setIsFeatured] = useState(false);
-  const [seoTitle, setSeoTitle]     = useState("");
-  const [seoDesc, setSeoDesc]       = useState("");
-  const [seoKw, setSeoKw]           = useState("");
+  const [title, setTitleRaw]        = useState("");
+  const [excerpt, setExcerptRaw]    = useState("");
+  const [featImg, setFeatImgRaw]    = useState("");
+  const [catId, setCatIdRaw]        = useState<number | "">("");
+  const [subCatId, setSubCatIdRaw]  = useState<number | "">("");
+  const [tags, setTagsRaw]          = useState("");
+  const [authorId, setAuthorIdRaw]  = useState<number | "">("");
+  const [status, setStatusRaw]      = useState<"draft"|"published"|"archived">("draft");
+  const [publishedAt, setPublishedAtRaw]= useState("");
+  const [isFeatured, setIsFeaturedRaw] = useState(false);
+  const [seoTitle, setSeoTitleRaw]  = useState("");
+  const [seoDesc, setSeoDescRaw]    = useState("");
+  const [seoKw, setSeoKwRaw]        = useState("");
   const [readingTime, setReadingTime]= useState(0);
+
+  // Wrapped setters that mark the post as dirty (unsaved changes).
+  // Auto-save only fires when dirtyRef is true, avoiding empty revisions.
+  const markDirty = () => { dirtyRef.current = true; };
+  const setTitle           = (v: string) => { markDirty(); setTitleRaw(v); };
+  const setExcerpt         = (v: string) => { markDirty(); setExcerptRaw(v); };
+  const setFeatImg         = (v: string) => { markDirty(); setFeatImgRaw(v); };
+  const setCatId           = (v: number | "") => { markDirty(); setCatIdRaw(v); };
+  const setSubCatId        = (v: number | "") => { markDirty(); setSubCatIdRaw(v); };
+  const setTags            = (v: string) => { markDirty(); setTagsRaw(v); };
+  const setAuthorId        = (v: number | "") => { markDirty(); setAuthorIdRaw(v); };
+  const setStatus          = (v: "draft"|"published"|"archived") => { markDirty(); setStatusRaw(v); };
+  const setPublishedAt     = (v: string) => { markDirty(); setPublishedAtRaw(v); };
+  const setIsFeatured      = (v: boolean) => { markDirty(); setIsFeaturedRaw(v); };
+  const setSeoTitle        = (v: string) => { markDirty(); setSeoTitleRaw(v); };
+  const setSeoDesc         = (v: string) => { markDirty(); setSeoDescRaw(v); };
+  const setSeoKw           = (v: string) => { markDirty(); setSeoKwRaw(v); };
+  const setContentDirty    = (v: string) => { markDirty(); setContent(v); };
 
   const [authors, setAuthors] = useState<BlogAuthor[]>([]);
   const [revisions, setRevisions] = useState<BlogRevision[]>([]);
@@ -293,13 +364,16 @@ function BlogEditor() {
   const loadCategories = useCallback(() => {
     apiFetch(`${API_BASE_URL}/blogs/categories`)
       .then(r => r.ok ? r.json() : [])
-      .then(setCategories);
+      .then(setCategories)
+      .catch(() => {});
     apiFetch(`${API_BASE_URL}/blogs/subcategories`)
       .then(r => r.ok ? r.json() : [])
-      .then(setSubcategories);
+      .then(setSubcategories)
+      .catch(() => {});
     apiFetch(`${API_BASE_URL}/blogs/authors`)
       .then(r => r.ok ? r.json() : [])
-      .then(setAuthors);
+      .then(setAuthors)
+      .catch(() => {});
   }, []);
 
   useEffect(() => { loadCategories(); }, [loadCategories]);
@@ -352,12 +426,14 @@ function BlogEditor() {
         setSeoKw(p.seo_keywords ?? "");
         setContent(p.content ?? "");
         setLoaded(true);
-      });
-      
+      })
+      .catch(() => { setLoaded(true); });
+
     // Load revisions
     apiFetch(`${API_BASE_URL}/blogs/${postId}/revisions`)
       .then(r => r.ok ? r.json() : [])
-      .then(setRevisions);
+      .then(setRevisions)
+      .catch(() => {});
   }, [postId, isNew]);
 
   /* Filtered subcategories */
@@ -375,7 +451,7 @@ function BlogEditor() {
     }
     if (data.excerpt) setExcerpt(data.excerpt);
     if (data.content_html) {
-      setContent(data.content_html);
+      setContentDirty(data.content_html);
     }
     
     if (data.tags && data.tags.length > 0) {
@@ -417,6 +493,7 @@ function BlogEditor() {
       if (res.ok) {
         const data = await res.json();
         setSaveMsg("✅ Saved successfully");
+        dirtyRef.current = false;  // reset dirty flag after successful save
         setReadingTime(data.reading_time || 0);
         if (isNew) router.replace(`/admin/blogs/editor/${data.id}`);
         if (overrideStatus) setStatus(overrideStatus);
@@ -502,7 +579,7 @@ function BlogEditor() {
 
     body.insertBefore(tocContainer, body.firstChild);
     editor.save();
-    setContent(editor.getContent());
+    setContentDirty(editor.getContent());
     save();
   };
 
@@ -532,10 +609,14 @@ function BlogEditor() {
     setGeneratingSnippets(false);
   };
 
-  /* Auto-save every 60s */
+  /* Auto-save every 60s — but only when there are unsaved changes (dirty).
+   * Previously this fired every 60s regardless of changes, creating empty
+   * revisions and unnecessary DB writes. */
   useEffect(() => {
     if (!loaded || isNew) return;
-    const t = setInterval(() => save(), 60_000);
+    const t = setInterval(() => {
+      if (dirtyRef.current) save();
+    }, 60_000);
     return () => clearInterval(t);
   }, [loaded, isNew, save]);
 
@@ -558,6 +639,7 @@ function BlogEditor() {
         select:focus, textarea:focus, input:focus { outline: none !important; border-color: #6366f1 !important; box-shadow: 0 0 0 3px rgba(99,102,241,0.1) !important; }
         .status-pill { display: flex; gap: 4px; padding: 3px; background: #f1f5f9; border-radius: 8px; }
         .status-pill button { border: none; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; flex: 1; }
+        @keyframes aib-spin { to { transform: rotate(360deg); } }
       `}</style>
 
       {/* ── Top Action Bar ── */}
@@ -628,7 +710,7 @@ function BlogEditor() {
           {/* Rich Editor (TinyMCE, self-hosted) */}
           <RichEditor
             value={content}
-            onChange={setContent}
+            onChange={setContentDirty}
             onInit={(ed) => { tinyMceRef.current = ed; }}
             placeholder="Start writing your article…"
             minHeight={500}
@@ -662,7 +744,7 @@ function BlogEditor() {
           {/* Featured Image — drag & drop */}
           <div className="sidebar-section">
             <FL>Featured Image</FL>
-            <FeaturedImagePicker value={featImg} onChange={setFeatImg} />
+            <FeaturedImagePicker value={featImg} onChange={setFeatImg} onAlert={customAlert} />
           </div>
 
           {/* Category */}

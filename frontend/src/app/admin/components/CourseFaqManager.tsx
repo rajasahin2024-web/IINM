@@ -1,8 +1,18 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { apiFetch } from "@/lib/apiFetch";
-import { BASE_URL } from "@/lib/config";
+import { BASE_URL, API_BASE_URL } from "@/lib/config";
 import { useToast } from "./ToastProvider";
+
+const formatPrice = (val?: string) => {
+  if (!val || val === "-1") return "—";
+  if (val === "0") return "Free";
+  const n = parseFloat(val);
+  if (isNaN(n)) return "—";
+  const per1m = n * 1_000_000;
+  if (per1m < 0.001) return `$${n}`;
+  return `$${per1m.toFixed(3)}/M`;
+};
 
 interface CourseFaq {
   id: number;
@@ -27,7 +37,23 @@ export default function CourseFaqManager({ courseId }: { courseId: number }) {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<Array<{ question: string; answer: string }>>([]);
 
+  // AI Model selector state
+  interface ORModel { id: string; name: string; pricing?: { prompt?: string; completion?: string }; }
+  const [models, setModels] = useState<ORModel[]>([]);
+  const [selectedModel, setSelectedModel] = useState("");
+
   useEffect(() => { loadFaqs(); }, [courseId]);
+
+  // Fetch OpenRouter models on mount
+  useEffect(() => {
+    apiFetch(`${API_BASE_URL}/settings/ai/openrouter/models`)
+      .then(r => r.ok ? r.json() : Promise.resolve(null))
+      .then(data => {
+        const list = Array.isArray(data?.data) ? data.data : [];
+        setModels(list);
+      })
+      .catch(() => setModels([]));
+  }, []);
 
   const loadFaqs = async () => {
     try {
@@ -43,7 +69,7 @@ export default function CourseFaqManager({ courseId }: { courseId: number }) {
     try {
       const res = await apiFetch(`${BASE_URL}/api/seo/ai/suggest-faqs`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ course_id: courseId, count: 5 }),
+        body: JSON.stringify({ course_id: courseId, count: 5, model: selectedModel || null }),
       });
       const data = await res.json();
       if (data.error) {
@@ -115,7 +141,20 @@ export default function CourseFaqManager({ courseId }: { courseId: number }) {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0f172a" }}>Course FAQs ({faqs.length})</h4>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {models.length > 0 && (
+            <select
+              value={selectedModel}
+              onChange={e => setSelectedModel(e.target.value)}
+              title="AI Model"
+              style={{ padding: "7px 10px", border: "1px solid #e2e8f0", fontSize: 12, color: "#475569", background: "#fff", cursor: "pointer", outline: "none", maxWidth: 180 }}
+            >
+              <option value="">Default Model</option>
+              {models.map(m => (
+                <option key={m.id} value={m.id}>{m.name} — {formatPrice(m.pricing?.prompt)}</option>
+              ))}
+            </select>
+          )}
           <button onClick={handleAiSuggest} disabled={aiLoading}
             style={{ padding: "8px 16px", border: "1px solid #c7d2fe", background: aiLoading ? "#e0e7ff" : "#eef2ff", color: "#4338ca", fontSize: 13, fontWeight: 600, cursor: aiLoading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6, opacity: aiLoading ? 0.7 : 1 }}>
             {aiLoading ? "Generating..." : "AI Suggest FAQs"}

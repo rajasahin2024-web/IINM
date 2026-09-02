@@ -37,12 +37,16 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       title: seoTitle || post?.title || "IINM Blog",
       description: seoDesc,
       type: "article",
+      url: `${baseUrl}/blog/${slug}`,
       publishedTime: post?.published_at || undefined,
       authors: post?.author_name ? [post.author_name] : undefined,
-      images: post?.featured_image ? [{ url: post.featured_image }] : undefined,
+      images: post?.featured_image ? [{ url: post.featured_image, width: 1200, height: 630 }] : undefined,
     },
     twitter: {
       card: "summary_large_image",
+      title: seoTitle || post?.title || "IINM Blog",
+      description: seoDesc,
+      images: post?.featured_image ? [post.featured_image] : undefined,
     },
   };
 }
@@ -67,6 +71,13 @@ export default async function BlogDetailPage({ params }: { params: Promise<{ slu
     url: `${baseUrl}/blog/${slug}`,
     mainEntityOfPage: { "@type": "WebPage", "@id": `${baseUrl}/blog/${slug}` },
   };
+  // wordCount helps AEO/answer engines understand article depth.
+  if (post?.reading_time) {
+    articleSchema.wordCount = post.reading_time * 200; // approximate from reading time
+  }
+  if (post?.seo_keywords) {
+    articleSchema.keywords = post.seo_keywords;
+  }
   if (post?.featured_image) {
     articleSchema.image = post.featured_image;
   }

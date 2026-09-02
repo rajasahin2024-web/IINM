@@ -2,7 +2,7 @@
 import { apiFetch } from "@/lib/apiFetch";
 import React, { useEffect, useState, useCallback, useRef, Fragment } from "react";
 import { API_BASE_URL } from "@/lib/config";
-import VideoPlayer from "./VideoPlayer";
+import HlsVideoPlayer from "../../courses/[slug]/HlsVideoPlayer";
 import R2FileManager from "./R2FileManager";
 import UploadModal from "./UploadModal";
 import { useToast } from "./ToastProvider";
@@ -16,6 +16,7 @@ interface Material {
   tags: string | null;
   file_type: "video" | "pdf" | "image" | "document" | "youtube";
   file_url: string | null;
+  hls_url: string | null;
   youtube_url: string | null;
   thumbnail_url: string | null;
   file_size: number | null;
@@ -808,13 +809,16 @@ function MediaPreviewModal({ material, onClose }: { material: Material; onClose:
       );
     }
     if (material.file_type === "video" && material.file_url) {
+      // Prefer HLS adaptive streaming when an hls_url is available (set by the
+      // backend's background FFmpeg transcode). Falls back to the raw file_url
+      // (mp4/mov/webm/...) via the native <video> element inside HlsVideoPlayer.
       return (
-        <VideoPlayer
-          options={{
-            autoplay: true, controls: true, responsive: true, fluid: true,
-            controlBar: { pictureInPictureToggle: false },
-            sources: [{ src: material.file_url, type: "video/mp4" }],
-          }}
+        <HlsVideoPlayer
+          src={material.file_url}
+          hlsUrl={material.hls_url || undefined}
+          poster={material.thumbnail_url || undefined}
+          autoPlay
+          className="cm-preview-video"
         />
       );
     }

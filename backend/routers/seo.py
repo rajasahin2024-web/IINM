@@ -24,6 +24,7 @@ from models import (
 )
 from routers.auth import require_device
 from helpers import rewrite_url
+from routers.settings import _call_openrouter_chat, _extract_json
 
 router = APIRouter(prefix="/api/seo", tags=["SEO / AEO"])
 
@@ -914,6 +915,7 @@ class FaqSuggestionRequest(BaseModel):
     course_id: Optional[int] = None
     context_text: Optional[str] = None  # custom context if no course_id
     count: int = 5
+    model: Optional[str] = None  # Override model for this request
 
 
 @router.post("/ai/suggest-faqs")
@@ -950,10 +952,10 @@ async def suggest_faqs_with_ai(
     else:
         raise HTTPException(status_code=400, detail="Provide course_id or context_text")
 
-    model = settings.model_general_text or "openai/gpt-4o-mini"
+    model = req.model or settings.model_general_text or "openai/gpt-4o-mini"
     system_prompt = f"""You are an expert SEO/AEO content creator. Generate exactly {req.count} FAQ (Frequently Asked Questions) pairs for the following content.
 
-Return ONLY valid JSON (no markdown, no explanation):
+Return a JSON object with exactly this structure:
 {{
   "faqs": [
     {{
@@ -969,55 +971,110 @@ Rules:
 - Keep questions under 80 characters
 - Keep answers under 300 characters
 - Focus on practical, high-value questions
-- Use natural language (not keyword-stuffed)"""
+- Use natural language (not keyword-stuffed)
+- You MUST return a valid JSON object. Do NOT include any text before or after the JSON."""
 
     try:
-        resp = httpx.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {settings.openrouter_api_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://iinmedu.com",
-                "X-Title": "IINM SEO/AEO FAQ Generator",
-            },
-            json={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Content context:\n{context}"},
-                ],
-                "temperature": 0.7,
-                "max_tokens": 1500,
-            },
-            timeout=30,
+        raw_text = await _call_openrouter_chat(
+            settings.openrouter_api_key, model, system_prompt,
+            f"Content context:\n{context}",
+            max_tokens=2048, json_mode=True, reasoning_effort="low",
         )
-        resp.raise_for_status()
-        data = resp.json()
-        content = data["choices"][0]["message"]["content"]
-
-        # Parse JSON from response (handle markdown code blocks)
-        content = content.strip()
-        if content.startswith("```"):
-            content = content.split("```")[1]
-            if content.startswith("json"):
-                content = content[4:]
-            content = content.strip()
-        if content.endswith("```"):
-            content = content[:-3].strip()
-
-        parsed = json.loads(content)
+        try:
+            parsed = _extract_json(raw_text)
+        except ValueError:
+            import logging
+            logging.error(f"suggest-faqs JSON parse failed. Model: {model}. Raw (first 500): {str(raw_text)[:500]}")
+            raise HTTPException(status_code=500, detail=f"AI returned unparseable response. Try a different model. Model used: {model}")
         faqs = parsed.get("faqs", [])
         return {
             "suggestions": faqs[:req.count],
             "course_title": course_title,
             "model": model,
         }
-    except httpx.HTTPStatusError as e:
-        return {"error": f"AI API error: {e.response.status_code}", "details": e.response.text[:500]}
-    except json.JSONDecodeError:
-        return {"error": "AI returned invalid JSON. Try again.", "raw_response": content[:500]}
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": f"Failed to generate FAQs: {str(e)}"}
+        raise HTTPException(status_code=500, detail=f"Failed to generate FAQs: {str(e)}")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  9a. AI GENERATE ORGANIZATION SCHEMA (JSON-LD)
+# ═══════════════════════════════════════════════════════════════
+
+class GenerateOrgSchemaRequest(BaseModel):
+    model: Optional[str] = None  # Override model for this request
+
+
+@router.post("/ai/generate-org-schema")
+async def generate_org_schema_with_ai(
+    req: GenerateOrgSchemaRequest,
+    device: str = Depends(require_device),
+    db: Session = Depends(get_db),
+):
+    """Admin: use OpenRouter AI to generate an EducationalOrganization JSON-LD schema from site settings."""
+    settings = db.query(AISettings).first()
+    if not settings or not settings.openrouter_api_key:
+        raise HTTPException(status_code=400, detail="OpenRouter API key not configured. Set it in AI Settings.")
+
+    site = db.query(SiteSettings).first()
+    site_name = (site.site_name if site else None) or "IINM"
+    site_url = (site.canonical_base_url if site else None) or "https://iinmedu.com"
+    site_url = site_url.rstrip("/")
+    logo_url = ""
+    if site and site.logo_url:
+        logo_url = site.logo_url if site.logo_url.startswith("http") else f"{site_url}{site.logo_url}"
+    description = (site.meta_description if site else None) or "AI-Powered Connected Learning Platform"
+
+    model = req.model or settings.model_general_text or "openai/gpt-4o-mini"
+
+    system_prompt = f"""You are an expert SEO specialist. Generate a schema.org JSON-LD object for an educational organization.
+
+Context:
+- Organization name: {site_name}
+- Website URL: {site_url}
+- Logo URL: {logo_url or "(not available — omit logo field)"}
+- Description: {description}
+- Type: EducationalOrganization (Indian ed-tech platform)
+
+Rules:
+- The JSON-LD object MUST include "@context": "https://schema.org" and "@type": "EducationalOrganization".
+- Include: name, url, logo (if available), description, sameAs (empty array if no social links known).
+- Include an "address" with addressCountry: "IN".
+- Include "areaServed": "IN".
+- You MUST return a valid JSON object. Do NOT include any text before or after the JSON.
+
+Return a JSON object with this structure:
+{{
+  "@context": "https://schema.org",
+  "@type": "EducationalOrganization",
+  "name": "{site_name}",
+  "url": "{site_url}",
+  "description": "...",
+  "address": {{"@type": "PostalAddress", "addressCountry": "IN"}},
+  "areaServed": "IN",
+  "sameAs": []
+}}
+"""
+
+    try:
+        raw_text = await _call_openrouter_chat(
+            settings.openrouter_api_key, model, system_prompt,
+            f"Generate the Organization JSON-LD schema for {site_name}.",
+            max_tokens=2048, json_mode=True, reasoning_effort="low",
+        )
+        try:
+            result = _extract_json(raw_text)
+        except ValueError:
+            import logging
+            logging.error(f"generate-org-schema JSON parse failed. Model: {model}. Raw (first 500): {str(raw_text)[:500]}")
+            raise HTTPException(status_code=500, detail=f"AI returned unparseable response. Try a different model. Model used: {model}")
+        schema_str = json.dumps(result, ensure_ascii=False, indent=2)
+        return {"status": "success", "data": {"organization_schema": schema_str}, "model_used": model}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected server error: {str(e)}")
 
 
 # ═══════════════════════════════════════════════════════════════

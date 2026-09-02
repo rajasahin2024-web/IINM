@@ -64,17 +64,27 @@ def transcode_to_hls(
     stream_map_parts: list[str] = []
     for idx, q in enumerate(valid):
         res, bitrate = QUALITY_PRESETS[q]
-        # scale with -2 to preserve aspect ratio (height fixed)
+        # scale with -2 to preserve aspect ratio (height fixed).
+        # NOTE: do NOT also pass -s:v:idx — combining a scale filter with a
+        # forced -s resolution makes FFmpeg emit "Invalid argument" when the
+        # filter output dimensions don't exactly match the forced size, which
+        # aborts the whole HLS muxer with "Could not write header".
         cmd.extend([
             "-map", "0:v:0",
             "-map", "0:a:0",
             f"-filter:v:{idx}", f"scale=-2:{res.split(':')[1]}",
             f"-b:v:{idx}", bitrate,
-            f"-s:v:{idx}", res.replace(":", "x"),
+            f"-maxrate:v:{idx}", bitrate,
+            f"-bufsize:v:{idx}", f"{int(bitrate.rstrip('k')) * 2}k",
         ])
         stream_map_parts.append(f"v:{idx},a:{idx}")
 
-    # HLS encoding settings
+    # HLS encoding settings.
+    # IMPORTANT: output paths must be RELATIVE to output_dir. FFmpeg's HLS
+    # muxer fails with "Permission denied" on Windows when the %v pattern is
+    # combined with an absolute drive-letter path (e.g. C:\...\%v\index.m3u8),
+    # because the muxer mangles the drive colon during %v substitution. We
+    # therefore run ffmpeg with cwd=output_dir and use bare relative patterns.
     cmd.extend([
         "-c:v", "libx264",
         "-c:a", "aac",
@@ -82,10 +92,13 @@ def transcode_to_hls(
         "-f", "hls",
         "-hls_time", "6",
         "-hls_list_size", "0",
-        "-hls_segment_filename", os.path.join(output_dir, "%v", "segment_%03d.ts"),
+        # Forward slashes are mandatory here: the variant name is substituted
+        # into the master playlist verbatim, and HLS playlists require "/" as
+        # the path separator (os.path.join would emit "\" on Windows).
+        "-hls_segment_filename", "%v/segment_%03d.ts",
         "-master_pl_name", "master.m3u8",
-        "-var_stream_map", ";".join(stream_map_parts),
-        os.path.join(output_dir, "%v", "index.m3u8"),
+        "-var_stream_map", " ".join(stream_map_parts),
+        "%v/index.m3u8",
     ])
 
     logging.info(f"Starting HLS transcode: {input_path} -> {output_dir} ({len(valid)} qualities)")
@@ -95,6 +108,7 @@ def transcode_to_hls(
             capture_output=True,
             text=True,
             timeout=1800,  # 30 min max
+            cwd=output_dir,
         )
         if result.returncode != 0:
             logging.error(f"FFmpeg HLS transcode failed (exit {result.returncode}): {result.stderr[-2000:]}")

@@ -43,23 +43,28 @@ export default function FomoNotification() {
   useEffect(() => {
     if (isHiddenPage) return;
 
-    console.log("[FOMO Live] Fetching notification settings on path:", pathname);
+    let retried = false;
 
-    // Fetch FOMO settings using the secure apiFetch wrapper with cache-busting query parameter
-    apiFetch(`/api/settings/fomo?t=${Date.now()}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        console.log("[FOMO Live] API settings loaded:", data);
-        if (data && data.theme?.is_active && data.events?.length > 0) {
-          setSettings(data);
-          console.log("[FOMO Live] System is enabled. Total events:", data.events.length);
-        } else {
-          console.log("[FOMO Live] System is disabled or has no events. Theme settings:", data?.theme);
-        }
-      })
-      .catch((err) => {
-        console.error("[FOMO Live] Error fetching settings:", err);
-      });
+    const fetchSettings = () => {
+      apiFetch(`/api/settings/fomo?t=${Date.now()}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && data.theme?.is_active && data.events?.length > 0) {
+            setSettings(data);
+          }
+        })
+        .catch(() => {
+          // Transient backend unavailability (restart, sleep) causes fetch to
+          // throw. Retry once after 3s instead of spamming the console on every
+          // page navigation — this is expected behavior, not an actionable error.
+          if (!retried) {
+            retried = true;
+            setTimeout(fetchSettings, 3000);
+          }
+        });
+    };
+
+    fetchSettings();
 
     return () => {
       clearAllTimers();

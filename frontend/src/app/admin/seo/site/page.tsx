@@ -4,9 +4,19 @@ import { AdminProvider } from "../../components/ProtectedAdmin";
 import { useToast } from "../../components/ToastProvider";
 import { Icon } from "../../icons";
 import { apiFetch } from "@/lib/apiFetch";
-import { BASE_URL } from "@/lib/config";
+import { BASE_URL, API_BASE_URL } from "@/lib/config";
 import SeoSerpPreview from "../../components/SeoSerpPreview";
 import JsonEditor from "../../components/JsonEditor";
+
+const formatPrice = (val?: string) => {
+  if (!val || val === "-1") return "—";
+  if (val === "0") return "Free";
+  const n = parseFloat(val);
+  if (isNaN(n)) return "—";
+  const per1m = n * 1_000_000;
+  if (per1m < 0.001) return `$${n}`;
+  return `$${per1m.toFixed(3)}/M`;
+};
 
 // ── Minimalist shared styles — no rounded edges ──
 const S = {
@@ -98,7 +108,42 @@ function SeoSiteInner() {
   const [metaDesc, setMetaDesc] = useState("");
   const [faviconUrl, setFaviconUrl] = useState("");
 
+  // AI Organization Schema state
+  interface ORModel { id: string; name: string; pricing?: { prompt?: string; completion?: string }; }
+  const [orgModels, setOrgModels] = useState<ORModel[]>([]);
+  const [orgSelectedModel, setOrgSelectedModel] = useState("");
+  const [orgGenerating, setOrgGenerating] = useState(false);
+
   useEffect(() => { load(); }, []);
+
+  // Fetch OpenRouter models on mount
+  useEffect(() => {
+    apiFetch(`${API_BASE_URL}/settings/ai/openrouter/models`)
+      .then(r => r.ok ? r.json() : Promise.resolve(null))
+      .then(data => {
+        const list = Array.isArray(data?.data) ? data.data : [];
+        setOrgModels(list);
+      })
+      .catch(() => setOrgModels([]));
+  }, []);
+
+  const handleGenerateOrgSchema = async () => {
+    setOrgGenerating(true);
+    try {
+      const res = await apiFetch(`${BASE_URL}/api/seo/ai/generate-org-schema`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: orgSelectedModel || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Generation failed");
+      setForm(prev => ({ ...prev, organization_schema: data.data.organization_schema }));
+      toast.success("Organization schema generated. Review and Save.");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to generate schema.");
+    } finally {
+      setOrgGenerating(false);
+    }
+  };
 
   const load = async () => {
     try {
@@ -218,6 +263,42 @@ function SeoSiteInner() {
             <h3 style={S.sectionTitle}>Organization Schema (JSON-LD)</h3>
             <JsonEditor value={form.organization_schema} onChange={(v) => setForm({ ...form, organization_schema: v })} minHeight={180} />
             <div style={S.hint}>Override the default EducationalOrganization schema. Leave empty for auto-generated.</div>
+
+            {/* AI Generate */}
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #f1f5f9" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+                {orgModels.length > 0 && (
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <label style={S.label}>AI Model</label>
+                    <select
+                      value={orgSelectedModel}
+                      onChange={e => setOrgSelectedModel(e.target.value)}
+                      style={{ ...S.input, cursor: "pointer" }}
+                    >
+                      <option value="">Default (from AI Settings)</option>
+                      {orgModels.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} — {formatPrice(m.pricing?.prompt)} / {formatPrice(m.pricing?.completion)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <button
+                  onClick={handleGenerateOrgSchema}
+                  disabled={orgGenerating}
+                  style={{
+                    padding: "10px 20px", border: "none", background: "#e63946", color: "#fff",
+                    fontSize: 13, fontWeight: 600, cursor: orgGenerating ? "not-allowed" : "pointer",
+                    opacity: orgGenerating ? 0.6 : 1, display: "flex", alignItems: "center", gap: 6,
+                    boxShadow: "0 2px 8px rgba(230,57,70,0.2)", whiteSpace: "nowrap",
+                  }}
+                >
+                  {orgGenerating ? "Generating..." : "✨ Generate with AI"}
+                </button>
+              </div>
+              <div style={S.hint}>AI generates an EducationalOrganization schema using your site settings. Review and Save.</div>
+            </div>
           </div>
         </div>
 

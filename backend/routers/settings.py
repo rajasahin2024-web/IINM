@@ -1152,36 +1152,50 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 
 def _extract_json(text) -> dict:
-    """Robustly extract JSON from AI response, handling markdown code blocks."""
+    """Robustly extract JSON from AI response, handling markdown code blocks and reasoning models."""
     if text is None:
         raise ValueError("AI returned empty content (null)")
     text = str(text).strip()
     if not text:
         raise ValueError("AI returned empty content")
+    # Replace smart quotes with straight quotes (common AI artifact)
+    text = text.replace("\u201c", '"').replace("\u201d", '"').replace("\u2018", "'").replace("\u2019", "'")
     # Try direct JSON parse first
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
-    # Try extracting from ```json ... ``` code block
     import re
-    code_block = re.search(r'```(?:json)?\s*(\{.*\})\s*```', text, re.DOTALL)
+    # Try extracting from ```json ... ``` code block
+    code_block = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
     if code_block:
         try:
             return json.loads(code_block.group(1))
         except json.JSONDecodeError:
             pass
-    # Try finding the outermost JSON object
+    # Try finding the LAST JSON object in text (reasoning models put answer at end)
+    # Find all potential JSON objects and try from the last one backwards
+    all_matches = list(re.finditer(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', text, re.DOTALL))
+    for match in reversed(all_matches):
+        candidate = match.group(0)
+        candidate_clean = re.sub(r',\s*([}\]])', r'\1', candidate)
+        try:
+            return json.loads(candidate_clean)
+        except json.JSONDecodeError:
+            continue
+    # Fallback: greedy match for outermost JSON object
     match = re.search(r'(\{.*\})', text, re.DOTALL)
     if match:
+        candidate = match.group(1)
+        candidate_clean = re.sub(r',\s*([}\]])', r'\1', candidate)
         try:
-            return json.loads(match.group(1))
+            return json.loads(candidate_clean)
         except json.JSONDecodeError:
             pass
     raise ValueError("Unable to parse AI response as JSON")
 
 
-async def _call_openrouter_chat(api_key: str, model: str, system_prompt: str, user_content, max_tokens: int = 8192):
+async def _call_openrouter_chat(api_key: str, model: str, system_prompt: str, user_content, max_tokens: int = 8192, json_mode: bool = False, reasoning_effort: str = None):
     """Helper to call OpenRouter chat completions API."""
     url = f"{OPENROUTER_BASE_URL}/chat/completions"
     headers = {
@@ -1200,6 +1214,10 @@ async def _call_openrouter_chat(api_key: str, model: str, system_prompt: str, us
         "temperature": 0.7,
         "max_tokens": max_tokens,
     }
+    if json_mode:
+        body["response_format"] = {"type": "json_object"}
+    if reasoning_effort:
+        body["reasoning"] = {"effort": reasoning_effort}
     async with httpx.AsyncClient(timeout=90.0) as client:
         resp = await client.post(url, headers=headers, json=body)
         if resp.status_code != 200:
@@ -1414,6 +1432,98 @@ Return ONLY valid JSON in this exact format (no markdown, no explanation):
         raise HTTPException(status_code=400, detail=f"Network error: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected server error: {str(e)}")
+
+
+# ══════════════════════════════════════════════════════
+#  AI GENERATE STATIC PAGE SEO META
+# ══════════════════════════════════════════════════════
+
+class GenerateSeoPageRequest(BaseModel):
+    page_key: str
+    page_name: Optional[str] = None
+    canonical_path: Optional[str] = None
+    custom_prompt: Optional[str] = None
+    model: Optional[str] = None  # Override model for this request
+
+@router.post("/ai/generate_seo_page")
+async def generate_seo_page_with_ai(req: GenerateSeoPageRequest, device: str = Depends(require_device), db: Session = Depends(get_db)):
+    """Use OpenRouter API to generate SEO meta (title, description, keywords) for a static page."""
+    settings = db.query(AISettings).first()
+    if not settings or not settings.openrouter_api_key:
+        raise HTTPException(status_code=400, detail="OpenRouter API key not configured. Please set it in AI Settings.")
+
+    api_key = settings.openrouter_api_key
+    model = req.model or settings.model_general_text or "openai/gpt-4o-mini"
+
+    page_label = req.page_name or req.page_key.replace("_", " ").title()
+    canonical_hint = f"\n- Canonical path: {req.canonical_path}" if req.canonical_path else ""
+
+    system_prompt = f"""You are an expert SEO specialist for IINM, an AI-powered connected learning platform (https://iinmedu.com).
+Generate SEO metadata for the "{page_label}" static page.
+
+Rules:
+- seo_title: compelling, keyword-rich, max 60 characters.
+- seo_description: engaging meta description, 120-160 characters, includes a call-to-action.
+- seo_keywords: 5 to 10 relevant keywords as an array of strings (no commas inside each keyword).{canonical_hint}
+- schema_json_ld: a JSON-LD object (schema.org) appropriate for this page type. Use the most relevant @type:
+    - "home" → WebSite with publisher Organization
+    - "about_us" / "about_iinm" → AboutPage with publisher Organization
+    - "contact_us" → ContactPage with contactPoint
+    - "courses_list" → CollectionPage
+    - "blog_list" → Blog
+  The schema_json_ld value MUST be a JSON OBJECT (not a string). Always include "@context": "https://schema.org".
+  Use "IINM" as the organization name and "https://iinmedu.com" as the URL.
+- Match the tone of an Indian ed-tech platform targeting students & professionals.
+- You MUST return a valid JSON object. Do NOT include any text before or after the JSON. Do NOT wrap in markdown code blocks.
+
+Return a JSON object with exactly these keys:
+{{
+  "seo_title": "...",
+  "seo_description": "...",
+  "seo_keywords": ["keyword1", "keyword2"],
+  "schema_json_ld": {{"@context": "https://schema.org", "@type": "WebSite", "name": "IINM", "url": "https://iinmedu.com"}}
+}}
+"""
+
+    user_content = (req.custom_prompt.strip() if req.custom_prompt and req.custom_prompt.strip()
+                    else f"Generate SEO meta for the \"{page_label}\" page of an AI-powered ed-tech platform (IINM).")
+
+    try:
+        raw_text = await _call_openrouter_chat(api_key, model, system_prompt, user_content, max_tokens=4096, json_mode=True, reasoning_effort="low")
+        try:
+            result = _extract_json(raw_text)
+        except ValueError as e:
+            import logging
+            logging.error(f"generate_seo_page JSON parse failed. Model: {model}. Raw response (first 500 chars): {str(raw_text)[:500]}")
+            raise HTTPException(status_code=500, detail=f"AI returned unparseable response. Try a different model or check AI Settings. Model used: {model}")
+        # Normalize keywords to a comma-separated string for the frontend input
+        kw = result.get("seo_keywords")
+        if isinstance(kw, list):
+            result["seo_keywords"] = ", ".join(str(k).strip() for k in kw if str(k).strip())
+        elif kw is None:
+            result["seo_keywords"] = ""
+        # Normalize schema_json_ld: AI returns a dict object; convert to pretty JSON string
+        schema = result.get("schema_json_ld")
+        if schema is None:
+            result["schema_json_ld"] = ""
+        elif isinstance(schema, (dict, list)):
+            result["schema_json_ld"] = json.dumps(schema, ensure_ascii=False, indent=2)
+        elif isinstance(schema, str):
+            # Validate it's parseable JSON; if so, pretty-print it
+            try:
+                parsed = json.loads(schema)
+                result["schema_json_ld"] = json.dumps(parsed, ensure_ascii=False, indent=2)
+            except json.JSONDecodeError:
+                # Keep as-is if not valid JSON (user can fix manually)
+                result["schema_json_ld"] = schema
+        return {"status": "success", "data": result, "model_used": model}
+    except HTTPException:
+        raise
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=400, detail=f"Network error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected server error: {str(e)}")
+
 
 # ══════════════════════════════════════════════════════
 #  AI GENERATE SOCIAL SNIPPETS

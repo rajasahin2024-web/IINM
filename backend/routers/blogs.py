@@ -71,6 +71,7 @@ def _sanitize_html(raw: Optional[str]) -> Optional[str]:
         attributes=_BLOG_ALLOWED_ATTRS,
         url_schemes={"http", "https", "mailto", "tel", "data"},
         clean_content_tags={"script", "style", "iframe", "object", "embed", "form"},
+        link_rel=None,
     )
 
 
@@ -125,6 +126,25 @@ def _reading_time(html_content: str) -> int:
     text = re.sub(r"<[^>]+>", " ", html_content)
     words = len(text.split())
     return max(1, math.ceil(words / 200))
+
+
+def _validate_image_field(url: Optional[str], field_name: str = "image") -> Optional[str]:
+    """Validate that an image field contains a real URL, not a base64 data URI.
+
+    Base64 data URIs in blog_posts.featured_image caused an 11.6MB API response
+    that broke Next.js data cache (>2MB limit) and made the homepage take 2–34s
+    to load. This guard prevents new base64 images from entering the database.
+    Short data URIs (e.g. tiny inline SVGs under 500 chars) are still allowed.
+    """
+    if url is None:
+        return None
+    if url.startswith("data:") and len(url) > 500:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{field_name} must be a URL (https://…), not a base64 data URI. "
+                   "Use the image uploader to upload the file to R2.",
+        )
+    return url
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -225,7 +245,7 @@ def create_author(payload: AuthorIn, db: Session = Depends(get_db)):
     author = BlogAuthor(
         name=payload.name,
         bio=payload.bio,
-        profile_image=payload.profile_image,
+        profile_image=_validate_image_field(payload.profile_image, "profile_image"),
         social_links=payload.social_links,
         is_active=payload.is_active,
     )
@@ -241,7 +261,7 @@ def update_author(author_id: int, payload: AuthorIn, db: Session = Depends(get_d
         raise HTTPException(status_code=404, detail="Author not found")
     author.name = payload.name
     author.bio = payload.bio
-    author.profile_image = payload.profile_image
+    author.profile_image = _validate_image_field(payload.profile_image, "profile_image")
     author.social_links = payload.social_links
     author.is_active = payload.is_active
     db.commit()
@@ -501,7 +521,7 @@ def create_post(payload: PostIn, db: Session = Depends(get_db)):
         slug=slug,
         excerpt=payload.excerpt,
         content=_sanitize_html(payload.content),
-        featured_image=payload.featured_image,
+        featured_image=_validate_image_field(payload.featured_image, "featured_image"),
         category_id=payload.category_id,
         subcategory_id=payload.subcategory_id,
         tags=payload.tags,
@@ -539,7 +559,7 @@ def update_post(post_id: int, payload: PostIn, db: Session = Depends(get_db)):
     p.slug = _unique_slug(payload.title, BlogPost, db, exclude_id=post_id)
     p.excerpt = payload.excerpt
     p.content = _sanitize_html(payload.content)
-    p.featured_image = payload.featured_image
+    p.featured_image = _validate_image_field(payload.featured_image, "featured_image")
     p.category_id = payload.category_id
     p.subcategory_id = payload.subcategory_id
     p.tags = payload.tags
@@ -622,6 +642,130 @@ def delete_post(post_id: int, db: Session = Depends(get_db)):
     db.delete(p)
     db.commit()
     return {"message": "deleted"}
+
+
+# ═══════════════════════════════════════════════════════════════
+# BASE64 → R2 MIGRATION (one-time operation)
+# ═══════════════════════════════════════════════════════════════
+
+import base64 as _base64
+import uuid as _uuid
+
+
+def _get_r2_client(db: Session):
+    """Return (boto3_s3_client, r2_settings) when R2 is active; else (None, None)."""
+    try:
+        import boto3
+        from models import R2Settings
+        r2 = db.query(R2Settings).first()
+        if not r2 or not r2.is_active or not r2.account_id or not r2.secret_access_key or not r2.bucket_name:
+            return None, None
+        account = (r2.account_id or "").strip()
+        if "r2.cloudflarestorage.com" in account:
+            endpoint = account if account.startswith("http") else f"https://{account}"
+        else:
+            endpoint = f"https://{account}.r2.cloudflarestorage.com"
+        s3 = boto3.client(
+            service_name="s3",
+            endpoint_url=endpoint,
+            aws_access_key_id=r2.access_key_id,
+            aws_secret_access_key=r2.secret_access_key,
+            region_name="auto",
+        )
+        return s3, r2
+    except Exception:
+        return None, None
+
+
+def _decode_data_uri(data_uri: str):
+    """Parse a data:image/...;base64,... URI. Returns (bytes, extension) or (None, None)."""
+    try:
+        header, _, b64data = data_uri.partition(",")
+        # header looks like "data:image/jpeg;base64"
+        mime = header.split(";")[0].replace("data:", "")  # e.g. "image/jpeg"
+        ext_map = {"image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".png",
+                   "image/webp": ".webp", "image/gif": ".gif", "image/svg+xml": ".svg"}
+        ext = ext_map.get(mime, ".jpg")
+        raw = _base64.b64decode(b64data)
+        return raw, ext
+    except Exception:
+        return None, None
+
+
+def _upload_bytes_to_r2(content: bytes, key: str, content_type: str, db: Session) -> str | None:
+    """Upload bytes to R2 and return the public URL, or None on failure."""
+    try:
+        s3, r2 = _get_r2_client(db)
+        if not s3 or not r2:
+            return None
+        s3.put_object(Bucket=r2.bucket_name, Key=key, Body=content, ContentType=content_type)
+        pub = (r2.public_url or "").rstrip("/")
+        return f"{pub}/{key}" if pub else None
+    except Exception:
+        return None
+
+
+@router.post("/migrate-base64-images", dependencies=[Depends(require_device)])
+def migrate_base64_images(db: Session = Depends(get_db)):
+    """One-time migration: convert any base64 data URIs in blog_posts.featured_image
+    and blog_authors.profile_image to R2 URLs.
+
+    This fixes the 11.6MB blog list response that broke Next.js data cache and
+    caused homepage load times of 2–34 seconds. After running this once and with
+    the new FeaturedImagePicker uploading to R2, no new base64 images should
+    enter the database.
+    """
+    s3, r2 = _get_r2_client(db)
+    if not s3 or not r2:
+        raise HTTPException(
+            status_code=400,
+            detail="R2 is not configured or not active. Configure R2 in /admin/settings/r2 first.",
+        )
+
+    migrated_posts = 0
+    migrated_authors = 0
+    failed: list[dict] = []
+
+    # ── Blog posts ──
+    posts = db.query(BlogPost).filter(BlogPost.featured_image.like("data:image/%")).all()
+    for p in posts:
+        raw, ext = _decode_data_uri(p.featured_image)
+        if raw is None:
+            failed.append({"type": "post", "id": p.id, "reason": "decode failed"})
+            continue
+        key = f"images/blog-featured/{_uuid.uuid4().hex}{ext}"
+        ct = f"image/{ext.lstrip('.')}" if ext != ".jpg" else "image/jpeg"
+        url = _upload_bytes_to_r2(raw, key, ct, db)
+        if url:
+            p.featured_image = url
+            migrated_posts += 1
+        else:
+            failed.append({"type": "post", "id": p.id, "reason": "R2 upload failed"})
+
+    # ── Authors ──
+    authors = db.query(BlogAuthor).filter(BlogAuthor.profile_image.like("data:image/%")).all()
+    for a in authors:
+        raw, ext = _decode_data_uri(a.profile_image)
+        if raw is None:
+            failed.append({"type": "author", "id": a.id, "reason": "decode failed"})
+            continue
+        key = f"images/blog-author/{_uuid.uuid4().hex}{ext}"
+        ct = f"image/{ext.lstrip('.')}" if ext != ".jpg" else "image/jpeg"
+        url = _upload_bytes_to_r2(raw, key, ct, db)
+        if url:
+            a.profile_image = url
+            migrated_authors += 1
+        else:
+            failed.append({"type": "author", "id": a.id, "reason": "R2 upload failed"})
+
+    db.commit()
+    return {
+        "migrated_posts": migrated_posts,
+        "migrated_authors": migrated_authors,
+        "failed": failed,
+        "total_posts_scanned": len(posts),
+        "total_authors_scanned": len(authors),
+    }
 
 
 # ═══════════════════════════════════════════════════════════════
