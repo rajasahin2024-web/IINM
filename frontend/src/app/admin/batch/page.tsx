@@ -851,18 +851,30 @@ function BatchManagerInner() {
                 </div>
 
                 {/* Capacity, Starting Count & Discount row */}
+                {editingId && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 12px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, marginBottom: 12 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#166534", display: "flex", alignItems: "center", gap: 6 }}>
+                      <Icon name="users" size={13} />
+                      Current System Enrollments: <strong>{batches.find(b => b.id === editingId)?.enrollments?.length ?? 0}</strong> student{(batches.find(b => b.id === editingId)?.enrollments?.length ?? 0) === 1 ? "" : "s"}
+                    </span>
+                    <span style={{ fontSize: 11, color: "#15803d", fontWeight: 600 }}>
+                      Public Displays: {Math.max(Number(formData.starting_count) || 0, (batches.find(b => b.id === editingId)?.enrollments?.length ?? 0))} / {formData.max_capacity}
+                    </span>
+                  </div>
+                )}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
                   {([
-                    { label: "Max Capacity",       key: "max_capacity"    as const },
-                    { label: "Starting Count",     key: "starting_count"  as const },
-                    { label: "Batch Discount (\u20b9)", key: "discount_amount" as const },
+                    { label: "Max Capacity",              key: "max_capacity"    as const },
+                    { label: "Already Enrolled Students", key: "starting_count"  as const },
+                    { label: "Batch Discount (\u20b9)",       key: "discount_amount" as const },
                   ] as { label: string; key: "max_capacity" | "starting_count" | "discount_amount" }[]).map(({ label, key }) => (
                     <div key={key} className="bi-sel-wrap">
                       <span className="bi-sel-label">{label}</span>
                       <input
                         type="number"
+                        min="0"
                         value={formData[key] as number}
-                        onChange={e => setFormData(f => ({ ...f, [key]: Number(e.target.value) }))}
+                        onChange={e => setFormData(f => ({ ...f, [key]: Math.max(0, Number(e.target.value)) }))}
                         style={{
                           width: "100%", padding: "10px 12px", borderRadius: 10,
                           border: "1.5px solid #e2e8f0", background: "#f8fafc",
@@ -879,11 +891,8 @@ function BatchManagerInner() {
                 </div>
 
                 {/* Starting Count helper text */}
-                <p style={{ fontSize: 11, color: "#94a3b8", margin: "0 0 12px", lineHeight: 1.5 }}>
-                  <strong style={{ color: "#64748b" }}>Starting Count</strong> — Fake head-start shown on the public booking page.
-                  As real students enroll, this count decreases by 1 per enrollment until real enrollments overtake it.
-                  Example: Starting Count = 12, Max Capacity = 20 → shows "12/20 enrolled" initially;
-                  after 8 real enrollments shows "12/20" (12 = max(12-8,0)+8); after 13 real enrollments shows "13/20" (real count takes over).
+                <p style={{ fontSize: 11, color: "#64748b", margin: "0 0 12px", lineHeight: 1.5 }}>
+                  <strong style={{ color: "#0f172a" }}>Already Enrolled Students</strong> — Number of students shown as already enrolled on the public booking slot and admission pages (e.g., entering <strong>18</strong> shows <em>&ldquo;18 / {formData.max_capacity} enrolled&rdquo;</em>). Real student enrollments seamlessly build upon this count.
                 </p>
 
                 {/* Toggles */}

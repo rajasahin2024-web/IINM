@@ -26,6 +26,7 @@ from sqlalchemy import func, or_
 from pydantic import BaseModel, EmailStr
 
 from database import get_db
+from cache import cache
 import models
 from helpers import rewrite_url
 from security import (
@@ -303,7 +304,11 @@ class CheckExistingResponse(BaseModel):
 
 @router.get("/config", response_model=SlotBookingConfig)
 def get_slot_booking_config(db: Session = Depends(get_db)):
-    """Public: return all config needed by the booking drawer frontend."""
+    """Public: return all config needed by the booking drawer frontend (cached)."""
+    cached = cache.get("slot_booking_config")
+    if cached is not None:
+        return SlotBookingConfig(**cached)
+
     pay = db.query(models.PaymentSettings).first()
     google = db.query(models.GoogleApiSettings).first()
     site = db.query(models.SiteSettings).first()
@@ -315,115 +320,128 @@ def get_slot_booking_config(db: Session = Depends(get_db)):
             rzp_key = pay.razorpay_live_key_id or pay.razorpay_key_id
     else:
         rzp_key = None
-    return SlotBookingConfig(
-        razorpay_key_id=rzp_key,
-        currency=pay.currency if pay else "INR",
-        is_test_mode=pay.is_test_mode if pay else True,
-        google_map_api_key=google.google_map_api_key if google else None,
-        enable_google_login=bool(google.enable_google_login) if google else False,
-        google_client_id=google.google_client_id if google else None,
-        site_name=site.site_name if site else None,
-        logo_url=rewrite_url(site.logo_url) if site else None,
-        founder_name=site.founder_name if site else None,
-        founder_designation=site.founder_designation if site else None,
-        founder_signature_url=rewrite_url(site.founder_signature_url) if site else None,
-    )
+
+    data = {
+        "razorpay_key_id": rzp_key,
+        "currency": pay.currency if pay else "INR",
+        "is_test_mode": pay.is_test_mode if pay else True,
+        "google_map_api_key": google.google_map_api_key if google else None,
+        "enable_google_login": bool(google.enable_google_login) if google else False,
+        "google_client_id": google.google_client_id if google else None,
+        "site_name": site.site_name if site else None,
+        "logo_url": rewrite_url(site.logo_url) if site else None,
+        "founder_name": site.founder_name if site else None,
+        "founder_designation": site.founder_designation if site else None,
+        "founder_signature_url": rewrite_url(site.founder_signature_url) if site else None,
+    }
+    cache.set("slot_booking_config", data, ttl=300)
+    return SlotBookingConfig(**data)
 
 
 @router.get("/courses", response_model=List[CourseListItem])
 def list_public_courses_for_booking(db: Session = Depends(get_db)):
-    """Public: list all PUBLISHED courses for the course dropdown."""
+    """Public: list all PUBLISHED courses for the course dropdown (cached)."""
+    cached = cache.get("slot_booking_courses")
+    if cached is not None:
+        return [CourseListItem(**item) for item in cached]
+
     courses = (
         db.query(models.Course)
         .filter(models.Course.status == "PUBLISHED")
         .order_by(models.Course.is_featured.desc(), models.Course.id.desc())
         .all()
     )
-    return [
-        CourseListItem(
-            id=c.id,
-            title=c.title,
-            slug=c.slug,
-            price=c.price,
-            discount_price=c.discount_price,
-            is_free=c.is_free,
-            currency=c.currency,
-            min_payment_type=c.min_payment_type,
-            min_payment_value=c.min_payment_value,
-            full_payment_discount_type=c.full_payment_discount_type,
-            full_payment_discount_value=c.full_payment_discount_value,
-            full_payment_discount_valid_till=c.full_payment_discount_valid_till.isoformat() if c.full_payment_discount_valid_till else None,
-        )
+    items = [
+        {
+            "id": c.id,
+            "title": c.title,
+            "slug": c.slug,
+            "price": c.price,
+            "discount_price": c.discount_price,
+            "is_free": c.is_free,
+            "currency": c.currency,
+            "min_payment_type": c.min_payment_type,
+            "min_payment_value": c.min_payment_value,
+            "full_payment_discount_type": c.full_payment_discount_type,
+            "full_payment_discount_value": c.full_payment_discount_value,
+            "full_payment_discount_valid_till": c.full_payment_discount_valid_till.isoformat() if c.full_payment_discount_valid_till else None,
+        }
         for c in courses
     ]
+    cache.set("slot_booking_courses", items, ttl=180)
+    return [CourseListItem(**item) for item in items]
 
 
 @router.get("/courses/{course_id}/batches", response_model=List[BatchListItem])
 def list_public_batches(course_id: int, db: Session = Depends(get_db)):
     """Public: list all batches for a course with seat availability.
 
-    Returns Upcoming/Ongoing batches first (selectable), then Completed batches
-    (for reference, shown below in the UI). Actual enrollment counts are used.
+    Optimized single-query SQL with outer join & in-memory cache to eliminate N+1 latency.
     """
-    course = db.query(models.Course).filter(models.Course.id == course_id).first()
+    cache_key = f"slot_booking_batches_{course_id}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return [BatchListItem(**b) for b in cached]
+
+    course = db.query(models.Course.id).filter(models.Course.id == course_id).first()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
 
-    # Fetch Upcoming/Ongoing batches first, then Completed batches
-    active_batches = (
-        db.query(models.Batch)
-        .filter(
-            models.Batch.course_id == course_id,
-            models.Batch.status.in_(["Upcoming", "Ongoing"]),
+    # Single aggregated query for active enrollments
+    counts_subquery = (
+        db.query(
+            models.BatchEnrollment.batch_id,
+            func.count(models.BatchEnrollment.id).label("enrolled_count")
         )
-        .order_by(models.Batch.start_date.asc().nullslast())
-        .all()
+        .filter(models.BatchEnrollment.status == "active")
+        .group_by(models.BatchEnrollment.batch_id)
+        .subquery()
     )
-    completed_batches = (
-        db.query(models.Batch)
+
+    batch_rows = (
+        db.query(
+            models.Batch,
+            func.coalesce(counts_subquery.c.enrolled_count, 0).label("actual_enrolled")
+        )
+        .outerjoin(counts_subquery, models.Batch.id == counts_subquery.c.batch_id)
         .filter(
             models.Batch.course_id == course_id,
-            models.Batch.status == "Completed",
+            models.Batch.status.in_(["Upcoming", "Ongoing", "Completed"])
         )
-        .order_by(models.Batch.start_date.desc().nullslast())
         .all()
     )
 
-    result = []
-    for b in active_batches + completed_batches:
-        actual_enrolled = (
-            db.query(func.count(models.BatchEnrollment.id))
-            .filter(
-                models.BatchEnrollment.batch_id == b.id,
-                models.BatchEnrollment.status == "active",
-            )
-            .scalar() or 0
-        )
-        # Display count = starting_count (admin-set head-start) + actual enrollments.
-        # starting_count decreases by 1 for each real enrollment (so it tapers off
-        # as real students join). Formula: max(starting_count - actual_enrolled, 0) + actual_enrolled
-        # This simplifies to: starting_count stays as a floor until real enrollments exceed it.
+    active_items = []
+    completed_items = []
+
+    for b, actual_enrolled in batch_rows:
         starting = b.starting_count or 0
-        if actual_enrolled >= starting:
-            # Real enrollments have overtaken the fake head-start — show real count
-            enrolled_count = actual_enrolled
-        else:
-            # Show starting_count as the base, real enrollments are "part of" it
-            enrolled_count = starting
+        enrolled_count = max(starting, actual_enrolled)
         seats_available = max(b.max_capacity - enrolled_count, 0)
-        result.append(BatchListItem(
-            id=b.id,
-            name=b.name,
-            mode=b.mode,
-            status=b.status,
-            start_date=b.start_date,
-            end_date=b.end_date,
-            max_capacity=b.max_capacity,
-            seats_available=seats_available,
-            enrolled_count=enrolled_count,
-            enable_waitlist=b.enable_waitlist,
-        ))
-    return result
+        item = {
+            "id": b.id,
+            "name": b.name,
+            "mode": b.mode,
+            "status": b.status,
+            "start_date": b.start_date.isoformat() if b.start_date else None,
+            "end_date": b.end_date.isoformat() if b.end_date else None,
+            "max_capacity": b.max_capacity,
+            "seats_available": seats_available,
+            "enrolled_count": enrolled_count,
+            "enable_waitlist": b.enable_waitlist,
+        }
+        if b.status in ("Upcoming", "Ongoing"):
+            active_items.append((b.start_date, item))
+        else:
+            completed_items.append((b.start_date, item))
+
+    # Active sorted by start_date asc, Completed sorted by start_date desc
+    active_sorted = [item for _, item in sorted(active_items, key=lambda x: (x[0] is None, x[0]))]
+    completed_sorted = [item for _, item in sorted(completed_items, key=lambda x: (x[0] is not None, x[0]), reverse=True)]
+    combined = active_sorted + completed_sorted
+
+    cache.set(cache_key, combined, ttl=60)
+    return [BatchListItem(**b) for b in combined]
 
 
 @router.get("/check-existing", response_model=CheckExistingResponse)
@@ -621,6 +639,12 @@ def verify_and_register(req: VerifyAndRegisterRequest, request: Request, db: Ses
         if not batch:
             raise HTTPException(status_code=404, detail="Batch not found for this course.")
 
+        if (batch.status or "").lower() != "upcoming":
+            raise HTTPException(
+                status_code=400,
+                detail="Slot booking is only open for upcoming batches. This batch is currently ongoing or completed."
+            )
+
         # Check seat availability
         enrolled_count = (
             db.query(func.count(models.BatchEnrollment.id))
@@ -771,6 +795,8 @@ def verify_and_register(req: VerifyAndRegisterRequest, request: Request, db: Ses
     db.commit()
     db.refresh(purchase)
     db.refresh(student)
+    if batch:
+        cache.invalidate(f"slot_booking_batches_{course.id}")
 
     # 10. Send confirmation email (non-blocking — fails silently)
     class_start_date = batch.start_date if batch else course.start_date.date() if course.start_date else None

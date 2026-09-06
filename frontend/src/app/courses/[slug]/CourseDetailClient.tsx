@@ -644,6 +644,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
   const [videoPlaylistEditorOpen, setVideoPlaylistEditorOpen] = useState(false);
   const [activeVideoIdx, setActiveVideoIdx] = useState(0);
   const [videoUserClicked, setVideoUserClicked] = useState(false);
+  const ytIframeRef = useRef<HTMLIFrameElement>(null);
   const [videoPlaylistForm, setVideoPlaylistForm] = useState({
     section_eyebrow: "",
     section_title: "",
@@ -1072,6 +1073,63 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
   const reviews = ext.video_testimonials || [];
   const videoPlaylist = ext.video_playlist || {};
   const toolsCovered = ext.tools_covered || {};
+
+  // ── Video playlist: auto-advance + prefetch ─────────────────────────────
+  const playlistVideos: Array<{ video_type: string; video_url: string; hls_url?: string; title: string; thumbnail_url: string; duration: string }> = videoPlaylist?.videos || [];
+
+  const handleVideoEnded = () => {
+    const next = activeVideoIdx + 1;
+    if (next < playlistVideos.length) {
+      setActiveVideoIdx(next);
+      // The user already interacted with the page (watched a video), so the
+      // next video can autoplay with sound.
+      setVideoUserClicked(true);
+    }
+  };
+
+  // YouTube iframe auto-advance: listen for the player's "ended" state via
+  // the postMessage API (requires enablejsapi=1 on the iframe src).
+  useEffect(() => {
+    const v = playlistVideos[activeVideoIdx];
+    if (!v || v.video_type !== "youtube") return;
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== "https://www.youtube.com") return;
+      let data: any = null;
+      try { data = typeof event.data === "string" ? JSON.parse(event.data) : event.data; } catch { return; }
+      if (data?.event === "onStateChange" && data?.info === 0) {
+        handleVideoEnded();
+      }
+    };
+    window.addEventListener("message", onMessage);
+    // Start the listening handshake so YouTube posts state changes to us.
+    const t = setTimeout(() => {
+      ytIframeRef.current?.contentWindow?.postMessage(
+        JSON.stringify({ event: "listening", id: 1, channel: "widget" }),
+        "https://www.youtube.com"
+      );
+    }, 1500);
+    return () => {
+      window.removeEventListener("message", onMessage);
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeVideoIdx, playlistVideos.length]);
+
+  // Prefetch the next playlist video's HLS manifest + thumbnail so switching
+  // feels instant (warms the CDN cache ahead of time).
+  useEffect(() => {
+    const next = playlistVideos[activeVideoIdx + 1];
+    if (!next) return;
+    if (next.hls_url) {
+      fetch(resolveAssetUrl(next.hls_url), { priority: "low" } as any).catch(() => {});
+    }
+    if (next.thumbnail_url) {
+      const img = new window.Image();
+      img.src = resolveAssetUrl(next.thumbnail_url);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeVideoIdx, playlistVideos.length]);
+
   const faqsRaw = ext.faqs || [];
   let faqs: any[] = [];
   let faqCategories: string[] = [];
@@ -1291,17 +1349,28 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                     const v = videoPlaylist.videos[activeVideoIdx] || videoPlaylist.videos[0];
                     const rawUrl = resolveAssetUrl(v.video_url);
                     const thumbSrc = resolveAssetUrl(v.thumbnail_url) || "";
+                    // Sound-first autoplay: the player tries playing WITH sound;
+                    // if the browser blocks it (no user interaction yet), it
+                    // falls back to muted autoplay + "Tap to unmute" overlay.
+                    // YouTube iframes can't do this dance — they get mute=1 on
+                    // the first view (YouTube shows its own unmute prompt).
+                    const firstView = activeVideoIdx === 0 && !videoUserClicked;
                     if (v.video_type === "youtube") {
                       // Convert any YouTube URL format to embed format
                       const embedUrl = getYouTubeEmbedUrl(rawUrl);
                       const sep = embedUrl.includes("?") ? "&" : "?";
-                      // Only autoplay after user clicks a playlist item (browsers block autoplay with sound on load)
-                      // rel=0: no related, modestbranding=1: less branding, iv_load_policy=3: no annotations, disablekb=1: no keyboard
-                      const params = `rel=0&modestbranding=1&iv_load_policy=3&disablekb=1${videoUserClicked ? "&autoplay=1" : ""}`;
-                      const autoplaySrc = `${embedUrl}${sep}${params}`;
+                      // enablejsapi lets us listen for the "ended" state so the
+                      // playlist can auto-advance. YouTube shows its own unmute
+                      // prompt when autoplaying muted.
+                      const baseParams = `rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&enablejsapi=1`;
+                      const stateParams = firstView
+                        ? `&mute=1&autoplay=1`
+                        : (videoUserClicked ? "&autoplay=1" : "");
+                      const autoplaySrc = `${embedUrl}${sep}${baseParams}${stateParams}&origin=${encodeURIComponent(typeof window !== "undefined" ? window.location.origin : "")}`;
                       return (
                         <iframe
                           key={activeVideoIdx}
+                          ref={ytIframeRef}
                           src={autoplaySrc}
                           title={v.title || "Course Video"}
                           className="cd-video-player-video"
@@ -1316,7 +1385,8 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                         src={rawUrl}
                         hlsUrl={v.hls_url ? resolveAssetUrl(v.hls_url) : undefined}
                         poster={thumbSrc || undefined}
-                        autoPlay={videoUserClicked}
+                        autoPlay
+                        onEnded={handleVideoEnded}
                         className="cd-video-player-video"
                       />
                     );

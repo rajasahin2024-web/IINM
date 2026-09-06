@@ -1125,6 +1125,94 @@ async def list_openrouter_models(db: Session = Depends(get_db)):
         raise HTTPException(status_code=502, detail=f"Network Error: {str(e)}")
 
 
+@router.get("/ai/openrouter/image-models")
+async def list_openrouter_image_models(db: Session = Depends(get_db)):
+    """Fetch image generation models from OpenRouter's dedicated Image API.
+
+    Returns models that support image output, with per-image pricing fetched
+    from each model's endpoint records (in parallel).
+    """
+    import asyncio
+
+    settings = db.query(AISettings).first()
+    api_key = settings.openrouter_api_key if settings else None
+    if not api_key:
+        raise HTTPException(status_code=400, detail="OpenRouter API key is not configured")
+    headers = {"Authorization": f"Bearer {api_key}"}
+    try:
+        async with httpx.AsyncClient() as client:
+            # 1. Fetch image models from the dedicated Image API
+            resp = await client.get(
+                "https://openrouter.ai/api/v1/images/models",
+                headers=headers, timeout=30.0,
+            )
+            if resp.status_code != 200:
+                try:
+                    err = resp.json()
+                    detail = err.get("error", {}).get("message", "Failed to fetch image models")
+                except Exception:
+                    detail = f"Failed to fetch image models (HTTP {resp.status_code})"
+                raise HTTPException(status_code=502, detail=detail)
+
+            image_models = resp.json().get("data", [])
+
+            # 2. Fetch pricing for each model in parallel from endpoint records
+            async def fetch_pricing(m):
+                endpoints_url = m.get("endpoints")
+                if not endpoints_url:
+                    return None
+                try:
+                    ep_resp = await client.get(
+                        f"https://openrouter.ai{endpoints_url}",
+                        headers=headers, timeout=15.0,
+                    )
+                    if ep_resp.status_code == 200:
+                        ep_data = ep_resp.json()
+                        ep_list = ep_data.get("endpoints", [])
+                        if ep_list:
+                            # Find the output_image pricing
+                            for ep in ep_list:
+                                pricing_arr = ep.get("pricing", [])
+                                for p in pricing_arr:
+                                    if p.get("billable") == "output_image":
+                                        return {
+                                            "cost_per_image": p.get("cost_usd"),
+                                            "unit": p.get("unit"),
+                                        }
+                            # Fallback: return first pricing entry
+                            if pricing_arr:
+                                return {
+                                    "cost_per_image": pricing_arr[0].get("cost_usd"),
+                                    "unit": pricing_arr[0].get("unit"),
+                                }
+                except Exception:
+                    pass
+                return None
+
+            pricing_results = await asyncio.gather(
+                *[fetch_pricing(m) for m in image_models],
+                return_exceptions=True,
+            )
+
+            # 3. Merge
+            enriched = []
+            for i, m in enumerate(image_models):
+                mid = m.get("id")
+                pricing = pricing_results[i] if i < len(pricing_results) and not isinstance(pricing_results[i], Exception) else None
+                enriched.append({
+                    "id": mid,
+                    "name": m.get("name"),
+                    "description": m.get("description"),
+                    "architecture": m.get("architecture"),
+                    "supported_parameters": m.get("supported_parameters"),
+                    "supports_streaming": m.get("supports_streaming"),
+                    "pricing": pricing,
+                })
+            return {"data": enriched}
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Network Error: {str(e)}")
+
+
 # ══════════════════════════════════════════════════════
 #  AI GENERATE QUESTIONS
 # ══════════════════════════════════════════════════════

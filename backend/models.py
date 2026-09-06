@@ -222,6 +222,8 @@ class CourseMaterial(Base):
     file_type    = Column(String(50))          # video | pdf | image | document | youtube
     file_url     = Column(Text, nullable=True)  # uploaded file URL
     hls_url      = Column(Text, nullable=True)  # HLS master playlist URL (adaptive bitrate)
+    hls_status   = Column(String(20), nullable=True)  # pending | processing | ready | failed
+    hls_error    = Column(Text, nullable=True)  # last transcode error summary
     youtube_url  = Column(Text, nullable=True)  # YouTube video link
     thumbnail_url = Column(Text, nullable=True)  # custom thumbnail for videos
     file_size    = Column(Integer, nullable=True)  # bytes
@@ -1333,7 +1335,7 @@ class NavbarItem(Base):
     description    = Column(Text, nullable=True)
     item_type      = Column(String(50), default="main")  # "main", "dropdown", "sidebar_item", "content_item", "footer_cta"
     order_position = Column(Integer, default=0, server_default=text('0'))
-    icon           = Column(String(50), nullable=True)
+    icon           = Column(String(512), nullable=True)
     meta_data      = Column(Text, nullable=True)  # custom styles e.g. gradients
     
     # Self-referential relationship
@@ -1758,4 +1760,258 @@ class CareerApplication(Base):
     is_read             = Column(Boolean, default=False)
     created_at          = Column(DateTime(timezone=True), server_default=func.now())
     updated_at          = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
+class MissionVisionSettings(Base):
+    """Institutional Mission, Vision, Objectives, and Trust settings for /mission-vision."""
+    __tablename__ = "mission_vision_settings"
+    id                     = Column(Integer, primary_key=True, index=True)
+    # Hero Section
+    hero_eyebrow           = Column(String(255), nullable=True)
+    hero_title             = Column(String(255), nullable=True)
+    hero_text              = Column(Text, nullable=True)
+    hero_stats_json        = Column(Text, nullable=True)
+    hero_credentials_json  = Column(Text, nullable=True)
+
+    # Statutory Accreditations Section
+    trust_eyebrow          = Column(String(255), nullable=True)
+    trust_title            = Column(String(255), nullable=True)
+    trust_desc             = Column(Text, nullable=True)
+    trust_cards_json       = Column(Text, nullable=True)
+
+    # Pillars Section
+    pillars_eyebrow        = Column(String(255), nullable=True)
+    pillars_title          = Column(String(255), nullable=True)
+    pillars_desc           = Column(Text, nullable=True)
+    mission_tag            = Column(String(100), nullable=True)
+    mission_title          = Column(String(255), nullable=True)
+    mission_statement      = Column(Text, nullable=True)
+    mission_points_json    = Column(Text, nullable=True)
+    vision_tag             = Column(String(100), nullable=True)
+    vision_title           = Column(String(255), nullable=True)
+    vision_statement       = Column(Text, nullable=True)
+    vision_points_json     = Column(Text, nullable=True)
+
+    # Strategic Objectives Section
+    objectives_eyebrow     = Column(String(255), nullable=True)
+    objectives_title       = Column(String(255), nullable=True)
+    objectives_desc        = Column(Text, nullable=True)
+    objectives_cards_json  = Column(Text, nullable=True)
+
+    # Core Values & Leadership Section
+    values_eyebrow         = Column(String(255), nullable=True)
+    values_title           = Column(String(255), nullable=True)
+    values_desc            = Column(Text, nullable=True)
+    values_cards_json      = Column(Text, nullable=True)
+    director_quote         = Column(Text, nullable=True)
+    director_name          = Column(String(255), nullable=True)
+    director_title         = Column(String(255), nullable=True)
+    director_image_url     = Column(Text, nullable=True)
+
+    # CTA Section
+    cta_title              = Column(String(255), nullable=True)
+    cta_desc               = Column(Text, nullable=True)
+    cta_primary_btn_text   = Column(String(100), nullable=True)
+    cta_primary_btn_link   = Column(String(255), nullable=True)
+    cta_secondary_btn_text = Column(String(100), nullable=True)
+    cta_secondary_btn_link = Column(String(255), nullable=True)
+
+    # SEO & AEO (Answer Engine Optimization)
+    seo_title              = Column(String(255), nullable=True)
+    seo_description        = Column(Text, nullable=True)
+    seo_keywords           = Column(Text, nullable=True)
+    canonical_url          = Column(String(255), nullable=True)
+    og_image_url           = Column(Text, nullable=True)
+    aeo_faqs_json          = Column(Text, nullable=True)
+
+    updated_at             = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
+class CertificationPageSettings(Base):
+    """Institutional Certifications, Quality Accreditations, and Document Gallery for /certification."""
+    __tablename__ = "certification_page_settings"
+    id                     = Column(Integer, primary_key=True, index=True)
+
+    # Hero Section
+    hero_eyebrow           = Column(String(255), nullable=True)
+    hero_title             = Column(String(255), nullable=True)
+    hero_subtitle          = Column(String(255), nullable=True)
+    hero_text              = Column(Text, nullable=True)
+    hero_badges_json       = Column(Text, nullable=True)
+    hero_card_rows_json    = Column(Text, nullable=True)
+
+    # Statutory Accreditations & Standards Section
+    standards_eyebrow      = Column(String(255), nullable=True)
+    standards_title        = Column(String(255), nullable=True)
+    standards_desc         = Column(Text, nullable=True)
+    standards_cards_json   = Column(Text, nullable=True)
+
+    # Scanned Documents Gallery Section
+    gallery_eyebrow        = Column(String(255), nullable=True)
+    gallery_title          = Column(String(255), nullable=True)
+    gallery_desc           = Column(Text, nullable=True)
+    gallery_items_json     = Column(Text, nullable=True)
+
+    # Academic & Skill Development Partnerships Section
+    partners_eyebrow       = Column(String(255), nullable=True)
+    partners_title         = Column(String(255), nullable=True)
+    partners_desc          = Column(Text, nullable=True)
+    partners_cards_json    = Column(Text, nullable=True)
+
+    # Online Verification System Section
+    verification_eyebrow   = Column(String(255), nullable=True)
+    verification_title     = Column(String(255), nullable=True)
+    verification_desc      = Column(Text, nullable=True)
+    verification_steps_json= Column(Text, nullable=True)
+    verification_portal_url= Column(String(255), nullable=True)
+
+    # CTA Section
+    cta_title              = Column(String(255), nullable=True)
+    cta_desc               = Column(Text, nullable=True)
+    cta_primary_btn_text   = Column(String(100), nullable=True)
+    cta_primary_btn_link   = Column(String(255), nullable=True)
+    cta_secondary_btn_text = Column(String(100), nullable=True)
+    cta_secondary_btn_link = Column(String(255), nullable=True)
+
+    # SEO & AEO
+    seo_title              = Column(String(255), nullable=True)
+    seo_description        = Column(Text, nullable=True)
+    seo_keywords           = Column(Text, nullable=True)
+    canonical_url          = Column(String(255), nullable=True)
+    og_image_url           = Column(Text, nullable=True)
+    aeo_faqs_json          = Column(Text, nullable=True)
+
+    updated_at             = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
+class OurTeamPageSettings(Base):
+    """Institutional Team, Faculty, and Mentorship Directory for /our-team."""
+    __tablename__ = "our_team_page_settings"
+    id                     = Column(Integer, primary_key=True, index=True)
+
+    # Hero Section
+    hero_eyebrow           = Column(String(255), nullable=True)
+    hero_title             = Column(String(255), nullable=True)
+    hero_subtitle          = Column(String(255), nullable=True)
+    hero_text              = Column(Text, nullable=True)
+    hero_badges_json       = Column(Text, nullable=True)
+    hero_card_rows_json    = Column(Text, nullable=True)
+
+    # Executive Leadership & Governing Council
+    executive_eyebrow      = Column(String(255), nullable=True)
+    executive_title        = Column(String(255), nullable=True)
+    executive_desc         = Column(Text, nullable=True)
+    executive_cards_json   = Column(Text, nullable=True)
+
+    # Faculty & Mentors Directory
+    team_eyebrow           = Column(String(255), nullable=True)
+    team_title             = Column(String(255), nullable=True)
+    team_desc              = Column(Text, nullable=True)
+    team_categories_json   = Column(Text, nullable=True)
+    team_members_json      = Column(Text, nullable=True)
+
+    # Where Our Mentors & Faculty Come From (Marquee)
+    affiliations_eyebrow   = Column(String(255), nullable=True)
+    affiliations_title     = Column(String(255), nullable=True)
+    affiliations_desc      = Column(Text, nullable=True)
+    affiliations_logos_json= Column(Text, nullable=True)
+
+    # Mentorship Framework & Pedagogy
+    framework_eyebrow      = Column(String(255), nullable=True)
+    framework_title        = Column(String(255), nullable=True)
+    framework_desc         = Column(Text, nullable=True)
+    framework_cards_json   = Column(Text, nullable=True)
+
+    # CTA Section
+    cta_title              = Column(String(255), nullable=True)
+    cta_desc               = Column(Text, nullable=True)
+    cta_primary_btn_text   = Column(String(100), nullable=True)
+    cta_primary_btn_link   = Column(String(255), nullable=True)
+    cta_secondary_btn_text = Column(String(100), nullable=True)
+    cta_secondary_btn_link = Column(String(255), nullable=True)
+
+    # SEO & AEO
+    seo_title              = Column(String(255), nullable=True)
+    seo_description        = Column(Text, nullable=True)
+    seo_keywords           = Column(Text, nullable=True)
+    canonical_url          = Column(String(255), nullable=True)
+    og_image_url           = Column(Text, nullable=True)
+    aeo_faqs_json          = Column(Text, nullable=True)
+
+    updated_at             = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
+class SampleCertificatePageSettings(Base):
+    __tablename__ = "sample_certificate_page_settings"
+
+    id                     = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Hero Section
+    hero_eyebrow           = Column(String(255), nullable=True)
+    hero_title             = Column(String(255), nullable=True)
+    hero_subtitle          = Column(String(255), nullable=True)
+    hero_text              = Column(Text, nullable=True)
+    hero_badges_json       = Column(Text, nullable=True)
+    hero_card_rows_json    = Column(Text, nullable=True)
+
+    # Certificate Verification Gateway
+    verify_eyebrow         = Column(String(255), nullable=True)
+    verify_title           = Column(String(255), nullable=True)
+    verify_desc            = Column(Text, nullable=True)
+    verify_portal_url      = Column(String(255), nullable=True)
+    verify_steps_json      = Column(Text, nullable=True)
+
+    # Course Sample Certificates Showcase
+    gallery_eyebrow        = Column(String(255), nullable=True)
+    gallery_title          = Column(String(255), nullable=True)
+    gallery_desc           = Column(Text, nullable=True)
+    gallery_categories_json= Column(Text, nullable=True)
+    sample_certificates_json = Column(Text, nullable=True)
+
+    # Tamper-Proof Security Features
+    security_eyebrow       = Column(String(255), nullable=True)
+    security_title         = Column(String(255), nullable=True)
+    security_desc          = Column(Text, nullable=True)
+    security_features_json = Column(Text, nullable=True)
+
+    # CTA Section
+    cta_title              = Column(String(255), nullable=True)
+    cta_desc               = Column(Text, nullable=True)
+    cta_primary_btn_text   = Column(String(100), nullable=True)
+    cta_primary_btn_link   = Column(String(255), nullable=True)
+    cta_secondary_btn_text = Column(String(100), nullable=True)
+    cta_secondary_btn_link = Column(String(255), nullable=True)
+
+    # SEO & AEO
+    seo_title              = Column(String(255), nullable=True)
+    seo_description        = Column(Text, nullable=True)
+    seo_keywords           = Column(Text, nullable=True)
+    canonical_url          = Column(String(255), nullable=True)
+    og_image_url           = Column(Text, nullable=True)
+    aeo_faqs_json          = Column(Text, nullable=True)
+
+    updated_at             = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
+# ══════════════════════════════════════════════════════
+#  NOTICES
+# ══════════════════════════════════════════════════════
+
+class Notice(Base):
+    __tablename__ = "notices"
+    id              = Column(Integer, primary_key=True, index=True)
+    title           = Column(String(255), nullable=False)
+    notice_no       = Column(String(100), nullable=True)
+    notice_date     = Column(Date, nullable=False, server_default=func.current_date())
+    category        = Column(String(100), nullable=False, default="General", server_default=text("'General'"))
+    description     = Column(Text, nullable=True)
+    cover_image     = Column(String(512), nullable=True)
+    attachment_url  = Column(String(512), nullable=True)
+    attachment_name = Column(String(255), nullable=True)
+    is_active       = Column(Boolean, default=True, server_default=text('true'))
+    is_pinned       = Column(Boolean, default=False, server_default=text('false'))
+    created_at      = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at      = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
 

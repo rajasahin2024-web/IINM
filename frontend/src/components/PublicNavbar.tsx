@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React, { useEffect, useState, useRef } from "react";
 import NotificationBar from "./NotificationBar";
+import NavbarIcon, { HandDrawnCaret } from "./NavbarIcon";
 import "../app/home.css";
 
 import { BASE_URL } from "@/lib/config";
@@ -318,23 +319,34 @@ export default function PublicNavbar({
                     left: -80px;
                     background: #ffffff;
                     border: 1px solid #e2e8f0;
-                    border-radius: 8px;
-                    box-shadow: 0 20px 40px -6px rgba(10, 22, 40, 0.12);
+                    border-top: 2px solid #e63946;
+                    border-radius: 0;
+                    box-shadow: 0 16px 32px -8px rgba(10, 22, 40, 0.14);
                     width: 580px;
                     display: flex;
                     flex-direction: column;
                     opacity: 0;
                     visibility: hidden;
-                    transform: translateY(12px) scale(0.96); /* High-end compact starting scale */
+                    transform: translateY(8px);
                     transform-origin: top center;
-                    transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.35s;
+                    transition: opacity 0.25s ease, transform 0.25s ease, visibility 0.25s;
                     z-index: 1000;
                     overflow: hidden;
                   }
                   .nav-link-dropdown:hover .nav-dropdown-card {
                     opacity: 1;
                     visibility: visible;
-                    transform: translateY(2px) scale(1); /* Snappy scale-up bouncy lift */
+                    transform: translateY(0);
+                  }
+                  .nav-dropdown-card-simple {
+                    width: 280px;
+                    left: 0;
+                  }
+                  .dropdown-simple-list {
+                    padding: 6px 0;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0;
                   }
                   .dropdown-body {
                     display: flex;
@@ -361,7 +373,7 @@ export default function PublicNavbar({
                     font-weight: 700;
                     color: #0f172a;
                     padding: 8px 10px;
-                    border-radius: 4px;
+                    border-radius: 0;
                     display: flex;
                     align-items: center;
                     gap: 8px;
@@ -381,16 +393,26 @@ export default function PublicNavbar({
                     gap: 4px;
                   }
                   .nav-dropdown-item {
-                    padding: 10px 14px;
-                    border-radius: 6px;
+                    padding: 10px 16px;
+                    border-radius: 0;
                     color: #0f172a;
                     text-decoration: none;
                     display: flex;
                     flex-direction: column;
-                    transition: all 0.15s ease;
+                    border-left: 2px solid transparent;
+                    transition: background-color 0.15s ease, border-color 0.15s ease;
                   }
                   .nav-dropdown-item:hover {
                     background: #f8fafc;
+                    border-left-color: #e63946;
+                  }
+                  .nav-dropdown-item .nav-item-icon {
+                    color: #94a3b8;
+                    flex-shrink: 0;
+                    transition: color 0.15s ease;
+                  }
+                  .nav-dropdown-item:hover .nav-item-icon {
+                    color: #e63946;
                   }
                   .nav-dropdown-title-row {
                     display: flex;
@@ -456,7 +478,7 @@ export default function PublicNavbar({
                     gap: 8px;
                     background: #f1f5f9;
                     border: 1px solid #e2e8f0;
-                    border-radius: 8px;
+                    border-radius: 0;
                     padding: 8px 14px;
                     color: #475569;
                     font-size: 12.5px;
@@ -474,38 +496,42 @@ export default function PublicNavbar({
                     font-weight: 700;
                     color: #0a1628 !important;
                     text-decoration: none;
-                    padding: 6px 14px;
-                    border-radius: 30px; /* High-end Gen-Z pill outline */
-                    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+                    padding: 8px 14px;
+                    border-radius: 0;
+                    transition: color 0.2s ease;
                     display: inline-flex;
                     position: relative;
                     align-items: center;
                     gap: 4px;
                     cursor: pointer;
                     background: transparent;
-                    border: 1px solid transparent;
+                    border: none;
+                  }
+                  .hp-main-menu-item::after {
+                    content: '';
+                    position: absolute;
+                    bottom: 0;
+                    left: 14px;
+                    right: 14px;
+                    height: 2px;
+                    background: #e63946;
+                    transform: scaleX(0);
+                    transform-origin: center;
+                    transition: transform 0.25s ease;
                   }
                   .hp-main-menu-item.active {
                     color: #e63946 !important;
                   }
                   .hp-main-menu-item.active::after {
-                    content: '';
-                    position: absolute;
-                    bottom: -4px;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    width: 24px;
-                    height: 4px;
-                    background: #e63946;
-                    border-radius: 2px;
+                    transform: scaleX(1);
                   }
                   .hp-main-menu-item:hover,
                   .nav-link-dropdown:hover .hp-main-menu-item {
-                    color: #e63946 !important; /* Elegant crimson brand color transition */
-                    background: rgba(230, 57, 70, 0.06); /* Ultra light transparent glassmorphic wash */
-                    border-color: rgba(230, 57, 70, 0.12); /* Modern soft border glow */
-                    transform: scale(1.04) translateY(-1px); /* Premium physical bouncy lift */
-                    box-shadow: 0 4px 12px rgba(230, 57, 70, 0.04);
+                    color: #e63946 !important;
+                  }
+                  .hp-main-menu-item:hover::after,
+                  .nav-link-dropdown:hover .hp-main-menu-item::after {
+                    transform: scaleX(1);
                   }
                   .hp-caret {
                     font-size: 8px;
@@ -523,10 +549,10 @@ export default function PublicNavbar({
                 {navbarLoading ? (
                   // Gorgeous Shimmer Skeletons matching brand sizes
                   <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                    <div style={{ width: "68px", height: "32px", background: "#f1f5f9", borderRadius: "30px", animation: "pulse 1.5s infinite" }} />
-                    <div style={{ width: "84px", height: "32px", background: "#f1f5f9", borderRadius: "30px", animation: "pulse 1.5s infinite" }} />
-                    <div style={{ width: "88px", height: "32px", background: "#f1f5f9", borderRadius: "30px", animation: "pulse 1.5s infinite" }} />
-                    <div style={{ width: "96px", height: "32px", background: "#f1f5f9", borderRadius: "30px", animation: "pulse 1.5s infinite" }} />
+                    <div style={{ width: "68px", height: "32px", background: "#f1f5f9", borderRadius: "0", animation: "pulse 1.5s infinite" }} />
+                    <div style={{ width: "84px", height: "32px", background: "#f1f5f9", borderRadius: "0", animation: "pulse 1.5s infinite" }} />
+                    <div style={{ width: "88px", height: "32px", background: "#f1f5f9", borderRadius: "0", animation: "pulse 1.5s infinite" }} />
+                    <div style={{ width: "96px", height: "32px", background: "#f1f5f9", borderRadius: "0", animation: "pulse 1.5s infinite" }} />
                   </div>
                 ) : (
                   navbarItems.map((item) => {
@@ -544,17 +570,19 @@ export default function PublicNavbar({
                       );
                     }
 
-                    // Extract sidebar items and footer items from dropdown
+                    // Extract sidebar items, footer items, and direct content items from dropdown
                     const sidebars = item.sub_items?.filter(s => s.item_type === "sidebar_item") || [];
                     const footers = item.sub_items?.filter(s => s.item_type === "footer_cta") || [];
+                    const directContents = item.sub_items?.filter(s => s.item_type === "content_item") || [];
+                    const isSimpleDropdown = sidebars.length === 0 && directContents.length > 0;
 
                     // Default active sidebar to first item for this dropdown
                     const activeSidebar = sidebars.find(s => s.id === activeSidebarId) || sidebars[0];
                     const activeContents = activeSidebar?.sub_items?.filter(s => s.item_type === "content_item") || [];
 
                     return (
-                      <div 
-                        key={item.id} 
+                      <div
+                        key={item.id}
                         className="nav-link-dropdown"
                         onMouseEnter={() => {
                           if (sidebars.length > 0) setActiveSidebarId(sidebars[0].id);
@@ -563,56 +591,90 @@ export default function PublicNavbar({
                       >
                         <span className={`hp-main-menu-item ${isItemActive(item) ? 'active' : ''}`}>
                           <span>{item.title}</span>
-                          <span className="hp-caret">▼</span>
+                          <span className="hp-caret"><HandDrawnCaret size={12} /></span>
                         </span>
-                        
-                        <div className="nav-dropdown-card">
-                          <div className="dropdown-body">
-                            {/* Left Sidebar column */}
-                            <div className="dropdown-sidebar">
-                              <div className="dropdown-sidebar-title">Sections</div>
-                              {sidebars.map(sub => (
-                                <div 
-                                  key={sub.id} 
-                                  className={`dropdown-sidebar-item ${activeSidebar?.id === sub.id ? "active" : ""}`}
-                                  onMouseEnter={() => setActiveSidebarId(sub.id)}
-                                >
-                                  <span>{sub.icon}</span> {sub.title}
-                                </div>
-                              ))}
-                            </div>
 
-                            {/* Right Main column — shows content of ACTIVE sidebar item */}
-                            <div className="dropdown-content">
-                              {activeContents.length === 0 ? (
-                                <div style={{ fontSize: "12px", color: "#94a3b8", padding: "20px" }}>
-                                  No items in this section
-                                </div>
-                              ) : (
-                                activeContents.map(sub => (
+                        <div className={`nav-dropdown-card ${isSimpleDropdown ? 'nav-dropdown-card-simple' : ''}`}>
+                          {isSimpleDropdown ? (
+                            <>
+                              <div className="dropdown-simple-list">
+                                {directContents.map(sub => (
                                   <Link key={sub.id} href={sub.link || "/"} className="nav-dropdown-item">
                                     <div className="nav-dropdown-title-row">
-                                      <span className="nav-dropdown-title">{sub.title}</span>
+                                      <span style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+                                        {sub.icon && <NavbarIcon icon={sub.icon} size={17} className="nav-item-icon" />}
+                                        <span className="nav-dropdown-title">{sub.title}</span>
+                                      </span>
                                       {sub.badge && <span className="nav-dropdown-badge badge-red">{sub.badge}</span>}
                                     </div>
-                                    <span className="nav-dropdown-sub">{sub.description}</span>
+                                    {sub.description && <span className="nav-dropdown-sub">{sub.description}</span>}
                                   </Link>
-                                ))
-                              )}
-                            </div>
-                          </div>
+                                ))}
+                              </div>
+                              {footers.map(sub => (
+                                <Link
+                                  key={sub.id}
+                                  href={sub.link || "/"}
+                                  className="dropdown-footer"
+                                  style={{ background: sub.meta_data || "linear-gradient(135deg, #e63946 0%, #cb2d39 100%)" }}
+                                >
+                                  <span>{sub.title}</span>
+                                </Link>
+                              ))}
+                            </>
+                          ) : (
+                            <>
+                              <div className="dropdown-body">
+                                {/* Left Sidebar column */}
+                                <div className="dropdown-sidebar">
+                                  <div className="dropdown-sidebar-title">Sections</div>
+                                  {sidebars.map(sub => (
+                                    <div
+                                      key={sub.id}
+                                      className={`dropdown-sidebar-item ${activeSidebar?.id === sub.id ? "active" : ""}`}
+                                      onMouseEnter={() => setActiveSidebarId(sub.id)}
+                                    >
+                                      {sub.icon && <NavbarIcon icon={sub.icon} size={16} className="nav-item-icon" />} {sub.title}
+                                    </div>
+                                  ))}
+                                </div>
 
-                          {/* Bottom CTA bar */}
-                          {footers.map(sub => (
-                            <Link 
-                              key={sub.id} 
-                              href={sub.link || "/"} 
-                              className="dropdown-footer" 
-                              style={{ background: sub.meta_data || "linear-gradient(135deg, #e63946 0%, #cb2d39 100%)" }}
-                            >
-                              <span>{sub.title}</span>
-                            </Link>
-                          ))}
+                                {/* Right Main column — shows content of ACTIVE sidebar item */}
+                                <div className="dropdown-content">
+                                  {activeContents.length === 0 ? (
+                                    <div style={{ fontSize: "12px", color: "#94a3b8", padding: "20px" }}>
+                                      No items in this section
+                                    </div>
+                                  ) : (
+                                    activeContents.map(sub => (
+                                      <Link key={sub.id} href={sub.link || "/"} className="nav-dropdown-item">
+                                        <div className="nav-dropdown-title-row">
+                                          <span style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+                                            {sub.icon && <NavbarIcon icon={sub.icon} size={17} className="nav-item-icon" />}
+                                            <span className="nav-dropdown-title">{sub.title}</span>
+                                          </span>
+                                          {sub.badge && <span className="nav-dropdown-badge badge-red">{sub.badge}</span>}
+                                        </div>
+                                        <span className="nav-dropdown-sub">{sub.description}</span>
+                                      </Link>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Bottom CTA bar */}
+                              {footers.map(sub => (
+                                <Link
+                                  key={sub.id}
+                                  href={sub.link || "/"}
+                                  className="dropdown-footer"
+                                  style={{ background: sub.meta_data || "linear-gradient(135deg, #e63946 0%, #cb2d39 100%)" }}
+                                >
+                                  <span>{sub.title}</span>
+                                </Link>
+                              ))}
+                            </>
+                          )}
                         </div>
                       </div>
                     );
@@ -913,7 +975,7 @@ export default function PublicNavbar({
         />
       )}
 
-      {/* Mobile Drawer Sidebar (Upgraded to premium dark midnight navy theme, left slide-in corporate drawer) */}
+      {/* Mobile Drawer Sidebar (Off-white with subtle red gradient, left slide-in) */}
       <div
         style={{
           position: "fixed",
@@ -921,9 +983,9 @@ export default function PublicNavbar({
           left: 0, // Slides smoothly from LEFT!
           bottom: 0,
           width: "280px",
-          background: "#0a1628", // Premium deep midnight navy brand background
-          boxShadow: "8px 0 32px rgba(0, 0, 0, 0.3)",
-          borderRight: "1px solid rgba(255, 255, 255, 0.06)",
+          background: "linear-gradient(to bottom, #ffffff 0%, #fef2f2 60%, #fee2e2 100%)", // White → light red gradient
+          boxShadow: "8px 0 32px rgba(0, 0, 0, 0.12)",
+          borderRight: "1px solid #e2e8f0",
           zIndex: 1000,
           padding: "24px",
           display: "flex",
@@ -934,21 +996,21 @@ export default function PublicNavbar({
         }}
       >
         {/* Drawer Header with Logo & Close Icon */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255, 255, 255, 0.08)", paddingBottom: "16px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #e2e8f0", paddingBottom: "16px" }}>
           <div style={{ display: "flex", alignItems: "center" }}>
-            {darkLogoUrl ? (
-              <img src={darkLogoUrl} alt={siteName} style={{ height: 38, width: "auto", objectFit: "contain" }} />
-            ) : logoUrl ? (
+            {logoUrl ? (
               <img src={logoUrl} alt={siteName} style={{ height: 38, width: "auto", objectFit: "contain" }} />
+            ) : darkLogoUrl ? (
+              <img src={darkLogoUrl} alt={siteName} style={{ height: 38, width: "auto", objectFit: "contain" }} />
             ) : (
-              <span style={{ color: "#ffffff", fontWeight: 800, fontSize: "16px", letterSpacing: "0.5px" }}>{siteName}</span>
+              <span style={{ color: "#0a1628", fontWeight: 800, fontSize: "16px", letterSpacing: "0.5px" }}>{siteName}</span>
             )}
           </div>
           <button
             onClick={() => setIsSidebarOpen(false)}
             style={{
-              background: "rgba(255, 255, 255, 0.08)",
-              border: "none",
+              background: "#f1f5f9",
+              border: "1px solid #e2e8f0",
               borderRadius: "50%",
               width: "32px",
               height: "32px",
@@ -956,7 +1018,7 @@ export default function PublicNavbar({
               alignItems: "center",
               justifyContent: "center",
               cursor: "pointer",
-              color: "#ffffff",
+              color: "#475569",
               transition: "background 0.2s",
             }}
             title="Close Menu"
@@ -969,14 +1031,14 @@ export default function PublicNavbar({
         </div>
 
         {/* Navigation Items (Modern lists with collapsible submenus on mobile) */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px", overflowY: "auto", flex: 1, marginTop: "12px" }} className="chat-scrollbar">
-          <span style={{ fontSize: "11px", fontWeight: 800, color: "rgba(255, 255, 255, 0.5)", letterSpacing: "1.2px", textTransform: "uppercase", marginBottom: "4px" }}>Navigation</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", overflowY: "auto", flex: 1, marginTop: "12px" }} className="navbar-mobile-scroll">
+          <span style={{ fontSize: "11px", fontWeight: 800, color: "#94a3b8", letterSpacing: "1.2px", textTransform: "uppercase", marginBottom: "4px" }}>Navigation</span>
           
           {navbarLoading ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              <div style={{ height: "36px", width: "100%", background: "rgba(255, 255, 255, 0.05)", borderRadius: "6px", animation: "pulse 1.5s infinite" }} />
-              <div style={{ height: "36px", width: "100%", background: "rgba(255, 255, 255, 0.05)", borderRadius: "6px", animation: "pulse 1.5s infinite" }} />
-              <div style={{ height: "36px", width: "100%", background: "rgba(255, 255, 255, 0.05)", borderRadius: "6px", animation: "pulse 1.5s infinite" }} />
+              <div style={{ height: "36px", width: "100%", background: "#e2e8f0", borderRadius: "0", animation: "pulse 1.5s infinite" }} />
+              <div style={{ height: "36px", width: "100%", background: "#e2e8f0", borderRadius: "0", animation: "pulse 1.5s infinite" }} />
+              <div style={{ height: "36px", width: "100%", background: "#e2e8f0", borderRadius: "0", animation: "pulse 1.5s infinite" }} />
             </div>
           ) : (
             navbarItems.map((item) => {
@@ -988,7 +1050,7 @@ export default function PublicNavbar({
                     key={item.id}
                     href={item.link || "/"}
                     onClick={() => setIsSidebarOpen(false)}
-                    style={{ fontSize: "13.5px", fontWeight: 700, textDecoration: "none", padding: "10px 14px", borderRadius: "6px", display: "block", ...(isItemActive(item) ? { color: "#e63946", background: "rgba(230, 57, 70, 0.12)", borderLeft: "3px solid #e63946" } : { color: "#ffffff", background: "rgba(255, 255, 255, 0.04)" }) }}
+                    style={{ fontSize: "13.5px", fontWeight: 700, textDecoration: "none", padding: "12px 14px", borderRadius: "0", display: "block", border: "1px solid #e2e8f0", ...(isItemActive(item) ? { color: "#e63946", background: "rgba(230, 57, 70, 0.08)", borderLeft: "3px solid #e63946" } : { color: "#0a1628", background: "#ffffff" }) }}
                   >
                     {item.title}
                   </Link>
@@ -996,52 +1058,69 @@ export default function PublicNavbar({
               }
 
               const sidebars = item.sub_items?.filter(s => s.item_type === "sidebar_item") || [];
+              const directContents = item.sub_items?.filter(s => s.item_type === "content_item") || [];
+              const isSimpleDropdown = sidebars.length === 0 && directContents.length > 0;
               const isExpanded = !!expandedItems[item.id];
 
               return (
                 <div key={item.id} style={{ display: "flex", flexDirection: "column" }}>
                   <button
                     onClick={() => setExpandedItems(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
-                    style={{ width: "100%", textAlign: "left", fontSize: "13.5px", fontWeight: 700, color: "#ffffff", background: "transparent", border: "none", padding: "10px 14px", borderRadius: "6px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", transition: "all 0.2s" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "rgba(255, 255, 255, 0.06)"}
-                    onMouseLeave={e => { if(!isExpanded) e.currentTarget.style.background = "transparent"; }}
+                    style={{ width: "100%", textAlign: "left", fontSize: "13.5px", fontWeight: 700, color: "#0a1628", background: isExpanded ? "#ffffff" : "#ffffff", border: "1px solid #e2e8f0", padding: "12px 14px", borderRadius: "0", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", transition: "all 0.2s" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#fef2f2"}
+                    onMouseLeave={e => { if(!isExpanded) e.currentTarget.style.background = "#ffffff"; }}
                   >
                     <span>{item.title}</span>
-                    <span style={{ fontSize: "10px", transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)", transition: "all 0.2s", color: "rgba(255, 255, 255, 0.6)" }}>▼</span>
+                    <span style={{ display: "inline-flex", transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)", transition: "all 0.2s", color: "#94a3b8" }}><HandDrawnCaret size={12} /></span>
                   </button>
                   {isExpanded && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "2px", padding: "4px 0 10px 16px", background: "transparent", borderLeft: "2px solid #e63946", marginLeft: "14px", marginTop: "4px" }}>
-                      {sidebars.map(sidebar => {
-                        const sidebarExpanded = !!expandedItems[sidebar.id];
-                        const sidebarContents = sidebar.sub_items?.filter(s => s.item_type === "content_item") || [];
-                        return (
-                          <div key={sidebar.id} style={{ display: "flex", flexDirection: "column" }}>
-                            <button
-                              onClick={() => setExpandedItems(prev => ({ ...prev, [sidebar.id]: !prev[sidebar.id] }))}
-                              style={{ width: "100%", textAlign: "left", fontSize: "12.5px", fontWeight: 700, color: "#cbd5e1", background: "transparent", border: "none", padding: "8px 10px", borderRadius: "4px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
-                            >
-                              <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                <span>{sidebar.icon}</span> {sidebar.title}
-                              </span>
-                              <span style={{ fontSize: "9px", transform: sidebarExpanded ? "rotate(180deg)" : "rotate(0deg)", transition: "all 0.2s", color: "rgba(255, 255, 255, 0.4)" }}>▼</span>
-                            </button>
-                            {sidebarExpanded && (
-                              <div style={{ display: "flex", flexDirection: "column", gap: "2px", padding: "2px 0 6px 12px", borderLeft: "1px dashed rgba(255, 255, 255, 0.15)", marginLeft: "8px" }}>
-                                {sidebarContents.map(sub => (
-                                  <Link 
-                                    key={sub.id} 
-                                    href={sub.link || "/"} 
-                                    onClick={() => setIsSidebarOpen(false)} 
-                                    style={{ fontSize: "12.5px", fontWeight: 500, textDecoration: "none", padding: "6px 10px", borderRadius: "4px", ...(isActiveLink(sub.link) ? { color: "#e63946", background: "rgba(230, 57, 70, 0.1)", borderLeft: "2px solid #e63946" } : { color: "#94a3b8" }) }}
-                                  >
-                                    {sub.title}
-                                  </Link>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "2px", padding: "8px 0 10px 16px", background: "#ffffff", border: "1px solid #e2e8f0", borderTop: "none", borderLeft: "2px solid #e63946", marginLeft: "14px", marginTop: "0" }}>
+                      {isSimpleDropdown ? (
+                        directContents.map(sub => (
+                          <Link
+                            key={sub.id}
+                            href={sub.link || "/"}
+                            onClick={() => setIsSidebarOpen(false)}
+                            style={{ fontSize: "12.5px", fontWeight: 600, textDecoration: "none", padding: "8px 10px", borderRadius: "0", display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid #f1f5f9", ...(isActiveLink(sub.link) ? { color: "#e63946", background: "rgba(230, 57, 70, 0.08)", borderLeft: "2px solid #e63946" } : { color: "#334155" }) }}
+                          >
+                            {sub.icon && <NavbarIcon icon={sub.icon} size={15} />}
+                            {sub.title}
+                          </Link>
+                        ))
+                      ) : (
+                        sidebars.map(sidebar => {
+                          const sidebarExpanded = !!expandedItems[sidebar.id];
+                          const sidebarContents = sidebar.sub_items?.filter(s => s.item_type === "content_item") || [];
+                          return (
+                            <div key={sidebar.id} style={{ display: "flex", flexDirection: "column" }}>
+                              <button
+                                onClick={() => setExpandedItems(prev => ({ ...prev, [sidebar.id]: !prev[sidebar.id] }))}
+                                style={{ width: "100%", textAlign: "left", fontSize: "12.5px", fontWeight: 700, color: "#0a1628", background: "transparent", border: "none", borderBottom: "1px solid #f1f5f9", padding: "8px 10px", borderRadius: "0", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+                              >
+                                <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                  {sidebar.icon && <NavbarIcon icon={sidebar.icon} size={15} />} {sidebar.title}
+                                </span>
+                                <span style={{ display: "inline-flex", fontSize: "9px", transform: sidebarExpanded ? "rotate(180deg)" : "rotate(0deg)", transition: "all 0.2s", color: "#94a3b8" }}><HandDrawnCaret size={10} /></span>
+                              </button>
+                              {sidebarExpanded && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "2px", padding: "4px 0 6px 12px", borderLeft: "2px solid #e63946", marginLeft: "8px" }}>
+                                  {sidebarContents.map(sub => (
+                                    <Link
+                                      key={sub.id}
+                                      href={sub.link || "/"}
+                                      onClick={() => setIsSidebarOpen(false)}
+                                      style={{ fontSize: "12.5px", fontWeight: 600, textDecoration: "none", padding: "8px 10px", borderRadius: "0", display: "flex", alignItems: "center", gap: "8px", ...(isActiveLink(sub.link) ? { color: "#e63946", background: "rgba(230, 57, 70, 0.08)", borderLeft: "2px solid #e63946" } : { color: "#334155" }) }}
+                                    >
+                                      {sub.icon && <NavbarIcon icon={sub.icon} size={15} />}
+                                      {sub.title}
+                                    </Link>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
                   )}
                 </div>
@@ -1051,19 +1130,19 @@ export default function PublicNavbar({
         </div>
 
         {/* Separator Line */}
-        <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.08)" }} />
+        <div style={{ height: "1px", background: "#e2e8f0" }} />
 
         {/* Mobile Authentication / Profile Section */}
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {isLoggedIn ? (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "0 10px" }}>
-                <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", color: "#0a1628", fontWeight: 700, fontSize: "14px" }}>
+                <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "#0a1628", display: "flex", alignItems: "center", justifyContent: "center", color: "#ffffff", fontWeight: 700, fontSize: "14px" }}>
                   A
                 </div>
                 <div style={{ display: "flex", flexDirection: "column" }}>
-                  <span style={{ fontSize: "13.5px", fontWeight: 700, color: "#ffffff" }}>My Account</span>
-                  <span style={{ fontSize: "11px", color: "#cbd5e1" }}>Logged In</span>
+                  <span style={{ fontSize: "13.5px", fontWeight: 700, color: "#0a1628" }}>My Account</span>
+                  <span style={{ fontSize: "11px", color: "#64748b" }}>Logged In</span>
                 </div>
               </div>
 
@@ -1074,11 +1153,11 @@ export default function PublicNavbar({
                   padding: "10px 18px",
                   fontSize: "13.5px",
                   fontWeight: 700,
-                  color: "#ffffff",
+                  color: "#0a1628",
                   textDecoration: "none",
-                  borderRadius: "8px",
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  borderRadius: "0",
+                  background: "#ffffff",
+                  border: "1px solid #e2e8f0",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -1104,7 +1183,7 @@ export default function PublicNavbar({
                   fontSize: "13.5px",
                   fontWeight: 700,
                   color: "#ffffff",
-                  borderRadius: "8px",
+                  borderRadius: "0",
                   background: "#e63946",
                   border: "none",
                   cursor: "pointer",
@@ -1123,9 +1202,9 @@ export default function PublicNavbar({
               {/* Ask AI Assistant in mobile sidebar */}
               <button
                 onClick={() => { setIsSidebarOpen(false); setIsSearchModalOpen(true); }}
-                style={{ width: "100%", background: "rgba(255, 255, 255, 0.05)", border: "1px solid rgba(255, 255, 255, 0.1)", color: "#ffffff", padding: "12px 14px", borderRadius: "8px", fontWeight: 700, fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", transition: "all 0.2s" }}
-                onMouseEnter={e => e.currentTarget.style.background = "rgba(255, 255, 255, 0.1)"}
-                onMouseLeave={e => e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)"}
+                style={{ width: "100%", background: "#ffffff", border: "1px solid #e2e8f0", color: "#475569", padding: "12px 14px", borderRadius: "0", fontWeight: 700, fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", transition: "all 0.2s" }}
+                onMouseEnter={e => e.currentTarget.style.background = "#f1f5f9"}
+                onMouseLeave={e => e.currentTarget.style.background = "#ffffff"}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 Ask AI Assistant
@@ -1138,7 +1217,7 @@ export default function PublicNavbar({
                   background: "#e63946", // Brand Red color for Sign In call to action
                   color: "#ffffff",
                   border: "none",
-                  borderRadius: "8px",
+                  borderRadius: "0",
                   padding: "12px 24px",
                   fontSize: "14px",
                   fontWeight: 700,

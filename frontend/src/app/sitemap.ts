@@ -11,6 +11,10 @@ const STATIC_PAGES: { path: string; priority: number; changeFrequency: "daily" |
   { path: "/blog", priority: 0.8, changeFrequency: "daily" },
   { path: "/about-us", priority: 0.6, changeFrequency: "monthly" },
   { path: "/about-iinm", priority: 0.6, changeFrequency: "monthly" },
+  { path: "/mission-vision", priority: 0.8, changeFrequency: "monthly" },
+  { path: "/certification", priority: 0.8, changeFrequency: "monthly" },
+  { path: "/sample-certificate", priority: 0.8, changeFrequency: "monthly" },
+  { path: "/our-team", priority: 0.8, changeFrequency: "monthly" },
   { path: "/contact-us", priority: 0.6, changeFrequency: "monthly" },
   { path: "/career", priority: 0.7, changeFrequency: "weekly" },
 ];

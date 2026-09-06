@@ -35,7 +35,7 @@ const nextConfig: NextConfig = {
               // origin explicitly — otherwise every <img src="http://localhost:2007/uploads/...">
               // is blocked by CSP. In production, https: covers the backend.
               `img-src 'self' data: https: blob:${isDev ? ` ${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:2007"}` : ""}`,
-              "media-src 'self' https://www.youtube.com",
+              "media-src 'self' https://www.youtube.com https://cdn.iinmedu.com blob:",
               "frame-src https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com https://checkout.razorpay.com https://api.razorpay.com",
               // In development the backend runs on http://localhost:2007 (not https),
               // so we must allow that origin explicitly — otherwise every API call

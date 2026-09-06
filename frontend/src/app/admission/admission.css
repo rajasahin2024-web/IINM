@@ -1,0 +1,1493 @@
+/* ─────────────────────────────────────────────────────────────
+   ADMISSION SLOT BOOKING PORTAL STYLES
+   Indian Institute of New Media (IINM)
+───────────────────────────────────────────────────────────── */
+
+:root {
+  --adm-navy: #0a1628;
+  --adm-navy-dark: #050b14;
+  --adm-brand-red: #e63946;
+  --adm-brand-red-hover: #cc2936;
+  --adm-brand-red-light: #fff1f2;
+  --adm-brand-red-glow: rgba(230, 57, 70, 0.2);
+
+  --adm-primary: var(--adm-brand-red);
+  --adm-primary-dark: var(--adm-brand-red-hover);
+  --adm-primary-light: var(--adm-brand-red-light);
+
+  --adm-secondary: #0ea5e9;
+  --adm-accent: #f59e0b;
+  --adm-success: #10b981;
+  --adm-success-light: #d1fae5;
+  --adm-text-main: #0f172a;
+  --adm-text-muted: #64748b;
+  --adm-border: #e2e8f0;
+  --adm-bg: #f8fafc;
+  --adm-card-bg: #ffffff;
+  --adm-radius: 16px;
+  --adm-shadow: 0 10px 25px -5px rgba(10, 22, 40, 0.06), 0 8px 10px -6px rgba(10, 22, 40, 0.04);
+  --adm-shadow-hover: 0 20px 30px -10px rgba(10, 22, 40, 0.12), 0 10px 15px -8px rgba(10, 22, 40, 0.06);
+}
+
+.adm-page-wrapper {
+  min-height: 100vh;
+  background-color: var(--adm-bg);
+  color: var(--adm-text-main);
+  font-family: inherit;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Hero Banner ── */
+.adm-hero {
+  position: relative;
+  background: linear-gradient(135deg, #050b14 0%, #0a1628 55%, #152238 100%);
+  color: #ffffff;
+  padding: 56px 20px 72px;
+  text-align: center;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.adm-hero::before {
+  content: "";
+  position: absolute;
+  top: -120px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 750px;
+  height: 420px;
+  background: radial-gradient(circle, rgba(230, 57, 70, 0.18) 0%, rgba(14, 165, 233, 0.08) 50%, transparent 80%);
+  pointer-events: none;
+}
+
+.adm-hero-container {
+  max-width: 860px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 2;
+}
+
+.adm-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(12px);
+  color: #38bdf8;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+}
+
+.adm-hero-badge-dot {
+  width: 8px;
+  height: 8px;
+  background: #e63946;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #e63946;
+  animation: adm-pulse 2s infinite;
+}
+
+@keyframes adm-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+.adm-hero-title {
+  font-size: clamp(28px, 4.5vw, 42px);
+  font-weight: 800;
+  line-height: 1.2;
+  margin: 0 0 14px;
+  letter-spacing: -0.02em;
+  background: linear-gradient(180deg, #ffffff 30%, #cbd5e1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.adm-hero-desc {
+  font-size: 16px;
+  color: #94a3b8;
+  max-width: 640px;
+  margin: 0 auto 24px;
+  line-height: 1.6;
+}
+
+.adm-hero-trust-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.adm-trust-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+.adm-trust-item svg {
+  color: #10b981;
+}
+
+/* ── Main Container & Stepper Card ── */
+.adm-main {
+  flex: 1;
+  max-width: 1100px;
+  width: 100%;
+  margin: -40px auto 60px;
+  padding: 0 20px;
+  position: relative;
+  z-index: 10;
+}
+
+.adm-card {
+  background: var(--adm-card-bg);
+  border-radius: var(--adm-radius);
+  border: 1px solid var(--adm-border);
+  box-shadow: var(--adm-shadow);
+  overflow: hidden;
+  transition: box-shadow 0.2s ease;
+}
+
+/* ── Wizard Stepper Track (Slim Brand Scroller) ── */
+.adm-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--adm-border);
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  /* Firefox slim scrollbar with brand red */
+  scrollbar-width: thin;
+  scrollbar-color: var(--adm-brand-red) #f1f5f9;
+}
+
+/* Custom Slim WebKit Scrollbar */
+.adm-stepper::-webkit-scrollbar {
+  height: 4px;
+}
+
+.adm-stepper::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 9999px;
+  margin: 0 16px;
+}
+
+.adm-stepper::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #e63946 0%, #0a1628 100%);
+  border-radius: 9999px;
+  box-shadow: 0 0 6px rgba(230, 57, 70, 0.4);
+  transition: all 0.2s ease;
+}
+
+.adm-stepper::-webkit-scrollbar-thumb:hover {
+  background: #e63946;
+  box-shadow: 0 0 8px rgba(230, 57, 70, 0.7);
+}
+
+.adm-step-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  user-select: none;
+  padding: 6px 10px;
+  border-radius: 12px;
+  transition: background-color 0.2s ease;
+}
+
+.adm-step-item:hover {
+  background-color: #f8fafc;
+}
+
+.adm-step-item:not(:last-child)::after {
+  content: "";
+  display: block;
+  width: 48px;
+  height: 2px;
+  background: #e2e8f0;
+  margin-left: 12px;
+}
+
+.adm-step-item.done:not(:last-child)::after {
+  background: var(--adm-brand-red);
+}
+
+.adm-step-num {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  background: #f1f5f9;
+  color: #64748b;
+  border: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.adm-step-item.active .adm-step-num {
+  background: var(--adm-brand-red);
+  color: #ffffff;
+  box-shadow: 0 0 0 4px var(--adm-brand-red-glow);
+}
+
+.adm-step-item.done .adm-step-num {
+  background: #0a1628;
+  color: #ffffff;
+}
+
+.adm-step-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.adm-step-label-small {
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #94a3b8;
+}
+
+.adm-step-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.adm-step-item.active .adm-step-title {
+  color: var(--adm-brand-red);
+  font-weight: 700;
+}
+
+.adm-step-item.done .adm-step-title {
+  color: #0a1628;
+}
+
+/* ── Content Body ── */
+.adm-content {
+  padding: 36px 40px;
+}
+
+.adm-section-header {
+  margin-bottom: 28px;
+}
+
+.adm-section-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--adm-text-main);
+  margin: 0 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.adm-section-desc {
+  font-size: 14.5px;
+  color: var(--adm-text-muted);
+  margin: 0;
+}
+
+/* ── Error Banner ── */
+.adm-alert-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  padding: 14px 18px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* ── STEP 1: Course Catalog Grid ── */
+.adm-course-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.adm-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 260px;
+}
+
+.adm-search-input {
+  width: 100%;
+  padding: 12px 16px 12px 42px;
+  border-radius: 10px;
+  border: 1px solid var(--adm-border);
+  background: #ffffff;
+  font-size: 14.5px;
+  color: var(--adm-text-main);
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.adm-search-input:focus {
+  border-color: var(--adm-primary);
+  box-shadow: 0 0 0 3px var(--adm-primary-light);
+}
+
+.adm-search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.adm-course-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 22px;
+  margin-bottom: 32px;
+}
+
+.adm-course-card {
+  position: relative;
+  background: #ffffff;
+  border: 2px solid var(--adm-border);
+  border-radius: 14px;
+  padding: 20px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.adm-course-card:hover {
+  border-color: #cbd5e1;
+  transform: translateY(-3px);
+  box-shadow: var(--adm-shadow-hover);
+}
+
+.adm-course-card.selected {
+  border-color: var(--adm-primary);
+  background: #fdfefe;
+  box-shadow: 0 0 0 3px var(--adm-primary-light), var(--adm-shadow);
+}
+
+.adm-course-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.adm-course-tag {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.adm-course-radio {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.adm-course-card.selected .adm-course-radio {
+  border-color: var(--adm-primary);
+  background: var(--adm-primary);
+}
+
+.adm-course-card.selected .adm-course-radio::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.adm-course-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--adm-text-main);
+  line-height: 1.35;
+  margin: 0 0 8px;
+}
+
+.adm-course-desc {
+  font-size: 13px;
+  color: var(--adm-text-muted);
+  line-height: 1.5;
+  margin: 0 0 16px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.adm-course-footer {
+  border-top: 1px solid #f1f5f9;
+  padding-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.adm-course-price-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.adm-price-label {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.adm-price-val {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.adm-price-original {
+  font-size: 13px;
+  color: #94a3b8;
+  text-decoration: line-through;
+  margin-left: 6px;
+  font-weight: 500;
+}
+
+.adm-course-select-btn {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--adm-border);
+  background: #f8fafc;
+  color: #334155;
+  transition: all 0.2s ease;
+}
+
+.adm-course-card.selected .adm-course-select-btn {
+  background: var(--adm-primary);
+  color: #ffffff;
+  border-color: var(--adm-primary);
+}
+
+/* ── Skeleton & Shimmer Loaders ── */
+@keyframes admShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.adm-skeleton-line {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: admShimmer 1.5s infinite ease-in-out;
+  border-radius: 6px;
+}
+
+.adm-skeleton-line.tag {
+  width: 80px;
+  height: 20px;
+  border-radius: 6px;
+}
+
+.adm-skeleton-line.title {
+  width: 75%;
+  height: 22px;
+  margin: 10px 0 12px;
+}
+
+.adm-skeleton-line.desc {
+  width: 100%;
+  height: 14px;
+  margin-bottom: 8px;
+}
+
+.adm-skeleton-line.desc.short {
+  width: 60%;
+}
+
+.adm-skeleton-line.price {
+  width: 90px;
+  height: 24px;
+}
+
+.adm-skeleton-line.btn {
+  width: 110px;
+  height: 38px;
+  border-radius: 8px;
+}
+
+.adm-course-card.adm-course-skeleton {
+  cursor: default;
+  pointer-events: none;
+  border-color: #e2e8f0;
+  background: #ffffff;
+  min-height: 230px;
+}
+
+.adm-batch-card.adm-batch-skeleton {
+  cursor: default;
+  pointer-events: none;
+  border-color: #e2e8f0;
+  background: #ffffff;
+}
+
+/* ── STEP 2: Applicant Details & Location ── */
+.adm-google-box {
+  margin-bottom: 24px;
+}
+
+.adm-google-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #1e293b;
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.adm-google-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.adm-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.adm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.adm-field-full {
+  grid-column: 1 / -1;
+}
+
+.adm-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.adm-req {
+  color: #ef4444;
+}
+
+.adm-input,
+.adm-select,
+.adm-textarea {
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1.5px solid var(--adm-border);
+  background: #ffffff;
+  font-size: 14px;
+  color: var(--adm-text-main);
+  outline: none;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.adm-input:focus,
+.adm-select:focus,
+.adm-textarea:focus {
+  border-color: var(--adm-primary);
+  box-shadow: 0 0 0 3px var(--adm-primary-light);
+}
+
+/* Photo Upload Block */
+.adm-photo-section {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.adm-photo-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  flex-shrink: 0;
+}
+
+.adm-photo-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.adm-photo-controls {
+  flex: 1;
+}
+
+.adm-photo-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 4px;
+}
+
+.adm-photo-sub {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: 0 0 10px;
+}
+
+.adm-upload-btn {
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid var(--adm-border);
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.adm-upload-btn:hover {
+  background: #f1f5f9;
+}
+
+/* Student Category Pills */
+.adm-category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.adm-category-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1.5px solid var(--adm-border);
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #334155;
+  transition: all 0.2s ease;
+}
+
+.adm-category-card:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.adm-category-card.selected {
+  border-color: var(--adm-primary);
+  background: #eef2ff;
+  color: var(--adm-primary);
+  font-weight: 600;
+}
+
+.adm-radio-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.adm-category-card.selected .adm-radio-dot {
+  border-color: var(--adm-primary);
+  background: var(--adm-primary);
+}
+
+.adm-category-card.selected .adm-radio-dot::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+/* Location Box */
+.adm-location-card {
+  background: #f8fafc;
+  border: 1px solid var(--adm-border);
+  border-radius: 14px;
+  padding: 22px;
+  margin-top: 24px;
+}
+
+.adm-location-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.adm-location-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.adm-detect-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.adm-detect-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: var(--adm-primary);
+  color: var(--adm-primary);
+}
+
+.adm-detect-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.adm-detected-pill {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+/* Checkbox & Toggles */
+.adm-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.adm-toggle-label {
+  font-size: 13.5px;
+  color: #334155;
+  font-weight: 500;
+}
+
+.adm-toggle {
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  background: #cbd5e1;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.adm-toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.adm-toggle.on {
+  background: var(--adm-primary);
+}
+
+.adm-toggle.on::after {
+  transform: translateX(20px);
+}
+
+.adm-terms-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 18px;
+  font-size: 13.5px;
+  color: #475569;
+  cursor: pointer;
+}
+
+.adm-terms-row input {
+  margin-top: 3px;
+}
+
+.adm-terms-row a {
+  color: var(--adm-primary);
+  text-decoration: underline;
+}
+
+/* ── STEP 3: Batch Selection ── */
+.adm-batch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.adm-batch-card {
+  background: #ffffff;
+  border: 2px solid var(--adm-border);
+  border-radius: 14px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.adm-batch-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: var(--adm-shadow);
+}
+
+.adm-batch-card.selected {
+  border-color: var(--adm-primary);
+  background: #fafbff;
+  box-shadow: 0 0 0 3px var(--adm-primary-light);
+}
+
+.adm-batch-card.adm-batch-card-ongoing {
+  background: #f8fafc;
+  border: 1.5px solid #bbf7d0;
+  cursor: not-allowed;
+  opacity: 0.95;
+}
+
+.adm-batch-card.adm-batch-card-ongoing:hover {
+  border-color: #86efac;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.08);
+}
+
+.adm-ongoing-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.adm-batch-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.adm-batch-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.adm-batch-mode-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #e0f2fe;
+  color: #0284c7;
+}
+
+.adm-batch-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+  color: #64748b;
+  margin-bottom: 16px;
+}
+
+.adm-batch-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adm-batch-progress-wrap {
+  margin-top: 12px;
+}
+
+.adm-batch-progress-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.adm-batch-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: #10b981;
+  transition: width 0.4s ease;
+}
+
+.adm-batch-progress-fill.filling {
+  background: #f59e0b;
+}
+
+.adm-batch-progress-fill.full {
+  background: #ef4444;
+}
+
+.adm-batch-progress-fill.ongoing {
+  background: linear-gradient(90deg, #4ade80, #22c55e);
+}
+
+.adm-batch-seats-text {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #10b981;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.adm-batch-seats-text.filling {
+  color: #d97706;
+}
+
+.adm-batch-seats-text.full {
+  color: #dc2626;
+}
+
+/* ── STEP 4: Review & Payment Split ── */
+.adm-split-review-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 32px;
+  align-items: start;
+}
+
+.adm-review-summary-box {
+  background: #f8fafc;
+  border: 1px solid var(--adm-border);
+  border-radius: 14px;
+  padding: 24px;
+}
+
+.adm-review-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--adm-border);
+}
+
+.adm-review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.adm-review-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13.5px;
+}
+
+.adm-review-label {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.adm-review-value {
+  color: #0f172a;
+  font-weight: 600;
+  text-align: right;
+}
+
+.adm-payment-box {
+  background: #ffffff;
+  border: 2px solid var(--adm-border);
+  border-radius: 14px;
+  padding: 24px;
+}
+
+/* Payment Mode Cards */
+.adm-pay-mode-group {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.adm-pay-option {
+  position: relative;
+  border: 2px solid var(--adm-border);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.2s ease;
+}
+
+.adm-pay-option:hover {
+  border-color: #cbd5e1;
+}
+
+.adm-pay-option.selected {
+  border-color: var(--adm-primary);
+  background: #f8fafc;
+  box-shadow: 0 0 0 2px var(--adm-primary-light);
+}
+
+.adm-pay-option-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.adm-pay-radio {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.adm-pay-option.selected .adm-pay-radio {
+  border-color: var(--adm-primary);
+  background: var(--adm-primary);
+}
+
+.adm-pay-option.selected .adm-pay-radio::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.adm-pay-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.adm-pay-sub {
+  font-size: 12px;
+  color: #64748b;
+  margin: 2px 0 0;
+}
+
+.adm-pay-amount {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  text-align: right;
+}
+
+.adm-pay-save-badge {
+  display: inline-block;
+  background: #ecfdf5;
+  color: #059669;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  margin-top: 4px;
+}
+
+/* Discount Countdown */
+.adm-countdown-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #fffbeb;
+  border: 1px solid #fef3c7;
+  padding: 10px 14px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: #b45309;
+  font-weight: 600;
+}
+
+.adm-countdown-timer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-family: monospace;
+  font-size: 14px;
+}
+
+.adm-timer-pill {
+  background: #78350f;
+  color: #ffffff;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Total Breakup */
+.adm-total-breakup {
+  border-top: 1.5px dashed var(--adm-border);
+  padding-top: 16px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.adm-total-label {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.adm-total-amount {
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--adm-primary);
+}
+
+.adm-ssl-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 14px;
+}
+
+/* ── STEP 5: Success & Receipt View ── */
+.adm-success-container {
+  text-align: center;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 20px 0;
+}
+
+.adm-success-icon-wrap {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: #ecfdf5;
+  border: 4px solid #a7f3d0;
+  color: #10b981;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+  animation: adm-bounce-in 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes adm-bounce-in {
+  0% { transform: scale(0.3); opacity: 0; }
+  60% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+.adm-success-title {
+  font-size: 28px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 8px;
+}
+
+.adm-success-subtitle {
+  font-size: 15px;
+  color: #64748b;
+  margin: 0 0 28px;
+}
+
+.adm-success-slip {
+  background: #f8fafc;
+  border: 1px solid var(--adm-border);
+  border-radius: 14px;
+  padding: 24px;
+  margin-bottom: 28px;
+  text-align: left;
+}
+
+.adm-slip-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.adm-slip-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.adm-slip-label {
+  font-size: 12px;
+  color: #64748b;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.adm-slip-val {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.adm-qr-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: #ffffff;
+  border: 1px solid var(--adm-border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 28px;
+}
+
+.adm-qr-card img {
+  width: 100px;
+  height: 100px;
+  border-radius: 8px;
+}
+
+.adm-qr-info {
+  text-align: left;
+}
+
+.adm-qr-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 4px;
+}
+
+.adm-qr-desc {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: 0;
+}
+
+.adm-success-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* ── Action Buttons Footer ── */
+.adm-footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--adm-border);
+  padding: 24px 40px;
+  background: #ffffff;
+}
+
+.adm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 28px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  border: none;
+  text-decoration: none;
+}
+
+.adm-btn-secondary {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.adm-btn-secondary:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+.adm-btn-primary {
+  background: var(--adm-brand-red);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(230, 57, 70, 0.28);
+}
+
+.adm-btn-primary:hover:not(:disabled) {
+  background: var(--adm-brand-red-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(230, 57, 70, 0.38);
+}
+
+.adm-btn-pay {
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+  color: #ffffff;
+  font-size: 16px;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+}
+
+.adm-btn-pay:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.4);
+}
+
+.adm-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .adm-split-review-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .adm-content {
+    padding: 22px 16px;
+  }
+  .adm-footer-actions {
+    padding: 16px 16px;
+  }
+  .adm-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .adm-stepper {
+    padding: 14px 16px;
+    gap: 10px;
+    justify-content: flex-start;
+  }
+  .adm-step-item {
+    gap: 8px;
+    padding: 4px 8px;
+  }
+  .adm-step-num {
+    width: 32px;
+    height: 32px;
+    font-size: 12.5px;
+  }
+  .adm-step-info {
+    display: flex;
+  }
+  .adm-step-label-small {
+    display: none;
+  }
+  .adm-step-title {
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+  .adm-step-item:not(:last-child)::after {
+    width: 20px;
+    margin-left: 8px;
+  }
+}

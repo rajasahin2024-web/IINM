@@ -662,6 +662,64 @@ export default function R2BucketSettingsForm() {
               </div>
             </div>
           </div>
+
+          {/* ── Production Setup Checklist ── */}
+          <div style={{ gridColumn: "1 / -1", ...card }}>
+            <div style={{ padding: "24px" }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2"><path d="M12 2l10 18H2L12 2z"/><line x1="12" y1="10" x2="12" y2="14"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                Production Setup Checklist
+              </h3>
+              <p style={{ margin: "0 0 18px", fontSize: 12.5, color: "#64748b" }}>
+                One-time steps to make Direct-to-R2 uploads and HLS work in production. Full guide: <code style={{ fontFamily: "monospace", fontSize: 11, background: "#f1f5f9", padding: "2px 6px", borderRadius: 4 }}>documentation/media-pipeline-setup.md</code>
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {[
+                  {
+                    n: 1, title: "R2 Bucket CORS (one-time, required for direct browser upload)",
+                    cmd: "cd backend && python scripts/setup_r2_cors.py",
+                    desc: "Lets the browser PUT files straight to R2. Without it, uploads silently fall back to the old server-proxy path (size-limited).",
+                  },
+                  {
+                    n: 2, title: "nginx: raise upload body limit",
+                    cmd: "client_max_body_size 500M;   # in the api server block, then: sudo nginx -t && sudo systemctl reload nginx",
+                    desc: "Fallback path + thumbnails go through the server. Default nginx limit is 1MB — uploads would stall at ~2%.",
+                  },
+                  {
+                    n: 3, title: "Cloudflare: bypass cache for /api/*",
+                    cmd: "Dashboard → Caching → Cache Rules → Create rule: URI Path starts with /api/ → Bypass cache",
+                    desc: "Fixes random CORS errors on API responses (cached responses are served without CORS headers).",
+                  },
+                  {
+                    n: 4, title: "Deploy backend + apply DB migration",
+                    cmd: "git pull && alembic upgrade head && restart uvicorn",
+                    desc: "Adds hls_status / hls_error columns used for transcode tracking and the Retry HLS button.",
+                  },
+                  {
+                    n: 5, title: "Verify in browser",
+                    cmd: "Hard refresh (Ctrl+Shift+R), upload a test video, watch the HLS badge: QUEUED → PROCESSING → HLS",
+                    desc: "Confirms the new CSP allows cdn.iinmedu.com media and the full pipeline works end-to-end.",
+                  },
+                ].map(item => (
+                  <div key={item.n} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "14px 16px", background: "#f8fafc", borderRadius: 10, border: "1px solid #f1f5f9" }}>
+                    <div style={{
+                      width: 24, height: 24, borderRadius: "50%", background: "#0f172a", color: "#fff",
+                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0,
+                    }}>{item.n}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{item.title}</p>
+                      <code style={{
+                        display: "block", marginTop: 6, fontSize: 11.5, color: "#0f172a", fontFamily: "monospace",
+                        background: "#fff", border: "1px solid #e2e8f0", borderRadius: 6, padding: "8px 10px",
+                        whiteSpace: "pre-wrap", wordBreak: "break-all",
+                      }}>{item.cmd}</code>
+                      <p style={{ margin: "6px 0 0", fontSize: 11.5, color: "#64748b", lineHeight: 1.5 }}>{item.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

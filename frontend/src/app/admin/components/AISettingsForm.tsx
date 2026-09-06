@@ -7,6 +7,7 @@ import { Icon } from "../icons";
 
 const API = `${API_BASE_URL}/settings/ai`;
 const MODELS_API = `${API_BASE_URL}/settings/ai/openrouter/models`;
+const IMAGE_MODELS_API = `${API_BASE_URL}/settings/ai/openrouter/image-models`;
 const TEST_API = `${API_BASE_URL}/settings/ai/openrouter/test`;
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -31,7 +32,25 @@ interface ORModel {
   supported_parameters: string[];
 }
 
+interface ORImageModel {
+  id: string;
+  name: string;
+  description: string;
+  architecture: {
+    input_modalities: string[];
+    output_modalities: string[];
+  };
+  supported_parameters: Record<string, { type: string; values?: string[] }>;
+  supports_streaming: boolean;
+  pricing: {
+    cost_per_image: number;
+    unit: string;
+  } | null;
+}
+
 interface AISettingsData {
+  gemini_api_key: string;
+  selected_model: string;
   openrouter_api_key: string;
   model_exam_text: string;
   model_image_reply: string;
@@ -200,12 +219,20 @@ export default function AISettingsForm() {
   const [testing, setTesting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [hasOpenRouterKey, setHasOpenRouterKey] = useState(false);
+  const [hasGeminiKey, setHasGeminiKey] = useState(false);
+  const [testingThumb, setTestingThumb] = useState(false);
+  const [imageModels, setImageModels] = useState<ORImageModel[]>([]);
+  const [loadingImageModels, setLoadingImageModels] = useState(false);
+  const [showImageModelPicker, setShowImageModelPicker] = useState(false);
+  const [imageModelSearch, setImageModelSearch] = useState("");
   const [models, setModels] = useState<ORModel[]>([]);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Filters>({ text: false, image: false, video: false, file: false, audio: false, reasoning: false, freeOnly: false });
   const [activeTab, setActiveTab] = useState<"setup" | "models" | "assign">("setup");
 
   const [settings, setSettings] = useState<AISettingsData>({
+    gemini_api_key: "",
+    selected_model: "",
     openrouter_api_key: "",
     model_exam_text: "",
     model_image_reply: "",
@@ -224,6 +251,8 @@ export default function AISettingsForm() {
         if (res.ok) {
           const data = await res.json();
           setSettings({
+            gemini_api_key: "",
+            selected_model: data.selected_model || "",
             openrouter_api_key: "",
             model_exam_text: data.model_exam_text || "",
             model_image_reply: data.model_image_reply || "",
@@ -235,6 +264,7 @@ export default function AISettingsForm() {
             is_active: data.is_active ?? true,
           });
           setHasOpenRouterKey(data.has_openrouter_key || false);
+          setHasGeminiKey(data.has_gemini_key || false);
         }
       } finally {
         setLoading(false);
@@ -253,6 +283,7 @@ export default function AISettingsForm() {
       });
       if (!res.ok) throw new Error("Failed to save settings");
       setHasOpenRouterKey(true);
+      if (settings.gemini_api_key) setHasGeminiKey(true);
       toast.success("AI settings saved successfully.");
     } catch (err: any) {
       toast.error(err.message);
@@ -301,6 +332,25 @@ export default function AISettingsForm() {
       toast.error("Network error while syncing models");
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const fetchImageModels = async () => {
+    setLoadingImageModels(true);
+    try {
+      const res = await apiFetch(IMAGE_MODELS_API);
+      if (res.ok) {
+        const data = await res.json();
+        setImageModels(data.data || []);
+        setShowImageModelPicker(true);
+      } else {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.detail || "Failed to fetch image models");
+      }
+    } catch {
+      toast.error("Network error while fetching image models");
+    } finally {
+      setLoadingImageModels(false);
     }
   };
 
@@ -427,6 +477,154 @@ export default function AISettingsForm() {
               </div>
             </form>
           </div>
+          <div style={{ ...card, padding: 32 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+              <Icon name="image" size={18} /> AI Thumbnail Generation (OpenRouter)
+            </h3>
+            <p style={{ margin: "0 0 20px", fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>
+              Uses OpenRouter's Image Generation API to create eye-catching AI thumbnails for course videos.
+              The AI uses the video title, description, and tags to generate a professional 16:9 thumbnail.
+              Your OpenRouter API key and credits are used.
+            </p>
+
+            {/* Selected model display + picker button */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#64748b", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.4px" }}>
+                Image Generation Model
+              </label>
+              {settings.selected_model ? (
+                <div style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "12px 16px", borderRadius: 10, border: "1.5px solid #ddd6fe",
+                  background: "#faf5ff",
+                }}>
+                  <div>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: "#7c3aed" }}>{settings.selected_model}</span>
+                    {(() => {
+                      const m = imageModels.find(x => x.id === settings.selected_model);
+                      if (m) return <span style={{ marginLeft: 8, fontSize: 12, color: "#64748b" }}>{m.name}</span>;
+                      return null;
+                    })()}
+                  </div>
+                  <button type="button" onClick={fetchImageModels} disabled={loadingImageModels}
+                    style={{ background: "#7c3aed", color: "#fff", border: "none", padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: loadingImageModels ? "wait" : "pointer", opacity: loadingImageModels ? 0.7 : 1 }}>
+                    {loadingImageModels ? "Loading..." : "Change Model"}
+                  </button>
+                </div>
+              ) : (
+                <button type="button" onClick={fetchImageModels} disabled={loadingImageModels || !hasOpenRouterKey}
+                  style={{
+                    width: "100%", padding: "14px 16px", borderRadius: 10,
+                    border: "1.5px dashed #c4b5fd", background: "#faf5ff",
+                    cursor: loadingImageModels || !hasOpenRouterKey ? "not-allowed" : "pointer",
+                    fontSize: 13, fontWeight: 600, color: "#7c3aed",
+                    opacity: loadingImageModels || !hasOpenRouterKey ? 0.5 : 1,
+                  }}>
+                  {loadingImageModels ? "Loading image models..." : !hasOpenRouterKey ? "⚠ Set OpenRouter API key first" : "Browse Image Generation Models →"}
+                </button>
+              )}
+              <p style={{ margin: "6px 0 0", fontSize: 11, color: "#94a3b8" }}>
+                This model is used when clicking "Generate with AI" on any video material thumbnail.
+              </p>
+            </div>
+
+            {/* Image model picker modal */}
+            {showImageModelPicker && (
+              <div style={{
+                position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 6000,
+                display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+              }} onClick={e => { if (e.target === e.currentTarget) setShowImageModelPicker(false); }}>
+                <div style={{
+                  background: "#fff", borderRadius: 14, width: "100%", maxWidth: 700,
+                  maxHeight: "80vh", display: "flex", flexDirection: "column", overflow: "hidden",
+                  boxShadow: "0 20px 60px rgba(0,0,0,.2)",
+                }}>
+                  <div style={{ padding: "16px 20px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0f172a" }}>Select Image Generation Model</h4>
+                    <button type="button" onClick={() => setShowImageModelPicker(false)}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", padding: 4 }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                  <div style={{ padding: "12px 20px", borderBottom: "1px solid #f1f5f9" }}>
+                    <input
+                      type="text" placeholder="Search models..."
+                      value={imageModelSearch}
+                      onChange={e => setImageModelSearch(e.target.value)}
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, outline: "none" }}
+                    />
+                  </div>
+                  <div style={{ flex: 1, overflowY: "auto" }}>
+                    {imageModels.length === 0 ? (
+                      <div style={{ padding: 40, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>
+                        No image models found. Make sure your OpenRouter API key is valid.
+                      </div>
+                    ) : (
+                      imageModels
+                        .filter(m => !imageModelSearch || m.name.toLowerCase().includes(imageModelSearch.toLowerCase()) || m.id.toLowerCase().includes(imageModelSearch.toLowerCase()))
+                        .map(m => (
+                          <div
+                            key={m.id}
+                            onClick={() => { setSettings(s => ({ ...s, selected_model: m.id })); setShowImageModelPicker(false); }}
+                            style={{
+                              padding: "14px 20px", borderBottom: "1px solid #f1f5f9", cursor: "pointer",
+                              display: "flex", justifyContent: "space-between", alignItems: "center",
+                              background: settings.selected_model === m.id ? "#f5f3ff" : "transparent",
+                              transition: "background 0.15s",
+                            }}
+                            onMouseEnter={e => { if (settings.selected_model !== m.id) e.currentTarget.style.background = "#f8fafc"; }}
+                            onMouseLeave={e => { if (settings.selected_model !== m.id) e.currentTarget.style.background = "transparent"; }}
+                          >
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{m.name}</div>
+                              <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{m.id}</div>
+                              {m.description && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{m.description.slice(0, 120)}</div>}
+                              {m.supported_parameters && Object.keys(m.supported_parameters).length > 0 && (
+                                <div style={{ marginTop: 6, display: "flex", gap: 4, flexWrap: "wrap" }}>
+                                  {Object.keys(m.supported_parameters).map(k => (
+                                    <span key={k} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "#f1f5f9", color: "#64748b", fontWeight: 600 }}>{k}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
+                              {m.pricing && m.pricing.cost_per_image !== undefined ? (
+                                <>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: m.pricing.cost_per_image === 0 ? "#16a34a" : "#0f172a" }}>
+                                    {m.pricing.cost_per_image === 0 ? "FREE" : `$${m.pricing.cost_per_image.toFixed(3)}`}
+                                  </div>
+                                  <div style={{ fontSize: 10, color: "#94a3b8" }}>per image</div>
+                                </>
+                              ) : (
+                                <span style={{ fontSize: 11, color: "#94a3b8" }}>See pricing</span>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+              <button type="button" onClick={handleSave} disabled={saving}
+                style={{ background: "#7c3aed", color: "#fff", border: "none", padding: "10px 22px", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, display: "flex", alignItems: "center", gap: 8 }}>
+                {saving ? "Saving..." : <><Icon name="save" size={16} /> Save Settings</>}
+              </button>
+              <span style={{ fontSize: 12, color: "#64748b" }}>
+                {hasOpenRouterKey && settings.selected_model ? "✓ AI thumbnails are ready to use" : hasOpenRouterKey ? "⚠ Select an image generation model" : "⚠ Set OpenRouter API key first"}
+              </span>
+            </div>
+            <div style={{ marginTop: 20, padding: "14px 18px", background: "#f5f3ff", borderRadius: 10, border: "1px solid #ddd6fe" }}>
+              <p style={{ margin: 0, fontSize: 12.5, color: "#6d28d9", lineHeight: 1.6 }}>
+                <b>How to use:</b> Go to <b>Curriculum → Media Library</b>, click <b>Edit</b> on any video material,
+                and click the <b>"Generate with AI ✨"</b> button in the thumbnail section.
+                The AI will create a custom thumbnail based on the video's title and description.
+              </p>
+            </div>
+          </div>
+
           <div style={{ ...card, padding: 32 }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
               <Icon name="help-circle" size={18} /> How to configure

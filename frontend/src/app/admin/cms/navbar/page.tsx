@@ -1,11 +1,12 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { AdminProvider } from "../../components/ProtectedAdmin";
 import { useToast } from "../../components/ToastProvider";
 import { apiFetch } from "@/lib/apiFetch";
 import { API_BASE_URL } from "@/lib/config";
 import { invalidateCache } from "@/lib/apiCache";
 import { Icon } from "../../icons";
+import NavbarIcon from "@/components/NavbarIcon";
 
 interface NavbarItem {
   id: number;
@@ -42,6 +43,39 @@ function NavbarCmsForm() {
   const [metaData, setMetaData] = useState("");
 
   const [expandedItems, setExpandedItems] = useState<Record<number, boolean>>({});
+
+  // Icon upload
+  const iconFileRef = useRef<HTMLInputElement>(null);
+  const [iconUploading, setIconUploading] = useState(false);
+
+  const handleIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIconUploading(true);
+    const token = typeof window !== "undefined" ? localStorage.getItem("iinm_device_token") : null;
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await apiFetch(`${API_BASE_URL}/settings/site/upload`, {
+        method: "POST",
+        headers: { "X-Device-Token": token || "" },
+        body: formData,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setIcon(data.url);
+        showToast("Icon uploaded", "success");
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.detail || "Icon upload failed", "error");
+      }
+    } catch {
+      showToast("Network error uploading icon", "error");
+    } finally {
+      setIconUploading(false);
+      if (iconFileRef.current) iconFileRef.current.value = "";
+    }
+  };
 
   const fetchNavbar = async () => {
     setLoading(true);
@@ -397,6 +431,7 @@ function NavbarCmsForm() {
             
             const sidebars = item.sub_items.filter(s => s.item_type === "sidebar_item");
             const footers = item.sub_items.filter(s => s.item_type === "footer_cta");
+            const directContents = item.sub_items.filter(s => s.item_type === "content_item");
 
             return (
               <div key={item.id} style={{ marginBottom: "12px" }}>
@@ -425,13 +460,22 @@ function NavbarCmsForm() {
                   
                   <div className="tree-actions">
                     {hasSub && (
-                      <button 
-                        onClick={() => openAddModal(item.id, "sidebar_item")} 
-                        className="cms-btn-secondary" 
-                        style={{ padding: "4px 10px", fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" }}
-                      >
-                        <Icon name="plus" size={10} /> Add Sidebar Section
-                      </button>
+                      <>
+                        <button 
+                          onClick={() => openAddModal(item.id, "content_item")} 
+                          className="cms-btn-secondary" 
+                          style={{ padding: "4px 10px", fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" }}
+                        >
+                          <Icon name="plus" size={10} /> Add Link
+                        </button>
+                        <button 
+                          onClick={() => openAddModal(item.id, "sidebar_item")} 
+                          className="cms-btn-secondary" 
+                          style={{ padding: "4px 10px", fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" }}
+                        >
+                          <Icon name="plus" size={10} /> Add Sidebar Section
+                        </button>
+                      </>
                     )}
                     <button 
                       onClick={() => openEditModal(item)} 
@@ -467,7 +511,9 @@ function NavbarCmsForm() {
                                     <Icon name={sidebarOpen ? "chevron-up" : "chevron-down"} size={10} />
                                   </button>
                                 )}
-                                <span style={{ fontSize: "14px" }}>{sidebar.icon || "•"}</span>
+                                <span style={{ fontSize: "14px", display: "inline-flex", alignItems: "center", color: "#0a1628" }}>
+                                  {sidebar.icon ? <NavbarIcon icon={sidebar.icon} size={16} /> : "•"}
+                                </span>
                                 <span style={{ fontWeight: 700 }}>{sidebar.title}</span>
                                 <span className="type-badge badge-sidebar">Sidebar Section</span>
                               </div>
@@ -498,6 +544,7 @@ function NavbarCmsForm() {
                                     <div key={sub.id} className="sub-item-card" style={{ borderLeft: "3px solid #e63946", marginBottom: "4px" }}>
                                       <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                          {sub.icon && <NavbarIcon icon={sub.icon} size={15} />}
                                           <span style={{ fontWeight: 800, color: "#0a1628", fontSize: "13px" }}>{sub.title}</span>
                                           {sub.badge && <span className="type-badge badge-content">{sub.badge}</span>}
                                           <span style={{ color: "#94a3b8", fontSize: "11px" }}>{sub.link}</span>
@@ -520,6 +567,34 @@ function NavbarCmsForm() {
                           </div>
                         );
                       })
+                    )}
+
+                    {/* Direct Content Links (simple 2-level dropdown) */}
+                    {directContents.length > 0 && (
+                      <div style={{ marginBottom: "12px" }}>
+                        <div className="sub-group-title">Direct Links</div>
+                        {directContents.map(sub => (
+                          <div key={sub.id} className="sub-item-card" style={{ borderLeft: "3px solid #e63946" }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                {sub.icon && <NavbarIcon icon={sub.icon} size={15} />}
+                                <span style={{ fontWeight: 800, color: "#0a1628", fontSize: "13px" }}>{sub.title}</span>
+                                {sub.badge && <span className="type-badge badge-content">{sub.badge}</span>}
+                                <span style={{ color: "#94a3b8", fontSize: "11px" }}>{sub.link}</span>
+                              </div>
+                              {sub.description && <span style={{ fontSize: "11.5px", color: "#64748b" }}>{sub.description}</span>}
+                            </div>
+                            <div style={{ display: "flex", gap: "6px" }}>
+                              <button onClick={() => openEditModal(sub)} style={{ border: "none", background: "none", color: "#64748b", cursor: "pointer" }}>
+                                <Icon name="edit" size={13} />
+                              </button>
+                              <button onClick={() => deleteItem(sub.id)} style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer" }}>
+                                <Icon name="trash" size={13} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     )}
 
                     {/* Footer CTA */}
@@ -631,17 +706,48 @@ function NavbarCmsForm() {
                   </div>
                 )}
 
-                {/* 5. Custom Icon (for sidebar elements) */}
-                {itemType === "sidebar_item" && (
+                {/* 5. Custom Icon (for submenu / sidebar elements) */}
+                {(itemType === "sidebar_item" || itemType === "content_item") && (
                   <div className="form-group">
-                    <label className="form-label">Unicode Emoji Icon</label>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      value={icon} 
-                      onChange={e => setIcon(e.target.value)} 
-                      placeholder="e.g. 🧠, 💼, 🏛️"
-                    />
+                    <label className="form-label">Submenu Icon</label>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <div style={{ flexShrink: 0, width: "36px", height: "36px", border: "1px solid #cbd5e1", borderRadius: "0", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fafc", color: "#0a1628" }}>
+                        {icon ? <NavbarIcon icon={icon} size={18} /> : <span style={{ fontSize: "10px", color: "#94a3b8" }}>None</span>}
+                      </div>
+                      <input
+                        type="text"
+                        className="form-input"
+                        style={{ flex: 1 }}
+                        value={icon}
+                        onChange={e => setIcon(e.target.value)}
+                        placeholder='lucide:code · material:school · https://cdn... · 🧠'
+                      />
+                      <button
+                        type="button"
+                        className="cms-btn-secondary"
+                        style={{ padding: "8px 12px", flexShrink: 0 }}
+                        onClick={() => iconFileRef.current?.click()}
+                        disabled={iconUploading}
+                      >
+                        {iconUploading ? "Uploading..." : "Upload"}
+                      </button>
+                      {icon && (
+                        <button type="button" onClick={() => setIcon("")} style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer", flexShrink: 0, padding: "4px" }} title="Clear icon">
+                          <Icon name="x" size={14} />
+                        </button>
+                      )}
+                      <input
+                        ref={iconFileRef}
+                        type="file"
+                        accept="image/*"
+                        style={{ display: "none" }}
+                        onChange={handleIconUpload}
+                      />
+                    </div>
+                    <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "6px", lineHeight: 1.5 }}>
+                      Formats: <b>lucide:code</b> (Lucide) · <b>material:school</b> (Material Symbols) · image URL / uploaded file · or paste an emoji.
+                      Browse: <a href="https://lucide.dev/icons" target="_blank" rel="noreferrer" style={{ color: "#e63946" }}>Lucide icons</a> · <a href="https://fonts.google.com/icons" target="_blank" rel="noreferrer" style={{ color: "#e63946" }}>Material icons</a>
+                    </div>
                   </div>
                 )}
 

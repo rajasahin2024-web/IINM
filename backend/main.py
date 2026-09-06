@@ -20,7 +20,7 @@ from typing import Optional
 from database import engine, SessionLocal, Base, get_db
 from cache import cache as app_cache
 from models import AdminUser, DeviceSession, DeviceAdminUser, Student
-from routers import courses, materials, questions, question_types, settings, comprehensions, topics, difficulty, batches, student, academic, progress, exams, dashboard, blogs, testimonials, contact, about, faq, leadership, invoice, slot_booking, seo, career, pages
+from routers import courses, materials, questions, question_types, settings, comprehensions, topics, difficulty, batches, student, academic, progress, exams, dashboard, blogs, testimonials, contact, about, faq, leadership, invoice, slot_booking, seo, career, pages, mission_vision, certification, our_team, sample_certificate, notices, verification
 from security import check_public_rate_limit, get_client_ip, verify_password
 
 # ── Database Setup ──────────────────────────────────────────────────────────
@@ -66,12 +66,22 @@ app.include_router(slot_booking.router)
 app.include_router(seo.router)
 app.include_router(career.router)
 app.include_router(pages.router)
+app.include_router(mission_vision.router)
+app.include_router(certification.router)
+app.include_router(our_team.router)
+app.include_router(sample_certificate.router)
+app.include_router(notices.router)
+app.include_router(verification.router)
 # Ensure upload directories exist
 os.makedirs("uploads", exist_ok=True)
+os.makedirs("uploads/sample_certificates", exist_ok=True)
 os.makedirs("uploads/materials", exist_ok=True)
 os.makedirs("uploads/thumbnails", exist_ok=True)
 os.makedirs("uploads/leadership", exist_ok=True)
+os.makedirs("uploads/team", exist_ok=True)
 os.makedirs("uploads/career", exist_ok=True)
+os.makedirs("uploads/mission-vision", exist_ok=True)
+os.makedirs("uploads/certifications", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 app.add_middleware(

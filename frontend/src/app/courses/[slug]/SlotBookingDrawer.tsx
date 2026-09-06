@@ -499,7 +499,12 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
   };
 
   const validateStep1 = (): boolean => {
-    if (!selectedBatchId) { setError("Please select a batch."); return false; }
+    if (!selectedBatchId) { setError("Please select an upcoming batch."); return false; }
+    const chosen = batches.find(b => b.id === selectedBatchId);
+    if (!chosen || chosen.status !== "Upcoming") {
+      setError("Please select an upcoming batch. Ongoing batches are already in progress and closed for booking.");
+      return false;
+    }
     setError("");
     return true;
   };
@@ -1093,12 +1098,12 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
                 </div>
               ) : (
                 <>
-                  {/* Active (Upcoming/Ongoing) batches — selectable */}
-                  {batches.filter(b => b.status === "Upcoming" || b.status === "Ongoing").length > 0 && (
+                  {/* Active Upcoming batches — selectable */}
+                  {batches.filter(b => b.status === "Upcoming").length > 0 ? (
                     <>
                       <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: "0 0 16px" }}>Select Your Batch</h3>
                       <div className="sb-batch-list">
-                        {batches.filter(b => b.status === "Upcoming" || b.status === "Ongoing").map(batch => {
+                        {batches.filter(b => b.status === "Upcoming").map(batch => {
                           const seatsClass = batch.seats_available > 10 ? "available" : batch.seats_available > 0 ? "filling" : "full";
                           const modeClass = (batch.mode || "online").toLowerCase();
                           const modeLabel = batch.mode === "Hybrid" ? "Pre-recorded + Live Class" : (batch.mode || "Online");
@@ -1120,6 +1125,53 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
                                 <span className={`sb-batch-seats ${seatsClass}`}>
                                   {batch.seats_available > 0 ? `${batch.seats_available} seats left` : batch.enable_waitlist ? "Waitlist available" : "Full"}
                                 </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ padding: "16px 20px", background: "#f8fafc", borderRadius: 12, border: "1px dashed #cbd5e1", textAlign: "center", marginBottom: 16 }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#64748b" }}>
+                        No upcoming batches open for slot booking right now.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Ongoing batches — in progress, not selectable */}
+                  {batches.filter(b => b.status === "Ongoing").length > 0 && (
+                    <>
+                      <div className="sb-ongoing-header">
+                        <span className="sb-ongoing-header-line" />
+                        <span className="sb-ongoing-header-text">Ongoing Batches</span>
+                        <span className="sb-ongoing-header-line" />
+                      </div>
+                      <div className="sb-batch-list">
+                        {batches.filter(b => b.status === "Ongoing").map(batch => {
+                          const fillPct = batch.max_capacity > 0 ? Math.round((batch.enrolled_count / batch.max_capacity) * 100) : 0;
+                          const modeLabel = batch.mode === "Hybrid" ? "Pre-recorded + Live Class" : (batch.mode || "Online");
+                          return (
+                            <div key={batch.id} className="sb-batch-card-ongoing" title="Classes currently in progress. Admissions are closed.">
+                              <div className="sb-ongoing-badge-pill">
+                                <span className="sb-ongoing-pulse-dot" />
+                                Ongoing
+                              </div>
+                              <div className="sb-ongoing-card-body">
+                                <div className="sb-ongoing-card-top">
+                                  <span className="sb-batch-name ongoing-name">{batch.name}</span>
+                                  <span className="sb-batch-mode-tag">{modeLabel}</span>
+                                </div>
+                                <div className="sb-batch-meta">
+                                  <span className="sb-batch-meta-item"><Icon.Calendar /> Started {formatDate(batch.start_date)}</span>
+                                  <span className="sb-batch-meta-item"><Icon.Users /> {batch.enrolled_count}/{batch.max_capacity} enrolled</span>
+                                </div>
+                                <div className="sb-batch-progress-wrap">
+                                  <div className="sb-batch-progress-bar">
+                                    <div className="sb-batch-progress-fill ongoing" style={{ width: `${fillPct}%` }} />
+                                  </div>
+                                  <span className="sb-ongoing-closed-text">Classes in progress · Admissions closed</span>
+                                </div>
                               </div>
                             </div>
                           );

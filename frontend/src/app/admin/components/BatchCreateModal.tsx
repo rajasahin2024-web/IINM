@@ -107,7 +107,7 @@ export default function BatchCreateModal({ onClose, onSuccess }: { onClose: () =
 
   const defaultForm = {
     course_id: "", name: "", mode: "live_class", meeting_url: "", status: "Upcoming",
-    start_date: "", end_date: "", max_capacity: 50,
+    start_date: "", end_date: "", max_capacity: 50, starting_count: 0,
     enable_waitlist: false, discount_amount: 0, enable_installments: false,
     instructor_ids: [] as number[], routines: [] as any[],
   };
@@ -216,6 +216,7 @@ export default function BatchCreateModal({ onClose, onSuccess }: { onClose: () =
         course_id:       parseInt(formData.course_id),
         discount_amount: formData.discount_amount ? parseFloat(formData.discount_amount as any) : 0,
         max_capacity:    parseInt(formData.max_capacity as any),
+        starting_count:  formData.starting_count ? parseInt(formData.starting_count as any) : 0,
         start_date:      formData.start_date || null,
         end_date:        formData.end_date   || null,
         content_drip:    drips,
@@ -357,17 +358,19 @@ export default function BatchCreateModal({ onClose, onSuccess }: { onClose: () =
                   </div>
                 ))}
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
                 {([
-                  { label: "Max Capacity",       key: "max_capacity"    as const },
-                  { label: "Batch Discount (\u20b9)", key: "discount_amount" as const },
-                ] as { label: string; key: "max_capacity" | "discount_amount" }[]).map(({ label, key }) => (
+                  { label: "Max Capacity",              key: "max_capacity"    as const },
+                  { label: "Already Enrolled Students", key: "starting_count"  as const },
+                  { label: "Batch Discount (\u20b9)",       key: "discount_amount" as const },
+                ] as { label: string; key: "max_capacity" | "starting_count" | "discount_amount" }[]).map(({ label, key }) => (
                   <div key={key} className="bi-sel-wrap">
                     <span className="bi-sel-label">{label}</span>
                     <input
                       type="number"
+                      min="0"
                       value={formData[key] as number}
-                      onChange={e => setFormData(f => ({ ...f, [key]: Number(e.target.value) }))}
+                      onChange={e => setFormData(f => ({ ...f, [key]: Math.max(0, Number(e.target.value)) }))}
                       style={{
                         width: "100%", padding: "10px 12px", borderRadius: 10,
                         border: "1.5px solid #e2e8f0", background: "#f8fafc",
@@ -382,6 +385,9 @@ export default function BatchCreateModal({ onClose, onSuccess }: { onClose: () =
                   </div>
                 ))}
               </div>
+              <p style={{ fontSize: 11, color: "#64748b", margin: "0 0 12px", lineHeight: 1.5 }}>
+                <strong style={{ color: "#0f172a" }}>Already Enrolled Students</strong> — Number of students shown as already enrolled on the public booking slot and admission pages.
+              </p>
               <div style={{ display: "flex", gap: 24 }}>
                 {([
                   { label: "Enable Waitlist",    key: "enable_waitlist"    as const },

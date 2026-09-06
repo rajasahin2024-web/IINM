@@ -110,10 +110,11 @@ export default function PublicFooter({
         // Fallback: use hardcoded groups if API fails
         setFooterGroups([
           { title: "Company", items: [
-            { title: "About", link: "/about-us" },
-            { title: "Careers", link: "/courses" },
+            { title: "About", link: "/about-iinm" },
+            { title: "Our Team", link: "/our-team" },
+            { title: "Careers", link: "/career" },
             { title: "Contact", link: "/contact-us" },
-            { title: "Blog", link: "/" },
+            { title: "Blog", link: "/blog" },
           ]},
           { title: "Resources", items: [
             { title: "Courses", link: "/courses" },
@@ -138,7 +139,9 @@ export default function PublicFooter({
           { title: "Career Building", items: [
             { title: "Career Paths", link: "/courses" },
             { title: "Interview Prep", link: "/contact-us" },
-            { title: "Certifications", link: "/courses" },
+            { title: "Certifications", link: "/certification" },
+            { title: "Sample Certificates", link: "/sample-certificate" },
+            { title: "Our Faculty & Team", link: "/our-team" },
             { title: "Placements", link: "/contact-us" },
           ]},
         ]);

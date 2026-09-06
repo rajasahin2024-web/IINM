@@ -82,6 +82,11 @@ export const adminMenuData: MenuItem[] = [
         href: "/admin/masters/leadership",
         icon: "star",
       },
+      {
+        label: "Notices",
+        href: "/admin/masters/notices",
+        icon: "bell",
+      },
     ],
   },
 

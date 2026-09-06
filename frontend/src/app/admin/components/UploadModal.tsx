@@ -1,6 +1,7 @@
 import React, { useState, useRef } from "react";
 import { apiFetch } from "@/lib/apiFetch";
 import { uploadWithProgress } from "@/lib/uploadWithProgress";
+import { uploadDirect } from "@/lib/uploadDirect";
 import { API_BASE_URL } from "@/lib/config";
 import { useToast } from "./ToastProvider";
 
@@ -133,12 +134,53 @@ export default function UploadModal({ onClose, onSuccess, existingTags }: Upload
     if (description.trim()) fd.append("description", description.trim());
     if (finalTags.length > 0) fd.append("tags", finalTags.join(","));
 
-    if (mode === "file") {
-      if (selectedFile) {
-        fd.append("file", selectedFile);
-        if (detectedType === "video" && selectedThumbnail) {
-          fd.append("thumbnail", selectedThumbnail);
+    let directFileUrl: string | null = null;
+    let directFileKey: string | null = null;
+
+    if (mode === "file" && selectedFile) {
+      if (detectedType === "video" && selectedThumbnail) {
+        fd.append("thumbnail", selectedThumbnail);
+      }
+
+      // ── Direct-to-R2 presigned upload (bypasses server body limits) ──
+      setLoading(true);
+      setUploadProgress(0);
+      try {
+        const presignRes = await apiFetch(`${API_BASE_URL}/materials/presign`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: selectedFile.name,
+            content_type: selectedFile.type || "application/octet-stream",
+            size: selectedFile.size,
+          }),
+        });
+        if (presignRes.ok) {
+          const presign = await presignRes.json();
+          const up = await uploadDirect(
+            presign.upload_url,
+            selectedFile,
+            selectedFile.type || "application/octet-stream",
+            (pct) => setUploadProgress(pct)
+          );
+          if (up.ok) {
+            directFileUrl = presign.file_url;
+            directFileKey = presign.file_key;
+            fd.append("file_url", presign.file_url);
+            fd.append("file_key", presign.file_key);
+          } else {
+            // Presigned PUT failed — fall back to multipart through the API
+            console.warn("Direct upload failed, falling back to multipart:", up.error);
+            fd.append("file", selectedFile);
+          }
+        } else {
+          // Presign rejected (storage not configured etc.) — multipart fallback
+          console.warn("Presign unavailable, falling back to multipart");
+          fd.append("file", selectedFile);
         }
+      } catch {
+        // Network error on presign — try multipart before giving up
+        fd.append("file", selectedFile);
       }
     } else {
       fd.append("youtube_url", youtubeUrl.trim());
@@ -149,12 +191,14 @@ export default function UploadModal({ onClose, onSuccess, existingTags }: Upload
     }
 
     setLoading(true);
-    setUploadProgress(0);
+    setUploadProgress(directFileUrl ? 100 : 0);
     try {
       const result = await uploadWithProgress(
         `${API_BASE_URL}/materials`,
         fd,
-        (pct) => setUploadProgress(pct)
+        (pct) => {
+          if (!directFileUrl) setUploadProgress(pct);
+        }
       );
       if (result.ok) {
         showToast("Upload successful!");
