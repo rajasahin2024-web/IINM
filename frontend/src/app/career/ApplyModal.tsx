@@ -164,6 +164,8 @@ export default function ApplyModal({ open, onClose, selectedJob, allJobs }: Appl
     ? allJobs.find(j => String(j.id) === form.job_post_id)?.title
     : null;
 
+  if (!open) return null;
+
   return (
     <div className="cr-modal-overlay" onClick={onClose}>
       <div className="cr-modal-dialog" onClick={e => e.stopPropagation()}>

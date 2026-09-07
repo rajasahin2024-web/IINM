@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Date, ForeignKey, Boolean, Float, Table, text
+from sqlalchemy import Column, Integer, String, Text, DateTime, Date, ForeignKey, Boolean, Float, Table, text, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database import Base
@@ -1698,6 +1698,21 @@ class CareerSettings(Base):
     updated_at               = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
 
+class CareerCategory(Base):
+    """Dynamic career category / sector / organization segment (e.g. Faculty, AI Tech, Corporate Partners)."""
+    __tablename__ = "career_categories"
+    id            = Column(Integer, primary_key=True, index=True)
+    name          = Column(String(255), nullable=False)
+    slug          = Column(String(255), unique=True, index=True, nullable=False)
+    description   = Column(Text, nullable=True)
+    icon          = Column(String(100), nullable=True)
+    badge_color   = Column(String(50), nullable=True)
+    is_active     = Column(Boolean, default=True)
+    display_order = Column(Integer, default=0)
+    created_at    = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at    = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
 class CareerPosition(Base):
     """Reusable role template (master) — e.g. Faculty, Counsellor."""
     __tablename__ = "career_positions"
@@ -1712,12 +1727,16 @@ class CareerPosition(Base):
 
 
 class CareerJobPost(Base):
-    """A published opening tied to a CareerPosition."""
+    """A published opening tied to a CareerCategory and optionally CareerPosition."""
     __tablename__ = "career_job_posts"
     id                  = Column(Integer, primary_key=True, index=True)
+    category_id         = Column(Integer, ForeignKey("career_categories.id", ondelete="SET NULL"), nullable=True, index=True)
     position_id         = Column(Integer, ForeignKey("career_positions.id", ondelete="SET NULL"), nullable=True, index=True)
     title               = Column(String(255), nullable=False)
     slug                = Column(String(255), unique=True, index=True, nullable=False)
+    featured_image_url  = Column(Text, nullable=True)
+    company_name        = Column(String(255), nullable=True)        # defaults to IINM or partner employer name
+    company_logo_url    = Column(Text, nullable=True)
     summary             = Column(Text, nullable=True)
     description         = Column(Text, nullable=True)
     requirements        = Column(Text, nullable=True)
@@ -1733,6 +1752,10 @@ class CareerJobPost(Base):
     application_deadline= Column(Date, nullable=True)
     status              = Column(String(20), default="open")        # open/closed/draft
     is_featured         = Column(Boolean, default=False)
+    is_pinned           = Column(Boolean, default=False, nullable=False)
+    tags                = Column(JSON, nullable=True, default=list) # e.g. ["Staff Nurse", "Govt Job", "ICU"]
+    application_type    = Column(String(20), default="internal", nullable=False) # internal (on-site modal) / external (redirect)
+    external_apply_url  = Column(Text, nullable=True)               # URL if application_type == external
     created_at          = Column(DateTime(timezone=True), server_default=func.now())
     updated_at          = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
     published_at        = Column(DateTime(timezone=True), nullable=True)

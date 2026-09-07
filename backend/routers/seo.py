@@ -20,7 +20,7 @@ from cache import cache
 from models import (
     SiteSettings, SeoPageMeta, Redirect, CourseFaq, Course,
     GscProperty, GscQueryStat, BlogPost, FAQ, CourseExtendedContent,
-    AISettings, SeoFooterDirectory,
+    AISettings, SeoFooterDirectory, CareerJobPost, CareerCategory,
 )
 from routers.auth import require_device
 from helpers import rewrite_url
@@ -584,9 +584,18 @@ def _auto_generate_llms_txt(db: Session) -> str:
         if slug:
             lines.append(f"- [{title}]({base}/blog/{slug})")
     lines.append("")
+    lines.append("## Career & Job Openings")
+    jobs = db.query(CareerJobPost).filter(CareerJobPost.status == "open").order_by(CareerJobPost.is_featured.desc(), CareerJobPost.id.desc()).all()
+    for j in jobs:
+        jtitle = j.title or "Job Opening"
+        jslug = j.slug or ""
+        if jslug:
+            lines.append(f"- [{jtitle}]({base}/career/{jslug})")
+    lines.append("")
     lines.append("## About")
     lines.append(f"- [About Us]({base}/about-us)")
     lines.append(f"- [Contact Us]({base}/contact-us)")
+    lines.append(f"- [Careers]({base}/career)")
     lines.append("")
     lines.append("## FAQs")
     faqs = db.query(FAQ).filter(FAQ.is_active == True).order_by(FAQ.order_index.asc()).limit(20).all()
@@ -646,6 +655,26 @@ def _auto_generate_llms_full(db: Session) -> str:
             parts.append(f"Summary: {_strip_html(p.excerpt)[:300]}")
         if p.content:
             parts.append(f"Content: {_strip_html(p.content)[:2000]}")
+        parts.append("")
+
+    # Career Opportunities
+    parts.append("## Career & Job Openings")
+    parts.append("")
+    open_jobs = db.query(CareerJobPost).filter(CareerJobPost.status == "open").order_by(CareerJobPost.is_featured.desc(), CareerJobPost.id.desc()).all()
+    for oj in open_jobs:
+        parts.append(f"### {oj.title}")
+        if oj.slug:
+            parts.append(f"URL: {base}/career/{oj.slug}")
+        if oj.company_name:
+            parts.append(f"Company: {oj.company_name}")
+        if oj.location:
+            parts.append(f"Location: {oj.location}")
+        if oj.job_type:
+            parts.append(f"Job Type: {oj.job_type}")
+        if oj.summary:
+            parts.append(f"Summary: {_strip_html(oj.summary)[:400]}")
+        if oj.requirements:
+            parts.append(f"Requirements: {_strip_html(oj.requirements)[:600]}")
         parts.append("")
 
     # Global FAQs

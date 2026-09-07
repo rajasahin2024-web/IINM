@@ -17,6 +17,7 @@ Admin endpoints (require_device):
 """
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, Response
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 from datetime import date, datetime
@@ -26,6 +27,7 @@ from database import get_db
 from cache import cache
 from models import (
     CareerSettings,
+    CareerCategory,
     CareerPosition,
     CareerJobPost,
     CareerApplication,
@@ -33,7 +35,15 @@ from models import (
 )
 from routers.auth import require_device
 from helpers import rewrite_url
-from security import validate_upload, ALLOWED_DOC_EXTENSIONS, MAX_GENERAL_SIZE_BYTES, check_public_rate_limit, get_client_ip
+from security import (
+    validate_upload,
+    ALLOWED_DOC_EXTENSIONS,
+    ALLOWED_IMAGE_EXTENSIONS,
+    MAX_IMAGE_SIZE_BYTES,
+    MAX_GENERAL_SIZE_BYTES,
+    check_public_rate_limit,
+    get_client_ip,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +153,21 @@ def _settings_out(s: Optional[CareerSettings]) -> dict:
     }
 
 
+def _category_out(c: CareerCategory, job_count: int = 0) -> dict:
+    return {
+        "id": c.id,
+        "name": c.name,
+        "slug": c.slug,
+        "description": c.description,
+        "icon": c.icon,
+        "badge_color": c.badge_color,
+        "is_active": bool(c.is_active),
+        "display_order": c.display_order or 0,
+        "job_count": job_count,
+        "created_at": c.created_at.isoformat() if c.created_at else None,
+    }
+
+
 def _position_out(p: CareerPosition) -> dict:
     return {
         "id": p.id, "title": p.title, "slug": p.slug,
@@ -152,13 +177,38 @@ def _position_out(p: CareerPosition) -> dict:
     }
 
 
-def _job_out(j: CareerJobPost, position_title: Optional[str] = None) -> dict:
+def _clean_tags(val) -> list:
+    if isinstance(val, list):
+        return [str(t).strip() for t in val if str(t).strip()]
+    if isinstance(val, str) and val.strip():
+        try:
+            parsed = json.loads(val)
+            if isinstance(parsed, list):
+                return [str(t).strip() for t in parsed if str(t).strip()]
+        except Exception:
+            pass
+        return [t.strip() for t in val.split(",") if t.strip()]
+    return []
+
+
+def _job_out(
+    j: CareerJobPost,
+    position_title: Optional[str] = None,
+    category_name: Optional[str] = None,
+    category_slug: Optional[str] = None,
+) -> dict:
     return {
         "id": j.id,
+        "category_id": j.category_id,
+        "category_name": category_name,
+        "category_slug": category_slug,
         "position_id": j.position_id,
         "position_title": position_title,
         "title": j.title,
         "slug": j.slug,
+        "featured_image_url": rewrite_url(j.featured_image_url),
+        "company_name": j.company_name or "IINM",
+        "company_logo_url": rewrite_url(j.company_logo_url),
         "summary": j.summary,
         "description": j.description,
         "requirements": j.requirements,
@@ -174,6 +224,10 @@ def _job_out(j: CareerJobPost, position_title: Optional[str] = None) -> dict:
         "application_deadline": j.application_deadline.isoformat() if j.application_deadline else None,
         "status": j.status,
         "is_featured": bool(j.is_featured),
+        "is_pinned": bool(getattr(j, "is_pinned", False)),
+        "tags": _clean_tags(getattr(j, "tags", [])),
+        "application_type": getattr(j, "application_type", "internal") or "internal",
+        "external_apply_url": getattr(j, "external_apply_url", None),
         "created_at": j.created_at.isoformat() if j.created_at else None,
         "updated_at": j.updated_at.isoformat() if j.updated_at else None,
         "published_at": j.published_at.isoformat() if j.published_at else None,
@@ -232,6 +286,16 @@ class CareerSettingsSchema(BaseModel):
     email_to_notify: Optional[str] = None
 
 
+class CategorySchema(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    slug: Optional[str] = None
+    description: Optional[str] = None
+    icon: Optional[str] = Field(None, max_length=100)
+    badge_color: Optional[str] = Field(None, max_length=50)
+    is_active: Optional[bool] = True
+    display_order: Optional[int] = 0
+
+
 class PositionSchema(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     slug: Optional[str] = None
@@ -241,9 +305,13 @@ class PositionSchema(BaseModel):
 
 
 class JobPostSchema(BaseModel):
+    category_id: Optional[int] = None
     position_id: Optional[int] = None
     title: str = Field(..., min_length=1, max_length=255)
     slug: Optional[str] = None
+    featured_image_url: Optional[str] = None
+    company_name: Optional[str] = Field("IINM", max_length=255)
+    company_logo_url: Optional[str] = None
     summary: Optional[str] = None
     description: Optional[str] = None
     requirements: Optional[str] = None
@@ -259,6 +327,10 @@ class JobPostSchema(BaseModel):
     application_deadline: Optional[date] = None
     status: Optional[str] = Field("open", max_length=20)
     is_featured: Optional[bool] = False
+    is_pinned: Optional[bool] = False
+    tags: Optional[List[str]] = Field(default_factory=list)
+    application_type: Optional[str] = Field("internal", max_length=20)
+    external_apply_url: Optional[str] = None
 
 
 class JobStatusSchema(BaseModel):
@@ -306,6 +378,326 @@ async def update_career_settings(
     db.refresh(s)
     cache.invalidate("career_settings")
     return {"message": "Career settings updated successfully."}
+
+
+# ══════════════════════════════════════════════════════
+#  CATEGORIES & SEEDER — Public + Admin
+# ══════════════════════════════════════════════════════
+
+def _seed_default_career_data(db: Session, force_jobs: bool = False):
+    """Seeds authentic Indian Government, Corporate Hospital, Faculty & Paramedical categories, positions, and sample jobs."""
+    default_cats = [
+        {"name": "Central & State Government Healthcare", "slug": "government-healthcare", "desc": "Official government recruitment, AIIMS, ESIC, Railway, and State Health Board vacancies.", "color": "#059669", "icon": "landmark", "order": 1},
+        {"name": "Corporate & Multi-Specialty Hospitals", "slug": "corporate-hospitals", "desc": "Positions across private corporate healthcare networks, Apollo, Fortis, and accredited hospitals.", "color": "#1d4ed8", "icon": "building", "order": 2},
+        {"name": "Nursing & Academic Faculty", "slug": "nursing-faculty", "desc": "Teaching faculty, clinical tutors, professors, and lab demonstrator openings at IINM and partner institutions.", "color": "#7c3aed", "icon": "graduation-cap", "order": 3},
+        {"name": "Paramedical & Allied Health Sciences", "slug": "paramedical-allied", "desc": "Medical laboratory, radiology, OT technology, emergency care, and dialysis technicians.", "color": "#0284c7", "icon": "activity", "order": 4},
+        {"name": "Healthcare Administration & Operations", "slug": "healthcare-administration", "desc": "Hospital operations, patient care coordination, quality assurance, and NABH compliance.", "color": "#d97706", "icon": "briefcase", "order": 5},
+        {"name": "Diagnostic & Pathology Laboratories", "slug": "diagnostic-labs", "desc": "Clinical research, sample processing, pathology centers, and molecular diagnostics.", "color": "#e11d48", "icon": "flask", "order": 6},
+    ]
+    cat_map = {}
+    for item in default_cats:
+        cat = db.query(CareerCategory).filter(CareerCategory.slug == item["slug"]).first()
+        if not cat:
+            cat = CareerCategory(
+                name=item["name"],
+                slug=item["slug"],
+                description=item["desc"],
+                badge_color=item["color"],
+                icon=item["icon"],
+                is_active=True,
+                display_order=item["order"],
+            )
+            db.add(cat)
+            db.commit()
+            db.refresh(cat)
+        cat_map[item["slug"]] = cat
+
+    default_positions = [
+        {"title": "Staff Nurse (ICU & Critical Care)", "slug": "staff-nurse-icu", "dept": "Critical Care"},
+        {"title": "Nursing Tutor & Clinical Instructor", "slug": "nursing-tutor", "dept": "Nursing Education"},
+        {"title": "Assistant Professor (Medical-Surgical)", "slug": "assistant-professor-nursing", "dept": "Academic Faculty"},
+        {"title": "Operation Theatre Technician (Senior OT Tech)", "slug": "senior-ot-technician", "dept": "Surgery & OT"},
+        {"title": "Medical Laboratory Technologist (DMLT / BMLT)", "slug": "medical-lab-technologist", "dept": "Laboratory Medicine"},
+        {"title": "Radiographer & Imaging Specialist", "slug": "radiographer-imaging-specialist", "dept": "Radiology"},
+        {"title": "Hospital Quality & NABH Coordinator", "slug": "hospital-quality-nabh-coordinator", "dept": "Administration"},
+        {"title": "Community Health Officer (CHO)", "slug": "community-health-officer", "dept": "Public Health"},
+    ]
+    pos_map = {}
+    for p in default_positions:
+        pos = db.query(CareerPosition).filter(CareerPosition.slug == p["slug"]).first()
+        if not pos:
+            pos = CareerPosition(
+                title=p["title"],
+                slug=p["slug"],
+                department=p["dept"],
+                description=f"Standard role template for {p['title']}",
+                is_active=True,
+            )
+            db.add(pos)
+            db.commit()
+            db.refresh(pos)
+        pos_map[p["slug"]] = pos
+
+    if force_jobs or db.query(CareerJobPost).count() == 0:
+        sample_jobs = [
+            {
+                "title": "Staff Nurse (ICU & Critical Care)",
+                "slug": "staff-nurse-icu-critical-care",
+                "cat_slug": "government-healthcare",
+                "pos_slug": "staff-nurse-icu",
+                "company": "AIIMS & Partner Public Hospitals",
+                "company_logo": "",
+                "summary": "Urgent recruitment for Staff Nurses in Intensive Care and Emergency Critical Care units with attractive salary and allowances.",
+                "description": "The Indian Institute of Nursing & Paramedical is facilitating partner recruitment for Staff Nurse Grade-II positions. Selected candidates will oversee critical patient monitoring, ventilator support management, and emergency clinical administration.",
+                "requirements": "• GNM or B.Sc Nursing from an INC recognized institution\n• Active State Nursing Council Registration (WBNC or other State Council)\n• 1+ years experience in ICU / CCU / Emergency preferred (Freshers eligible for Junior grade)\n• Good communication and patient care dedication",
+                "responsibilities": "• Managing bedside critical care, vital monitoring, and medical record documentation\n• Administering medication, IV fluids, and physician-prescribed interventions\n• Collaborating with multi-disciplinary medical teams during resuscitation and procedures\n• Adhering to hospital infection control and NABH protocols",
+                "location": "Kolkata & Kalyani, West Bengal",
+                "job_type": "full_time",
+                "exp_min": 1, "exp_max": 4,
+                "sal_min": 450000, "sal_max": 750000,
+                "vacancies": 8,
+                "tags": ["Staff Nurse", "Critical Care", "ICU", "Govt Sector", "Full-time"],
+                "featured": True,
+                "app_type": "external",
+                "ext_url": "https://www.aiimskalyani.edu.in",
+            },
+            {
+                "title": "Nursing Faculty & Clinical Tutor (GNM & B.Sc)",
+                "slug": "nursing-faculty-clinical-tutor",
+                "cat_slug": "nursing-faculty",
+                "pos_slug": "nursing-tutor",
+                "company": "Indian Institute of Nursing & Paramedical",
+                "company_logo": "",
+                "summary": "Join our academic team as a Clinical Tutor and Nursing Lecturer. Teach theory and clinical skills to GNM and B.Sc Nursing batches.",
+                "description": "IINM invites passionate nursing educators to join our faculty team in Kolkata. This role combines classroom teaching, simulation lab demonstrations, and hospital clinical round supervision.",
+                "requirements": "• M.Sc Nursing or B.Sc Nursing with 2+ years of teaching/clinical experience\n• Valid Nursing Council registration\n• Strong grasp of Anatomy, Physiology, Medical-Surgical Nursing, and Pediatrics\n• Proficiency in English and Bengali",
+                "responsibilities": "• Delivering curriculum lectures, lesson plans, and clinical skills training\n• Guiding students during hospital postings and hands-on laboratory sessions\n• Conducting internal assessments, viva examinations, and student counseling\n• Contributing to college academic committee and accreditation records",
+                "location": "IINM Campus, Kolkata",
+                "job_type": "full_time",
+                "exp_min": 2, "exp_max": 6,
+                "sal_min": 420000, "sal_max": 680000,
+                "vacancies": 3,
+                "tags": ["Faculty", "Nursing Tutor", "Academic", "B.Sc Nursing", "M.Sc Nursing"],
+                "featured": True,
+            },
+            {
+                "title": "Senior Medical Laboratory Technologist (Pathology & Biochemistry)",
+                "slug": "senior-medical-lab-technologist",
+                "cat_slug": "paramedical-allied",
+                "pos_slug": "medical-lab-technologist",
+                "company": "Apollo & Diagnostic Network Partners",
+                "company_logo": "",
+                "summary": "Experienced MLT required for automated diagnostic testing, biochemistry analyzers, and quality control supervision.",
+                "description": "Diagnostic partner hiring Senior Medical Lab Technicians to operate state-of-the-art hematology and biochemistry analyzers in Kolkata. Opportunities for growth into Section Head.",
+                "requirements": "• DMLT or BMLT from a recognized state medical faculty / university\n• 1 to 3 years hands-on experience in automated analyzers\n• Knowledge of NABL documentation and calibration protocols",
+                "responsibilities": "• Sample collection, processing, and routine diagnostic testing\n• Daily calibration, internal quality control (IQC), and equipment maintenance\n• Preparing accurate diagnostic reports and managing laboratory information systems",
+                "location": "Kolkata, West Bengal",
+                "job_type": "full_time",
+                "exp_min": 1, "exp_max": 3,
+                "sal_min": 320000, "sal_max": 540000,
+                "vacancies": 4,
+                "tags": ["Paramedical", "MLT", "Pathology", "Corporate Hospital", "Hematology"],
+                "featured": False,
+            },
+            {
+                "title": "Operation Theatre Technician (Senior OT Tech)",
+                "slug": "senior-ot-technician-surgery",
+                "cat_slug": "corporate-hospitals",
+                "pos_slug": "senior-ot-technician",
+                "company": "Multi-Specialty Healthcare Partner",
+                "company_logo": "",
+                "summary": "Assisting surgical and anesthesia teams across advanced laparoscopy, general surgery, and orthopedics OT suites.",
+                "description": "Premier corporate hospital seeking certified OT Technicians to support surgical teams, sterile prep, anesthesia workstation readiness, and intra-operative equipment handling.",
+                "requirements": "• Diploma or Degree in Operation Theatre Technology (DOTT / B.Sc OTT)\n• 2+ years of surgical OT experience\n• Thorough understanding of aseptic techniques and emergency surgical protocols",
+                "responsibilities": "• Sterilization, fumigation, and readiness of OT suites and surgical instruments\n• Assisting surgeons and anesthesiologists before, during, and after surgical procedures\n• Operating suction apparatus, electrocautery, laparoscopy towers, and patient monitors",
+                "location": "Kolkata, West Bengal",
+                "job_type": "full_time",
+                "exp_min": 2, "exp_max": 5,
+                "sal_min": 300000, "sal_max": 480000,
+                "vacancies": 5,
+                "tags": ["OT Tech", "Operation Theatre", "Surgery", "Healthcare", "Full-time"],
+                "featured": False,
+            },
+        ]
+        for sj in sample_jobs:
+            if not db.query(CareerJobPost).filter(CareerJobPost.slug == sj["slug"]).first():
+                cat = cat_map.get(sj["cat_slug"])
+                pos = pos_map.get(sj["pos_slug"])
+                job = CareerJobPost(
+                    category_id=cat.id if cat else None,
+                    position_id=pos.id if pos else None,
+                    title=sj["title"],
+                    slug=sj["slug"],
+                    company_name=sj["company"],
+                    company_logo_url=sj["company_logo"],
+                    summary=sj["summary"],
+                    description=sj["description"],
+                    requirements=sj["requirements"],
+                    responsibilities=sj["responsibilities"],
+                    location=sj["location"],
+                    job_type=sj["job_type"],
+                    experience_min=sj["exp_min"],
+                    experience_max=sj["exp_max"],
+                    salary_min=sj["sal_min"],
+                    salary_max=sj["sal_max"],
+                    salary_currency="INR",
+                    vacancies=sj["vacancies"],
+                    status="open",
+                    is_featured=sj["featured"],
+                    is_pinned=sj.get("is_pinned", False),
+                    tags=sj["tags"],
+                    application_type=sj.get("app_type", "internal"),
+                    external_apply_url=sj.get("ext_url", None),
+                    published_at=datetime.utcnow(),
+                )
+                db.add(job)
+                db.commit()
+
+
+@router.post("/admin/seed-defaults")
+async def seed_career_defaults(device: str = Depends(require_device), db: Session = Depends(get_db)):
+    """Admin: Seed authentic Indian Government, Corporate Healthcare, Faculty & Paramedical categories, positions, and sample jobs."""
+    try:
+        _seed_default_career_data(db, force_jobs=True)
+        cache.invalidate("career_categories_public")
+        cache.invalidate("career_jobs_public")
+        return {"message": "Sample career categories, positions, and jobs successfully seeded."}
+    except Exception as e:
+        logger.exception("Failed to seed career defaults")
+        raise HTTPException(500, f"Seeding failed: {str(e)}")
+
+
+@router.get("/categories")
+async def list_public_categories(response: Response, db: Session = Depends(get_db)):
+    """Public: active career categories with count of open jobs."""
+    response.headers["Cache-Control"] = "public, max-age=60"
+    cached = cache.get("career_categories_public")
+    if cached is not None:
+        return cached
+    if db.query(CareerCategory).count() == 0:
+        try:
+            _seed_default_career_data(db)
+        except Exception as e:
+            logger.warning(f"Auto-seed career categories failed: {e}")
+    cats = db.query(CareerCategory).filter(CareerCategory.is_active == True).order_by(CareerCategory.display_order.asc(), CareerCategory.name.asc()).all()
+    # Optimized single aggregation query instead of N queries
+    job_counts = dict(
+        db.query(CareerJobPost.category_id, func.count(CareerJobPost.id))
+        .filter(CareerJobPost.status == "open", CareerJobPost.category_id.isnot(None))
+        .group_by(CareerJobPost.category_id)
+        .all()
+    )
+    out = [_category_out(c, job_count=job_counts.get(c.id, 0)) for c in cats]
+    cache.set("career_categories_public", out)
+    return out
+
+
+@router.get("/categories/all")
+async def list_all_categories(device: str = Depends(require_device), db: Session = Depends(get_db)):
+    """Admin: all career categories with total job counts."""
+    if db.query(CareerCategory).count() == 0:
+        try:
+            _seed_default_career_data(db)
+        except Exception as e:
+            logger.warning(f"Auto-seed career categories failed: {e}")
+    cats = db.query(CareerCategory).order_by(CareerCategory.display_order.asc(), CareerCategory.created_at.desc()).all()
+    # Optimized single aggregation query
+    job_counts = dict(
+        db.query(CareerJobPost.category_id, func.count(CareerJobPost.id))
+        .filter(CareerJobPost.category_id.isnot(None))
+        .group_by(CareerJobPost.category_id)
+        .all()
+    )
+    return [_category_out(c, job_count=job_counts.get(c.id, 0)) for c in cats]
+
+
+@router.post("/categories")
+async def create_category(req: CategorySchema, device: str = Depends(require_device), db: Session = Depends(get_db)):
+    slug = slugify(req.slug or req.name)
+    slug = _ensure_unique_slug(db, CareerCategory, slug)
+    c = CareerCategory(
+        name=req.name.strip(),
+        slug=slug,
+        description=req.description,
+        icon=req.icon,
+        badge_color=req.badge_color,
+        is_active=req.is_active if req.is_active is not None else True,
+        display_order=req.display_order or 0,
+    )
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    cache.invalidate("career_categories_public")
+    return _category_out(c)
+
+
+@router.put("/categories/{category_id}")
+async def update_category(category_id: int, req: CategorySchema, device: str = Depends(require_device), db: Session = Depends(get_db)):
+    c = db.query(CareerCategory).filter(CareerCategory.id == category_id).first()
+    if not c:
+        raise HTTPException(404, "Category not found")
+    c.name = req.name.strip()
+    if req.slug and req.slug != c.slug:
+        c.slug = _ensure_unique_slug(db, CareerCategory, slugify(req.slug), exclude_id=c.id)
+    c.description = req.description
+    c.icon = req.icon
+    c.badge_color = req.badge_color
+    if req.is_active is not None:
+        c.is_active = req.is_active
+    if req.display_order is not None:
+        c.display_order = req.display_order
+    db.commit()
+    db.refresh(c)
+    cache.invalidate("career_categories_public")
+    cache.invalidate("career_jobs_public")
+    return _category_out(c)
+
+
+@router.delete("/categories/{category_id}")
+async def delete_category(category_id: int, device: str = Depends(require_device), db: Session = Depends(get_db)):
+    c = db.query(CareerCategory).filter(CareerCategory.id == category_id).first()
+    if not c:
+        raise HTTPException(404, "Category not found")
+    db.delete(c)
+    db.commit()
+    cache.invalidate("career_categories_public")
+    cache.invalidate("career_jobs_public")
+    return {"message": "Category deleted"}
+
+
+@router.patch("/categories/{category_id}/toggle")
+async def toggle_category(category_id: int, device: str = Depends(require_device), db: Session = Depends(get_db)):
+    c = db.query(CareerCategory).filter(CareerCategory.id == category_id).first()
+    if not c:
+        raise HTTPException(404, "Category not found")
+    c.is_active = not c.is_active
+    db.commit()
+    cache.invalidate("career_categories_public")
+    return {"id": c.id, "is_active": bool(c.is_active)}
+
+
+# ══════════════════════════════════════════════════════
+#  IMAGE UPLOAD — Admin
+# ══════════════════════════════════════════════════════
+
+@router.post("/upload-image")
+async def upload_career_image(
+    file: UploadFile = File(...),
+    device: str = Depends(require_device),
+    db: Session = Depends(get_db),
+):
+    """Admin: upload featured image or company logo for career."""
+    ext = validate_upload(file, ALLOWED_IMAGE_EXTENSIONS, MAX_IMAGE_SIZE_BYTES)
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    filename = f"{uuid.uuid4().hex}{ext}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+    content = await file.read()
+    with open(filepath, "wb") as buf:
+        buf.write(content)
+    local_url = f"/{UPLOAD_DIR}/{filename}"
+    r2_url = _try_upload_to_r2(content, f"career/{filename}", file.content_type, db)
+    url = r2_url or local_url
+    return {"url": url, "filename": file.filename}
 
 
 # ══════════════════════════════════════════════════════
@@ -393,36 +785,67 @@ async def toggle_position(position_id: int, device: str = Depends(require_device
 #  JOB POSTS — Public + Admin
 # ══════════════════════════════════════════════════════
 
-def _job_with_position(db: Session, j: CareerJobPost) -> dict:
+def _job_with_details(
+    db: Session,
+    j: CareerJobPost,
+    pos_map: Optional[dict] = None,
+    cat_map: Optional[dict] = None,
+) -> dict:
     pos_title = None
     if j.position_id:
-        pos = db.query(CareerPosition).filter(CareerPosition.id == j.position_id).first()
-        if pos:
-            pos_title = pos.title
-    return _job_out(j, pos_title)
+        if pos_map is not None:
+            pos_title = pos_map.get(j.position_id)
+        else:
+            pos = db.query(CareerPosition).filter(CareerPosition.id == j.position_id).first()
+            if pos:
+                pos_title = pos.title
+    cat_name, cat_slug = None, None
+    if j.category_id:
+        if cat_map is not None:
+            cat_tuple = cat_map.get(j.category_id)
+            if cat_tuple:
+                cat_name, cat_slug = cat_tuple
+        else:
+            cat = db.query(CareerCategory).filter(CareerCategory.id == j.category_id).first()
+            if cat:
+                cat_name = cat.name
+                cat_slug = cat.slug
+    return _job_out(j, pos_title, cat_name, cat_slug)
 
 
 @router.get("/jobs")
-async def list_public_jobs(response: Response, db: Session = Depends(get_db)):
-    """Public: published open job posts."""
-    response.headers["Cache-Control"] = "public, max-age=60"
-    cached = cache.get("career_jobs_public")
+async def list_public_jobs(category: Optional[str] = None, tag: Optional[str] = None, response: Response = None, db: Session = Depends(get_db)):
+    """Public: published open job posts, optionally filtered by category slug or tag."""
+    if response:
+        response.headers["Cache-Control"] = "public, max-age=60"
+    cache_key = f"career_jobs_public_{category or 'all'}_{tag or 'all'}"
+    cached = cache.get(cache_key)
     if cached is not None:
         return cached
+    q = db.query(CareerJobPost).filter(CareerJobPost.status == "open")
+    if category and category != "all":
+        cat = db.query(CareerCategory).filter(CareerCategory.slug == category).first()
+        if cat:
+            q = q.filter(CareerJobPost.category_id == cat.id)
     items = (
-        db.query(CareerJobPost)
-        .filter(CareerJobPost.status == "open")
-        .order_by(CareerJobPost.is_featured.desc(), CareerJobPost.published_at.desc(), CareerJobPost.created_at.desc())
+        q.order_by(CareerJobPost.is_pinned.desc(), CareerJobPost.is_featured.desc(), CareerJobPost.published_at.desc(), CareerJobPost.created_at.desc())
         .all()
     )
-    result = [_job_with_position(db, j) for j in items]
-    cache.set("career_jobs_public", result)
+    if tag and tag.strip():
+        t_low = tag.lower().strip()
+        items = [j for j in items if any(t_low == t.lower() or t_low in t.lower() for t in _clean_tags(getattr(j, "tags", [])))]
+    # Batch lookup maps to eliminate N+1 queries
+    pos_map = {p.id: p.title for p in db.query(CareerPosition.id, CareerPosition.title).all()}
+    cat_map = {c.id: (c.name, c.slug) for c in db.query(CareerCategory.id, CareerCategory.name, CareerCategory.slug).all()}
+    result = [_job_with_details(db, j, pos_map=pos_map, cat_map=cat_map) for j in items]
+    cache.set(cache_key, result)
     return result
 
 
 @router.get("/jobs/all")
 async def list_all_jobs(
     status: Optional[str] = None,
+    category_id: Optional[int] = None,
     page: int = 1,
     limit: int = 50,
     device: str = Depends(require_device),
@@ -431,13 +854,17 @@ async def list_all_jobs(
     q = db.query(CareerJobPost)
     if status:
         q = q.filter(CareerJobPost.status == status)
+    if category_id:
+        q = q.filter(CareerJobPost.category_id == category_id)
     total = q.count()
-    items = q.order_by(CareerJobPost.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
+    items = q.order_by(CareerJobPost.is_pinned.desc(), CareerJobPost.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
+    pos_map = {p.id: p.title for p in db.query(CareerPosition.id, CareerPosition.title).all()}
+    cat_map = {c.id: (c.name, c.slug) for c in db.query(CareerCategory.id, CareerCategory.name, CareerCategory.slug).all()}
     return {
         "total": total,
         "page": page,
         "pages": (total + limit - 1) // limit,
-        "items": [_job_with_position(db, j) for j in items],
+        "items": [_job_with_details(db, j, pos_map=pos_map, cat_map=cat_map) for j in items],
     }
 
 
@@ -452,7 +879,7 @@ async def get_public_job(slug: str, response: Response, db: Session = Depends(ge
     j = db.query(CareerJobPost).filter(CareerJobPost.slug == slug, CareerJobPost.status == "open").first()
     if not j:
         raise HTTPException(404, "Job post not found")
-    result = _job_with_position(db, j)
+    result = _job_with_details(db, j)
     cache.set(cache_key, result)
     return result
 
@@ -462,8 +889,12 @@ async def create_job(req: JobPostSchema, device: str = Depends(require_device), 
     slug = slugify(req.slug or req.title)
     slug = _ensure_unique_slug(db, CareerJobPost, slug)
     j = CareerJobPost(
+        category_id=req.category_id,
         position_id=req.position_id,
         title=req.title, slug=slug,
+        featured_image_url=req.featured_image_url,
+        company_name=req.company_name or "IINM",
+        company_logo_url=req.company_logo_url,
         summary=req.summary, description=req.description,
         requirements=req.requirements, responsibilities=req.responsibilities,
         location=req.location, job_type=req.job_type or "full_time",
@@ -474,13 +905,18 @@ async def create_job(req: JobPostSchema, device: str = Depends(require_device), 
         application_deadline=req.application_deadline,
         status=req.status or "open",
         is_featured=bool(req.is_featured),
+        is_pinned=bool(req.is_pinned),
+        tags=req.tags or [],
+        application_type=req.application_type or "internal",
+        external_apply_url=req.external_apply_url.strip() if req.external_apply_url else None,
         published_at=datetime.utcnow() if (req.status or "open") == "open" else None,
     )
     db.add(j)
     db.commit()
     db.refresh(j)
     cache.invalidate("career_jobs_public")
-    return _job_with_position(db, j)
+    cache.invalidate("career_categories_public")
+    return _job_with_details(db, j)
 
 
 @router.put("/jobs/{job_id}")
@@ -488,10 +924,14 @@ async def update_job(job_id: int, req: JobPostSchema, device: str = Depends(requ
     j = db.query(CareerJobPost).filter(CareerJobPost.id == job_id).first()
     if not j:
         raise HTTPException(404, "Job post not found")
+    j.category_id = req.category_id
     j.position_id = req.position_id
     j.title = req.title
     if req.slug and req.slug != j.slug:
         j.slug = _ensure_unique_slug(db, CareerJobPost, slugify(req.slug), exclude_id=j.id)
+    j.featured_image_url = req.featured_image_url
+    j.company_name = req.company_name or "IINM"
+    j.company_logo_url = req.company_logo_url
     j.summary = req.summary
     j.description = req.description
     j.requirements = req.requirements
@@ -510,11 +950,16 @@ async def update_job(job_id: int, req: JobPostSchema, device: str = Depends(requ
         j.published_at = datetime.utcnow()
     j.status = new_status
     j.is_featured = bool(req.is_featured)
+    j.is_pinned = bool(req.is_pinned)
+    j.tags = req.tags or []
+    j.application_type = req.application_type or "internal"
+    j.external_apply_url = req.external_apply_url.strip() if req.external_apply_url else None
     db.commit()
     db.refresh(j)
     cache.invalidate("career_jobs_public")
+    cache.invalidate("career_categories_public")
     cache.invalidate(f"career_job_{j.slug}")
-    return _job_with_position(db, j)
+    return _job_with_details(db, j)
 
 
 @router.delete("/jobs/{job_id}")
@@ -556,6 +1001,17 @@ async def toggle_job_feature(job_id: int, device: str = Depends(require_device),
     db.commit()
     cache.invalidate("career_jobs_public")
     return {"id": j.id, "is_featured": bool(j.is_featured)}
+
+
+@router.patch("/jobs/{job_id}/pin")
+async def toggle_job_pin(job_id: int, device: str = Depends(require_device), db: Session = Depends(get_db)):
+    j = db.query(CareerJobPost).filter(CareerJobPost.id == job_id).first()
+    if not j:
+        raise HTTPException(404, "Job post not found")
+    j.is_pinned = not bool(j.is_pinned)
+    db.commit()
+    cache.invalidate("career_jobs_public")
+    return {"id": j.id, "is_pinned": bool(j.is_pinned)}
 
 
 # ══════════════════════════════════════════════════════
@@ -724,7 +1180,8 @@ async def career_stats(device: str = Depends(require_device), db: Session = Depe
     jobs_closed = db.query(CareerJobPost).filter(CareerJobPost.status == "closed").count()
     jobs_draft = db.query(CareerJobPost).filter(CareerJobPost.status == "draft").count()
     positions_total = db.query(CareerPosition).count()
-    positions_active = db.query(CareerPosition).filter(CareerPosition.is_active == True).count()
+    categories_total = db.query(CareerCategory).count()
+    categories_active = db.query(CareerCategory).filter(CareerCategory.is_active == True).count()
 
     app_total = db.query(CareerApplication).count()
     app_by_status = {}
@@ -734,6 +1191,7 @@ async def career_stats(device: str = Depends(require_device), db: Session = Depe
 
     return {
         "jobs": {"total": jobs_total, "open": jobs_open, "closed": jobs_closed, "draft": jobs_draft},
+        "categories": {"total": categories_total, "active": categories_active},
         "positions": {"total": positions_total, "active": positions_active},
         "applications": {"total": app_total, "unread": app_unread, "by_status": app_by_status},
     }

@@ -25,12 +25,13 @@ function getBaseUrl(site: any): string {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  // Fetch site settings + courses + blogs + static pages in parallel
-  const [site, coursesData, blogsData, pagesData] = await Promise.all([
+  // Fetch site settings + courses + blogs + static pages + career jobs in parallel
+  const [site, coursesData, blogsData, pagesData, careerData] = await Promise.all([
     serverFetch("/settings/site", REVALIDATE),
     serverFetch("/public/courses?limit=1000", REVALIDATE),
     serverFetch("/blogs?status=published&limit=1000", REVALIDATE),
     serverFetch("/pages/published", REVALIDATE),
+    serverFetch("/career/jobs", REVALIDATE),
   ]);
 
   const baseUrl = getBaseUrl(site && !("__dbDown" in site) ? site : null);
@@ -75,6 +76,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         priority: 0.7,
       });
     }
+  }
+
+  // ── Career Job Posts (Auto SEO & AEO Indexed) ──
+  const jobList = careerData && !("__dbDown" in careerData)
+    ? (Array.isArray(careerData) ? careerData : [])
+    : [];
+  for (const job of jobList) {
+    if (!job.slug) continue;
+    entries.push({
+      url: `${baseUrl}/career/${job.slug}`,
+      lastModified: job.updated_at || job.published_at
+        ? new Date(job.updated_at || job.published_at)
+        : new Date(),
+      changeFrequency: "daily" as const,
+      priority: 0.8,
+    });
   }
 
   // ── Static pages ──

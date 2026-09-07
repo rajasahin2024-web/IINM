@@ -1,215 +1,37 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef, Suspense } from "react";
+import React, { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import PublicNavbar from "@/components/PublicNavbar";
 import PublicFooter from "@/components/PublicFooter";
 import JsonLd from "@/components/JsonLd";
 import ApplyModal from "./ApplyModal";
+import JobDetailModal from "./JobDetailModal";
 import { BASE_URL as API } from "@/lib/config";
 import "./career.css";
 
-/* ── Hero Grid + Mouse Spotlight (replicated from course-details) ── */
-function HeroGridSpotlight() {
-  const spotlightRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const hero = spotlightRef.current?.parentElement;
-    const spot = spotlightRef.current;
-    if (!hero || !spot) return;
-
-    const handleMouse = (e: MouseEvent) => {
-      const rect = hero.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      spot.style.setProperty("--mouse-x", `${x}px`);
-      spot.style.setProperty("--mouse-y", `${y}px`);
-      spot.style.opacity = "1";
-    };
-    const handleLeave = () => {
-      spot.style.opacity = "0";
-    };
-
-    hero.addEventListener("mousemove", handleMouse);
-    hero.addEventListener("mouseleave", handleLeave);
-    return () => {
-      hero.removeEventListener("mousemove", handleMouse);
-      hero.removeEventListener("mouseleave", handleLeave);
-    };
-  }, []);
-
-  return (
-    <>
-      <div className="cr-hero-grid-bg" />
-      <div ref={spotlightRef} className="cr-hero-grid-spotlight" />
-    </>
-  );
+interface CareerCategory {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  badge_color: string | null;
+  job_count: number;
 }
-
-/* ── 3 Arches Geometric SVG Illustration ── */
-function ArchesIllustration() {
-  return (
-    <div className="cr-arches-wrap">
-      <svg
-        className="cr-arches-svg"
-        viewBox="0 0 340 220"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        {/* Arch 1 (Left) */}
-        <path d="M20 220V90C20 45.8172 55.8172 10 100 10C144.183 10 180 45.8172 180 90V220" stroke="#0f172a" strokeWidth="2.5" />
-        <path d="M38 220V90C38 55.7594 65.7594 28 100 28C134.241 28 162 55.7594 162 90V220" stroke="#0f172a" strokeWidth="1.5" />
-        {/* Arch 1 Ribs */}
-        <line x1="100" y1="10" x2="100" y2="28" stroke="#0f172a" strokeWidth="1.5" />
-        <line x1="75" y1="14" x2="79" y2="31" stroke="#0f172a" strokeWidth="1.5" />
-        <line x1="52" y1="24" x2="60" y2="40" stroke="#0f172a" strokeWidth="1.5" />
-        <line x1="34" y1="42" x2="46" y2="54" stroke="#0f172a" strokeWidth="1.5" />
-        <line x1="24" y1="65" x2="39" y2="72" stroke="#0f172a" strokeWidth="1.5" />
-        <line x1="125" y1="14" x2="121" y2="31" stroke="#0f172a" strokeWidth="1.5" />
-        <line x1="148" y1="24" x2="140" y2="40" stroke="#0f172a" strokeWidth="1.5" />
-        <line x1="166" y1="42" x2="154" y2="54" stroke="#0f172a" strokeWidth="1.5" />
-        <line x1="176" y1="65" x2="161" y2="72" stroke="#0f172a" strokeWidth="1.5" />
-        {/* Vertical Hatching Arch 1 */}
-        <line x1="20" y1="110" x2="38" y2="110" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="20" y1="130" x2="38" y2="130" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="20" y1="150" x2="38" y2="150" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="20" y1="170" x2="38" y2="170" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="20" y1="190" x2="38" y2="190" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="20" y1="210" x2="38" y2="210" stroke="#0f172a" strokeWidth="1.2" />
-
-        <line x1="162" y1="110" x2="180" y2="110" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="162" y1="130" x2="180" y2="130" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="162" y1="150" x2="180" y2="150" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="162" y1="170" x2="180" y2="170" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="162" y1="190" x2="180" y2="190" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="162" y1="210" x2="180" y2="210" stroke="#0f172a" strokeWidth="1.2" />
-
-        {/* Arch 2 (Middle) */}
-        <path d="M100 220V90C100 45.8172 135.817 10 180 10C224.183 10 260 45.8172 260 90V220" stroke="#0f172a" strokeWidth="2.5" />
-        <path d="M118 220V90C118 55.7594 145.759 28 180 28C214.241 28 242 55.7594 242 90V220" stroke="#0f172a" strokeWidth="1.5" />
-        {/* Arch 2 Ribs */}
-        <line x1="180" y1="10" x2="180" y2="28" stroke="#0f172a" strokeWidth="1.5" />
-        <line x1="155" y1="14" x2="159" y2="31" stroke="#0f172a" strokeWidth="1.5" />
-        <line x1="132" y1="24" x2="140" y2="40" stroke="#0f172a" strokeWidth="1.5" />
-        <line x1="205" y1="14" x2="201" y2="31" stroke="#0f172a" strokeWidth="1.5" />
-        <line x1="228" y1="24" x2="220" y2="40" stroke="#0f172a" strokeWidth="1.5" />
-        <line x1="246" y1="42" x2="234" y2="54" stroke="#0f172a" strokeWidth="1.5" />
-        <line x1="256" y1="65" x2="241" y2="72" stroke="#0f172a" strokeWidth="1.5" />
-        {/* Vertical Hatching Arch 2 */}
-        <line x1="242" y1="110" x2="260" y2="110" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="242" y1="130" x2="260" y2="130" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="242" y1="150" x2="260" y2="150" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="242" y1="170" x2="260" y2="170" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="242" y1="190" x2="260" y2="190" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="242" y1="210" x2="260" y2="210" stroke="#0f172a" strokeWidth="1.2" />
-
-        {/* Arch 3 (Right) */}
-        <path d="M180 220V90C180 45.8172 215.817 10 260 10C304.183 10 340 45.8172 340 90V220" stroke="#0f172a" strokeWidth="2.5" />
-        <path d="M198 220V90C198 55.7594 225.759 28 260 28C294.241 28 322 55.7594 322 90V220" stroke="#0f172a" strokeWidth="1.5" />
-        {/* Arch 3 Ribs */}
-        <line x1="260" y1="10" x2="260" y2="28" stroke="#0f172a" strokeWidth="1.5" />
-        <line x1="285" y1="14" x2="281" y2="31" stroke="#0f172a" strokeWidth="1.5" />
-        <line x1="308" y1="24" x2="300" y2="40" stroke="#0f172a" strokeWidth="1.5" />
-        <line x1="326" y1="42" x2="314" y2="54" stroke="#0f172a" strokeWidth="1.5" />
-        <line x1="336" y1="65" x2="321" y2="72" stroke="#0f172a" strokeWidth="1.5" />
-        {/* Vertical Hatching Arch 3 */}
-        <line x1="322" y1="110" x2="340" y2="110" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="322" y1="130" x2="340" y2="130" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="322" y1="150" x2="340" y2="150" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="322" y1="170" x2="340" y2="170" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="322" y1="190" x2="340" y2="190" stroke="#0f172a" strokeWidth="1.2" />
-        <line x1="322" y1="210" x2="340" y2="210" stroke="#0f172a" strokeWidth="1.2" />
-      </svg>
-    </div>
-  );
-}
-
-/* ── Default 6 Perks (matching the reference image) ── */
-const DEFAULT_PERKS = [
-  {
-    title: "Own Your Work",
-    description: "Enjoy full freedom to take charge and take risks in your role.",
-    iconBg: "#f3e8ff",
-    iconColor: "#9333ea",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-        <circle cx="12" cy="7" r="4" />
-      </svg>
-    ),
-  },
-  {
-    title: "Healthcare and Welfare",
-    description: "Benefit from top-tier health insurance and a dedicated support facilitator.",
-    iconBg: "#fef3c7",
-    iconColor: "#d97706",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-      </svg>
-    ),
-  },
-  {
-    title: "Goodies and Gadgets",
-    description: "Get complimentary gadgets and goodies to make work enjoyable.",
-    iconBg: "#e0f2fe",
-    iconColor: "#0284c7",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-        <line x1="8" y1="21" x2="16" y2="21" />
-        <line x1="12" y1="17" x2="12" y2="21" />
-      </svg>
-    ),
-  },
-  {
-    title: "Delicious Daily Meals",
-    description: "Enjoy freshly prepared meals daily, crafted to bring the comfort of home.",
-    iconBg: "#ffe4e6",
-    iconColor: "#e11d48",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M18 8h1a4 4 0 0 1 0 8h-1" />
-        <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
-        <line x1="6" y1="1" x2="6" y2="4" />
-        <line x1="10" y1="1" x2="10" y2="4" />
-        <line x1="14" y1="1" x2="14" y2="4" />
-      </svg>
-    ),
-  },
-  {
-    title: "Free-flowing Resources",
-    description: "Access premium resources, whether it's a laptop or specialized tools.",
-    iconBg: "#d1fae5",
-    iconColor: "#059669",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
-        <line x1="4" y1="22" x2="4" y2="15" />
-      </svg>
-    ),
-  },
-  {
-    title: "Flexible Leave Policy",
-    description: "Take time off whenever needed—no questions asked.",
-    iconBg: "#ffedd5",
-    iconColor: "#ea580c",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-        <polyline points="16 17 21 12 16 7" />
-        <line x1="21" y1="12" x2="9" y2="12" />
-      </svg>
-    ),
-  },
-];
 
 interface JobPost {
   id: number;
+  category_id: number | null;
+  category_name: string | null;
+  category_slug: string | null;
   position_id: number | null;
   position_title: string | null;
   title: string;
   slug: string;
+  featured_image_url: string | null;
+  company_name: string | null;
+  company_logo_url: string | null;
   summary: string | null;
   description: string | null;
   requirements: string | null;
@@ -222,7 +44,12 @@ interface JobPost {
   salary_max: number | null;
   salary_currency: string;
   vacancies: number;
+  application_deadline?: string | null;
   is_featured: boolean;
+  is_pinned?: boolean;
+  tags?: string[];
+  application_type?: string;
+  external_apply_url?: string | null;
 }
 
 function formatSalaryLPA(min?: number | null, max?: number | null, currency = "INR"): string | null {
@@ -244,9 +71,12 @@ function CareerPageContent() {
   const params = useSearchParams();
   const [settings, setSettings] = useState<any>({});
   const [jobs, setJobs] = useState<JobPost[]>([]);
+  const [categories, setCategories] = useState<CareerCategory[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filters State
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [selectedTag, setSelectedTag] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [expMin, setExpMin] = useState<string>("");
   const [expMax, setExpMax] = useState<string>("");
@@ -254,24 +84,43 @@ function CareerPageContent() {
   const [activeExpMax, setActiveExpMax] = useState<number | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
+  const [selectedJobType, setSelectedJobType] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   // Accordion toggle states
+  const [openTagAccordion, setOpenTagAccordion] = useState(true);
   const [openExpAccordion, setOpenExpAccordion] = useState(true);
   const [openLocAccordion, setOpenLocAccordion] = useState(true);
   const [openDeptAccordion, setOpenDeptAccordion] = useState(true);
+  const [openTypeAccordion, setOpenTypeAccordion] = useState(true);
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [modalJob, setModalJob] = useState<JobPost | null>(null);
+  const [detailModalJob, setDetailModalJob] = useState<JobPost | null>(null);
 
   useEffect(() => {
     Promise.all([
       fetch(`${API}/api/career/settings`).then(r => (r.ok ? r.json() : {})).catch(() => ({})),
       fetch(`${API}/api/career/jobs`).then(r => (r.ok ? r.json() : [])).catch(() => []),
-    ]).then(([s, j]) => {
+      fetch(`${API}/api/career/categories`).then(r => (r.ok ? r.json() : [])).catch(() => []),
+    ]).then(([s, j, c]) => {
       setSettings(s || {});
       const list = Array.isArray(j) ? j : [];
       setJobs(list);
+      setCategories(Array.isArray(c) ? c : []);
+
+      // Check URL for ?category=<slug>
+      const catParam = params.get("category");
+      if (catParam) {
+        setSelectedCategory(catParam);
+      }
+
+      // Check URL for ?tag=<tag>
+      const tagParam = params.get("tag");
+      if (tagParam) {
+        setSelectedTag(tagParam);
+      }
 
       // Check URL for ?job=<slug> or #apply
       const jobSlug = params.get("job");
@@ -289,8 +138,12 @@ function CareerPageContent() {
     });
   }, [params]);
 
-  // Open apply modal for a specific job
+  // Open apply modal for a specific job (or redirect if external)
   const handleApplyJob = (job: JobPost) => {
+    if (job.application_type === "external" && job.external_apply_url) {
+      window.open(job.external_apply_url, "_blank", "noopener,noreferrer");
+      return;
+    }
     setModalJob(job);
     setModalOpen(true);
   };
@@ -324,6 +177,32 @@ function CareerPageContent() {
     return Array.from(map.entries()).map(([dept, count]) => ({ dept, count }));
   }, [jobs]);
 
+  const jobTypeCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    jobs.forEach(j => {
+      if (j.job_type && j.job_type.trim()) {
+        const t = j.job_type.trim();
+        map.set(t, (map.get(t) || 0) + 1);
+      }
+    });
+    return Array.from(map.entries()).map(([t, count]) => ({ type: t, count }));
+  }, [jobs]);
+
+  const tagCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    jobs.forEach(j => {
+      (j.tags || []).forEach(t => {
+        const clean = t.trim();
+        if (clean) {
+          map.set(clean, (map.get(clean) || 0) + 1);
+        }
+      });
+    });
+    return Array.from(map.entries())
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [jobs]);
+
   // Handle Experience Apply
   const applyExpFilter = () => {
     const minVal = expMin !== "" ? Number(expMin) : null;
@@ -342,21 +221,54 @@ function CareerPageContent() {
   const handleResetAll = () => {
     setSearchQuery("");
     resetExpFilter();
+    setSelectedCategory("all");
+    setSelectedTag("all");
     setSelectedLocation("all");
     setSelectedDepartment("all");
+    setSelectedJobType("all");
   };
+
+  const hasActiveFilters = useMemo(() => {
+    return (
+      selectedCategory !== "all" ||
+      selectedTag !== "all" ||
+      searchQuery.trim() !== "" ||
+      selectedLocation !== "all" ||
+      selectedDepartment !== "all" ||
+      selectedJobType !== "all" ||
+      activeExpMin !== null ||
+      activeExpMax !== null
+    );
+  }, [selectedCategory, selectedTag, searchQuery, selectedLocation, selectedDepartment, selectedJobType, activeExpMin, activeExpMax]);
 
   // Filtered Jobs
   const filteredJobs = useMemo(() => {
     return jobs.filter(j => {
+      // Dynamic Category Filter
+      if (selectedCategory !== "all") {
+        if (j.category_slug !== selectedCategory && String(j.category_id) !== selectedCategory) {
+          return false;
+        }
+      }
+
+      // Tag Filter
+      if (selectedTag !== "all") {
+        if (!j.tags || !j.tags.some(t => t.toLowerCase() === selectedTag.toLowerCase())) {
+          return false;
+        }
+      }
+
       // Search
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchTitle = j.title.toLowerCase().includes(q);
         const matchLoc = (j.location || "").toLowerCase().includes(q);
         const matchPos = (j.position_title || "").toLowerCase().includes(q);
+        const matchCat = (j.category_name || "").toLowerCase().includes(q);
+        const matchComp = (j.company_name || "").toLowerCase().includes(q);
         const matchSummary = (j.summary || "").toLowerCase().includes(q);
-        if (!matchTitle && !matchLoc && !matchPos && !matchSummary) return false;
+        const matchTags = (j.tags || []).some(t => t.toLowerCase().includes(q));
+        if (!matchTitle && !matchLoc && !matchPos && !matchCat && !matchComp && !matchSummary && !matchTags) return false;
       }
 
       // Location
@@ -373,6 +285,13 @@ function CareerPageContent() {
         }
       }
 
+      // Job Type
+      if (selectedJobType !== "all") {
+        if (j.job_type !== selectedJobType) {
+          return false;
+        }
+      }
+
       // Experience Filter
       if (activeExpMin !== null) {
         const jMax = j.experience_max ?? 99;
@@ -384,61 +303,39 @@ function CareerPageContent() {
       }
 
       return true;
-    });
-  }, [jobs, searchQuery, selectedLocation, selectedDepartment, activeExpMin, activeExpMax]);
+    }).sort((a, b) => {
+        // 1. Pinned jobs always stay at the top
+        if (Boolean(a.is_pinned) !== Boolean(b.is_pinned)) {
+          return a.is_pinned ? -1 : 1;
+        }
+        return 0;
+      });
+  }, [jobs, selectedCategory, selectedTag, searchQuery, selectedLocation, selectedDepartment, selectedJobType, activeExpMin, activeExpMax]);
 
-  // Render Job Tags
-  const renderJobTags = (j: JobPost) => {
-    const tags: string[] = [];
-    if (j.job_type === "full_time") tags.push("Full-time");
-    else if (j.job_type === "part_time") tags.push("Part-time");
-    else if (j.job_type === "remote") tags.push("Remote");
-    else if (j.job_type === "internship") tags.push("Internship");
-    else if (j.job_type === "contract") tags.push("Contract");
-
-    if (j.title.toLowerCase().includes("ai") || j.title.toLowerCase().includes("llm") || j.title.toLowerCase().includes("genai")) tags.push("GenAI / LLMs");
-    if (j.title.toLowerCase().includes("professor") || j.title.toLowerCase().includes("faculty")) tags.push("Teaching");
-    if (j.title.toLowerCase().includes("sales") || j.title.toLowerCase().includes("bda") || j.title.toLowerCase().includes("counsellor")) tags.push("EdTech Sales");
-    if (j.title.toLowerCase().includes("data") || j.title.toLowerCase().includes("engineer")) tags.push("Data Engineering");
-    if (j.title.toLowerCase().includes("compiler") || j.title.toLowerCase().includes("automata")) tags.push("Systems / LLVM");
-
-    return tags.slice(0, 3);
+  const formatJobType = (val: string) => {
+    switch (val) {
+      case "full_time": return "Full-time";
+      case "part_time": return "Part-time";
+      case "contract": return "Contract";
+      case "remote": return "Remote";
+      case "internship": return "Internship";
+      default: return val.replace(/_/g, " ");
+    }
   };
 
-  interface PerkItem {
-    title: string;
-    description: string;
-    iconBg: string;
-    iconColor: string;
-    icon: React.ReactNode;
-  }
-
-  // Perks list (from settings or default)
-  const displayPerks: PerkItem[] = useMemo(() => {
-    if (settings.perks && Array.isArray(settings.perks) && settings.perks.length > 0) {
-      return settings.perks.map((p: any, idx: number) => {
-        const defaultMatch = DEFAULT_PERKS[idx % DEFAULT_PERKS.length];
-        return {
-          title: p.title || defaultMatch.title,
-          description: p.description || defaultMatch.description,
-          iconBg: defaultMatch.iconBg,
-          iconColor: defaultMatch.iconColor,
-          icon: defaultMatch.icon,
-        };
-      });
-    }
-    return DEFAULT_PERKS;
-  }, [settings.perks]);
-
-  // JSON-LD structured data
+  // JSON-LD structured data for Google Jobs & AI Search Engines
   const jobLd = jobs.map(j => ({
     "@context": "https://schema.org",
     "@type": "JobPosting",
     title: j.title,
-    description: j.summary || j.description || "",
+    description: j.summary || j.description || j.title,
     employmentType: j.job_type.toUpperCase(),
     jobLocationType: j.job_type === "remote" ? "TELECOMMUTE" : undefined,
-    hiringOrganization: { "@type": "Organization", name: "IINM" },
+    hiringOrganization: {
+      "@type": "Organization",
+      name: j.company_name || "IINM",
+    },
+    image: j.featured_image_url || undefined,
   })).filter(j => j.title);
 
   return (
@@ -447,368 +344,759 @@ function CareerPageContent() {
       <PublicNavbar />
 
       {/* ────────────────────────────────────────────────────────
-          1. HERO SECTION (Aligned with Navbar width)
+          1. CLEAN INSTITUTIONAL HERO (Aligned with 1400px Container)
           ──────────────────────────────────────────────────────── */}
       <section className="cr-hero-section">
-        <HeroGridSpotlight />
-        <div className="cr-hero-container">
-          {/* Left Hero Column */}
-          <div className="cr-hero-left">
-            <div className="cr-hero-eyebrow">
-              {settings.hero_eyebrow || "COME BE PART OF THE"}
+        <div className="cr-container">
+          <div className="cr-hero-inner">
+            <div className="cr-hero-content">
+              {/* Breadcrumbs */}
+              <nav className="cr-breadcrumbs" aria-label="Breadcrumb">
+                <Link href="/">Home</Link>
+                <span className="cr-breadcrumbs-sep">/</span>
+                <span className="cr-breadcrumbs-current">Careers</span>
+              </nav>
+
+              <h1 className="cr-hero-title">
+                {settings.hero_title || "Career Opportunities"}
+              </h1>
+              <p className="cr-hero-subtitle">
+                {settings.hero_subtitle ||
+                  "Join our teaching faculty, clinical labs, administrative operations, and healthcare partner teams. Discover open positions and advance your professional journey."}
+              </p>
             </div>
-            <h1 className="cr-hero-title">
-              {settings.hero_title ? (
-                settings.hero_title
-              ) : (
-                <>revolution<span className="cr-title-accent">.</span></>
-              )}
-            </h1>
 
-            {/* Arches Graphic */}
-            <ArchesIllustration />
-          </div>
-
-          {/* Right Perks Grid (6 Benefit Cards) */}
-          <div className="cr-perks-grid">
-            {displayPerks.map((perk, index) => (
-              <div key={index} className="cr-perk-card">
-                <div className="cr-perk-icon-box" style={{ background: perk.iconBg, color: perk.iconColor }}>
-                  {perk.icon}
-                </div>
-                <div className="cr-perk-body">
-                  <h4 className="cr-perk-title">{perk.title}</h4>
-                  <p className="cr-perk-desc">{perk.description}</p>
-                </div>
+            <div className="cr-hero-meta-aside">
+              <div className="cr-hero-stat-pill">
+                <span className="num">{jobs.length}</span>
+                <span className="lbl">Active Openings</span>
               </div>
+              {categories.length > 0 && (
+                <div className="cr-hero-stat-pill">
+                  <span className="num">{categories.length}</span>
+                  <span className="lbl">Disciplines</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ────────────────────────────────────────────────────────
+          2. CATEGORY FILTER TABS BAR (Horizontal quick tabs)
+          ──────────────────────────────────────────────────────── */}
+      <div className="cr-cat-bar-wrap">
+        <div className="cr-container">
+          <div className="cr-cat-bar-scroll">
+            <button
+              type="button"
+              className={`cr-cat-pill-btn ${selectedCategory === "all" ? "is-active" : ""}`}
+              onClick={() => setSelectedCategory("all")}
+            >
+              <span>All Openings</span>
+              <span className="cr-cat-count-badge">{jobs.length}</span>
+            </button>
+
+            {categories.map(cat => (
+              <button
+                key={cat.id}
+                type="button"
+                className={`cr-cat-pill-btn ${selectedCategory === cat.slug ? "is-active" : ""}`}
+                onClick={() => setSelectedCategory(cat.slug)}
+              >
+                <span>{cat.name}</span>
+                <span className="cr-cat-count-badge">{cat.job_count}</span>
+              </button>
             ))}
           </div>
         </div>
-      </section>
+      </div>
 
       {/* ────────────────────────────────────────────────────────
-          2. CURRENT OPENINGS SECTION (Navbar aligned width)
+          3. MAIN WORKSPACE: LEFT CONTENT + RIGHT FILTERS
           ──────────────────────────────────────────────────────── */}
-      <section className="cr-openings-section" id="openings">
-        <div className="cr-openings-container">
-          {/* Header */}
-          <div className="cr-section-header-center">
-            <span className="cr-section-badge">OPPORTUNITIES AT IINM</span>
-            <h2 className="cr-section-title-large">Current Openings</h2>
-            <p className="cr-section-subtitle-center">
-              Explore open roles across faculty, admissions, tech labs, and student operations. Join our growing mission.
-            </p>
-          </div>
-
-          {/* Search & Reset Bar */}
-          <div className="cr-search-bar-wrap">
-            <div className="cr-search-input-box">
-              <span className="cr-search-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="8" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-              </span>
-              <input
-                type="text"
-                className="cr-search-input"
-                placeholder="Search by job role, keywords, skills, or location..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <button className="cr-btn-reset" onClick={handleResetAll}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                <path d="M3 3v5h5" />
-              </svg>
-              <span>Reset</span>
-            </button>
-          </div>
-
-          {/* Results count bar */}
-          <div className="cr-results-count-bar">
-            <div className="cr-results-count">
-              <span>{filteredJobs.length}</span> {filteredJobs.length === 1 ? "opening" : "openings"} found
-            </div>
-          </div>
-
-          {/* Main 2-Col Layout: Left Filters + Right Jobs Grid */}
+      <section className="cr-workspace-section">
+        <div className="cr-container">
           <div className="cr-main-layout">
-            {/* Left Sidebar Filters */}
-            <aside className="cr-sidebar-filters">
-              {/* Experience Filter */}
-              <div className="cr-filter-block">
-                <div className="cr-filter-title" onClick={() => setOpenExpAccordion(!openExpAccordion)}>
-                  <span>By Experience (in Years)</span>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: openExpAccordion ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </div>
-
-                {openExpAccordion && (
-                  <div>
-                    <div className="cr-exp-inputs-row">
-                      <input
-                        type="number"
-                        min="0"
-                        className="cr-exp-input"
-                        placeholder="Min Exp"
-                        value={expMin}
-                        onChange={e => setExpMin(e.target.value)}
-                      />
-                      <span className="cr-exp-to-text">to</span>
-                      <input
-                        type="number"
-                        min="0"
-                        className="cr-exp-input"
-                        placeholder="Max Exp"
-                        value={expMax}
-                        onChange={e => setExpMax(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="cr-exp-btn-row">
-                      <button type="button" className="cr-btn-filter-reset" onClick={resetExpFilter}>
-                        RESET
-                      </button>
-                      <button type="button" className="cr-btn-filter-apply" onClick={applyExpFilter}>
-                        APPLY
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Location Filter */}
-              {locationCounts.length > 0 && (
-                <div className="cr-filter-block">
-                  <div className="cr-filter-title" onClick={() => setOpenLocAccordion(!openLocAccordion)}>
-                    <span>Location</span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: openLocAccordion ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>
-                      <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                  </div>
-
-                  {openLocAccordion && (
-                    <div className="cr-filter-list">
-                      <label className={`cr-filter-item ${selectedLocation === "all" ? "is-selected" : ""}`}>
-                        <div className="cr-filter-radio-left">
-                          <input
-                            type="radio"
-                            name="locFilter"
-                            className="cr-filter-checkbox"
-                            checked={selectedLocation === "all"}
-                            onChange={() => setSelectedLocation("all")}
-                          />
-                          <span>All Locations</span>
-                        </div>
-                        <span className="cr-filter-count-badge">{jobs.length}</span>
-                      </label>
-                      {locationCounts.map(({ loc, count }) => (
-                        <label key={loc} className={`cr-filter-item ${selectedLocation === loc ? "is-selected" : ""}`}>
-                          <div className="cr-filter-radio-left">
-                            <input
-                              type="radio"
-                              name="locFilter"
-                              className="cr-filter-checkbox"
-                              checked={selectedLocation === loc}
-                              onChange={() => setSelectedLocation(loc)}
-                            />
-                            <span>{loc}</span>
-                          </div>
-                          <span className="cr-filter-count-badge">{count}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Department / Position Filter */}
-              {departmentCounts.length > 0 && (
-                <div className="cr-filter-block">
-                  <div className="cr-filter-title" onClick={() => setOpenDeptAccordion(!openDeptAccordion)}>
-                    <span>Department / Role</span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: openDeptAccordion ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>
-                      <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                  </div>
-
-                  {openDeptAccordion && (
-                    <div className="cr-filter-list">
-                      <label className={`cr-filter-item ${selectedDepartment === "all" ? "is-selected" : ""}`}>
-                        <div className="cr-filter-radio-left">
-                          <input
-                            type="radio"
-                            name="deptFilter"
-                            className="cr-filter-checkbox"
-                            checked={selectedDepartment === "all"}
-                            onChange={() => setSelectedDepartment("all")}
-                          />
-                          <span>All Departments</span>
-                        </div>
-                        <span className="cr-filter-count-badge">{jobs.length}</span>
-                      </label>
-                      {departmentCounts.map(({ dept, count }) => (
-                        <label key={dept} className={`cr-filter-item ${selectedDepartment === dept ? "is-selected" : ""}`}>
-                          <div className="cr-filter-radio-left">
-                            <input
-                              type="radio"
-                              name="deptFilter"
-                              className="cr-filter-checkbox"
-                              checked={selectedDepartment === dept}
-                              onChange={() => setSelectedDepartment(dept)}
-                            />
-                            <span>{dept}</span>
-                          </div>
-                          <span className="cr-filter-count-badge">{count}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Clear Filters */}
-              <button className="cr-clear-all-link" onClick={handleResetAll}>
-                Clear all filters
-              </button>
-            </aside>
-
-            {/* Right Jobs Grid */}
-            <div className="cr-jobs-grid">
-              {loading ? (
-                <div className="cr-empty-state-box">
-                  <div className="cr-empty-icon">
-                    <div className="cr-spinner" style={{ borderColor: "rgba(29,78,216,0.3)", borderTopColor: "#1d4ed8" }} />
-                  </div>
-                  <h4 className="cr-empty-title">Loading Openings...</h4>
-                  <p className="cr-empty-desc">Fetching the latest career positions from IINM.</p>
-                </div>
-              ) : filteredJobs.length === 0 ? (
-                <div className="cr-empty-state-box">
-                  <div className="cr-empty-icon">
-                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            
+            {/* ═══════════════════════════════════════════════════════
+                LEFT COLUMN: Content (Jobs, Search, Grid/List Switcher)
+                ═══════════════════════════════════════════════════════ */}
+            <main className="cr-jobs-column">
+              {/* Search & View Mode Header */}
+              <div className="cr-content-topbar">
+                <div className="cr-search-box">
+                  <span className="cr-search-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="11" cy="11" r="8" />
                       <line x1="21" y1="21" x2="16.65" y2="16.65" />
                     </svg>
+                  </span>
+                  <input
+                    type="text"
+                    className="cr-search-input-field"
+                    placeholder="Search by role title, keywords, skills, or location..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      style={{ border: "none", background: "none", cursor: "pointer", color: "#94a3b8", padding: 4 }}
+                      title="Clear search"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <div className="cr-topbar-actions">
+                  <div className="cr-results-summary">
+                    Showing <strong>{filteredJobs.length}</strong> {filteredJobs.length === 1 ? "opening" : "openings"}
                   </div>
-                  <h4 className="cr-empty-title">No matching openings found</h4>
-                  <p className="cr-empty-desc">
-                    Try adjusting your search criteria, clearing filters, or submit an Open Application with your CV.
-                  </p>
-                  <button className="cr-btn-primary" onClick={handleOpenGeneralApply} style={{ padding: "10px 24px" }}>
-                    Submit Open Application
+
+                  {/* Grid / List switcher */}
+                  <div className="cr-view-switcher">
+                    <button
+                      type="button"
+                      className={`cr-view-btn ${viewMode === "grid" ? "is-active" : ""}`}
+                      onClick={() => setViewMode("grid")}
+                      title="Grid view"
+                      aria-label="Grid view"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="3" width="7" height="7" />
+                        <rect x="14" y="3" width="7" height="7" />
+                        <rect x="14" y="14" width="7" height="7" />
+                        <rect x="3" y="14" width="7" height="7" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      className={`cr-view-btn ${viewMode === "list" ? "is-active" : ""}`}
+                      onClick={() => setViewMode("list")}
+                      title="List view"
+                      aria-label="List view"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="8" y1="6" x2="21" y2="6" />
+                        <line x1="8" y1="12" x2="21" y2="12" />
+                        <line x1="8" y1="18" x2="21" y2="18" />
+                        <line x1="3" y1="6" x2="3.01" y2="6" />
+                        <line x1="3" y1="12" x2="3.01" y2="12" />
+                        <line x1="3" y1="18" x2="3.01" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Active Filter Chips */}
+              {hasActiveFilters && (
+                <div className="cr-active-chips-bar">
+                  <span className="cr-active-chips-label">Filters applied:</span>
+                  {selectedCategory !== "all" && (
+                    <span className="cr-active-filter-chip">
+                      <span>Category: {categories.find(c => c.slug === selectedCategory)?.name || selectedCategory}</span>
+                      <button type="button" className="cr-chip-remove-btn" onClick={() => setSelectedCategory("all")}>✕</button>
+                    </span>
+                  )}
+                  {selectedTag !== "all" && (
+                    <span className="cr-active-filter-chip">
+                      <span>Tag: #{selectedTag}</span>
+                      <button type="button" className="cr-chip-remove-btn" onClick={() => setSelectedTag("all")}>✕</button>
+                    </span>
+                  )}
+                  {searchQuery && (
+                    <span className="cr-active-filter-chip">
+                      <span>&quot;{searchQuery}&quot;</span>
+                      <button type="button" className="cr-chip-remove-btn" onClick={() => setSearchQuery("")}>✕</button>
+                    </span>
+                  )}
+                  {selectedDepartment !== "all" && (
+                    <span className="cr-active-filter-chip">
+                      <span>Dept: {selectedDepartment}</span>
+                      <button type="button" className="cr-chip-remove-btn" onClick={() => setSelectedDepartment("all")}>✕</button>
+                    </span>
+                  )}
+                  {selectedLocation !== "all" && (
+                    <span className="cr-active-filter-chip">
+                      <span>Loc: {selectedLocation}</span>
+                      <button type="button" className="cr-chip-remove-btn" onClick={() => setSelectedLocation("all")}>✕</button>
+                    </span>
+                  )}
+                  {selectedJobType !== "all" && (
+                    <span className="cr-active-filter-chip">
+                      <span>Type: {formatJobType(selectedJobType)}</span>
+                      <button type="button" className="cr-chip-remove-btn" onClick={() => setSelectedJobType("all")}>✕</button>
+                    </span>
+                  )}
+                  {(activeExpMin !== null || activeExpMax !== null) && (
+                    <span className="cr-active-filter-chip">
+                      <span>Exp: {activeExpMin ?? 0} - {activeExpMax ?? "Any"} yrs</span>
+                      <button type="button" className="cr-chip-remove-btn" onClick={resetExpFilter}>✕</button>
+                    </span>
+                  )}
+                  <button type="button" className="cr-chip-clear-all" onClick={handleResetAll}>
+                    Clear all
                   </button>
                 </div>
-              ) : (
-                filteredJobs.map(job => {
-                  const salaryText = formatSalaryLPA(job.salary_min, job.salary_max, job.salary_currency);
-                  return (
-                    <div key={job.id} className="cr-job-card">
-                      <div className="cr-job-card-top">
-                        {job.position_title ? (
-                          <span className="cr-job-dept-badge">{job.position_title}</span>
-                        ) : (
-                          <span />
-                        )}
-                        {job.is_featured && <span className="cr-job-badge-featured">Featured</span>}
-                      </div>
+              )}
 
-                      <h3 className="cr-job-title" title={job.title}>
-                        {job.title}
-                      </h3>
-
-                      <div className="cr-job-meta-row">
-                        <div className="cr-job-meta-item">
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <circle cx="12" cy="12" r="10" />
-                            <polyline points="12 6 12 12 16 14" />
-                          </svg>
-                          <span>
-                            Experience : {job.experience_min ?? 0}{job.experience_max ? ` - ${job.experience_max}` : "+"} years
-                          </span>
+              {/* Job Listings Grid / List */}
+              <div className={`cr-jobs-grid ${viewMode === "list" ? "is-list-view" : ""}`}>
+                {loading ? (
+                  <div className="cr-empty-state-card" style={{ gridColumn: "1 / -1" }}>
+                    <div className="cr-empty-icon">
+                      <div style={{ width: 24, height: 24, border: "2px solid #e2e8f0", borderTopColor: "#0a1628", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                    </div>
+                    <h3 className="cr-empty-title">Loading positions...</h3>
+                    <p className="cr-empty-desc">Fetching the latest career openings.</p>
+                  </div>
+                ) : filteredJobs.length === 0 ? (
+                  <div className="cr-empty-state-card" style={{ gridColumn: "1 / -1" }}>
+                    <div className="cr-empty-icon">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                      </svg>
+                    </div>
+                    <h3 className="cr-empty-title">No matching openings found</h3>
+                    <p className="cr-empty-desc">
+                      Try resetting your search query or filters. You can also submit an Open Application and we will reach out when a suitable position opens.
+                    </p>
+                    <button type="button" className="cr-empty-btn" onClick={handleOpenGeneralApply}>
+                      Submit Open Application
+                    </button>
+                  </div>
+                ) : (
+                  filteredJobs.map(job => {
+                    const salaryText = formatSalaryLPA(job.salary_min, job.salary_max, job.salary_currency);
+                    return (
+                      <article
+                        key={job.id}
+                        className={`cr-job-card ${job.application_type === "external" ? "cr-job-card-external" : "cr-job-card-internal"} ${job.is_pinned ? "is-pinned" : ""}`}
+                      >
+                        {/* Featured Image Thumbnail */}
+                        <div className="cr-card-thumb-wrap">
+                          {job.is_pinned && (
+                            <div className="cr-pin-ribbon">
+                              <span className="cr-pin-ribbon-icon">📌</span>
+                              <span>Pinned Opening</span>
+                            </div>
+                          )}
+                          {job.featured_image_url ? (
+                            <img
+                              src={job.featured_image_url}
+                              alt={job.title}
+                              className="cr-card-thumb-img"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="cr-card-thumb-fallback">
+                              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                              </svg>
+                            </div>
+                          )}
                         </div>
 
-                        <div className="cr-job-meta-item">
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                            <circle cx="12" cy="10" r="3" />
-                          </svg>
-                          <span>
-                            Location : {job.location || "Multiple Locations"}
-                          </span>
-                        </div>
-
-                        {salaryText && (
-                          <div className="cr-job-salary-badge">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                              <line x1="12" y1="1" x2="12" y2="23" />
-                              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                            </svg>
-                            <span>{salaryText}</span>
+                        <div className="cr-card-body">
+                          {/* Distinct Application Type Banner Pill */}
+                          <div style={{ marginBottom: 12 }}>
+                            {job.application_type === "external" ? (
+                              <span className="cr-type-indicator cr-type-external" title="Direct link to external official recruitment portal">
+                                <span className="cr-type-dot" />
+                                <span>External Portal Application</span>
+                                <span style={{ fontSize: 12, marginLeft: 2 }}>↗</span>
+                              </span>
+                            ) : (
+                              <span className="cr-type-indicator cr-type-internal" title="Direct on-campus application with IINM recruitment team">
+                                <span className="cr-type-dot" />
+                                <span>Direct Institute Application</span>
+                                <span style={{ fontSize: 11, marginLeft: 2 }}>⚡</span>
+                              </span>
+                            )}
                           </div>
-                        )}
-                      </div>
 
-                      {/* Tags */}
-                      <div className="cr-job-tags-wrap">
-                        {renderJobTags(job).map((tag, i) => (
-                          <span key={i} className="cr-tag-pill">
-                            {tag}
-                          </span>
+                          {/* Badges */}
+                          <div className="cr-card-badge-row">
+                            <div className="cr-card-badges-left">
+                              {job.category_name && (
+                                <span className="cr-badge-cat">{job.category_name}</span>
+                              )}
+                              {job.company_name && job.company_name !== "IINM" && (
+                                <span className="cr-badge-partner">{job.company_name}</span>
+                              )}
+                              <span style={{ fontSize: 11.5, color: "#64748b", background: "#f1f5f9", padding: "3px 8px", borderRadius: 4, fontWeight: 500 }}>
+                                {formatJobType(job.job_type)}
+                              </span>
+                            </div>
+                            {job.is_featured && <span className="cr-badge-featured">★ Featured</span>}
+                          </div>
+
+                          {/* Title */}
+                          <h2 className="cr-card-title">
+                            <button
+                              type="button"
+                              onClick={() => setDetailModalJob(job)}
+                              style={{ background: "none", border: "none", padding: 0, font: "inherit", color: "inherit", textAlign: "left", cursor: "pointer" }}
+                            >
+                              {job.title}
+                            </button>
+                          </h2>
+
+                          {/* Excerpt / Summary */}
+                          {job.summary && (
+                            <p className="cr-card-desc">{job.summary}</p>
+                          )}
+
+                          {/* Role Tag Chips */}
+                          {job.tags && job.tags.length > 0 && (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "8px 0 12px 0" }}>
+                              {job.tags.slice(0, 5).map((tag, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setSelectedTag(selectedTag === tag ? "all" : tag);
+                                  }}
+                                  style={{
+                                    border: selectedTag === tag ? "1px solid #0284c7" : "1px solid #e2e8f0",
+                                    background: selectedTag === tag ? "#0ea5e9" : "#f8fafc",
+                                    color: selectedTag === tag ? "#ffffff" : "#475569",
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    padding: "2px 8px",
+                                    borderRadius: 12,
+                                    cursor: "pointer",
+                                    transition: "all 0.15s ease",
+                                  }}
+                                  title={`Filter by tag: ${tag}`}
+                                >
+                                  #{tag}
+                                </button>
+                              ))}
+                              {job.tags.length > 5 && (
+                                <span style={{ fontSize: 11, color: "#94a3b8", alignSelf: "center" }}>
+                                  +{job.tags.length - 5}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Meta Information */}
+                          <div className="cr-card-meta-list">
+                            <div className="cr-card-meta-item">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                                <circle cx="12" cy="10" r="3" />
+                              </svg>
+                              <span>{job.location || "On-campus / Multiple Locations"}</span>
+                            </div>
+
+                            <div className="cr-card-meta-item">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <circle cx="12" cy="12" r="10" />
+                                <polyline points="12 6 12 12 16 14" />
+                              </svg>
+                              <span>
+                                {job.experience_min ?? 0}{job.experience_max ? ` - ${job.experience_max}` : "+"} yrs experience
+                              </span>
+                            </div>
+
+                            {salaryText && (
+                              <div className="cr-card-meta-item cr-card-salary">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <line x1="12" y1="1" x2="12" y2="23" />
+                                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                                </svg>
+                                <span>{salaryText}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Card Footer Actions */}
+                          <div className="cr-card-footer">
+                            <button
+                              type="button"
+                              className="cr-card-link-details"
+                              onClick={() => setDetailModalJob(job)}
+                              style={{ background: "none", border: "none", cursor: "pointer", font: "inherit", padding: 0 }}
+                            >
+                              <span>View details</span>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <polyline points="9 18 15 12 9 6" />
+                              </svg>
+                            </button>
+
+                            <button
+                              type="button"
+                              className="cr-card-btn-apply"
+                              onClick={() => handleApplyJob(job)}
+                              style={job.application_type === "external" ? { background: "#7e22ce" } : undefined}
+                            >
+                              <span>{job.application_type === "external" ? "Apply on Official Site" : "Apply Now"}</span>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                {job.application_type === "external" ? (
+                                  <>
+                                    <line x1="7" y1="17" x2="17" y2="7" />
+                                    <polyline points="7 7 17 7 17 17" />
+                                  </>
+                                ) : (
+                                  <>
+                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                    <polyline points="12 5 19 12 12 19" />
+                                  </>
+                                )}
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })
+                )}
+              </div>
+            </main>
+
+            {/* ═══════════════════════════════════════════════════════
+                RIGHT COLUMN: Filters Sidebar (Sticky, Clean, Human)
+                ═══════════════════════════════════════════════════════ */}
+            <aside className="cr-sidebar-filters">
+              <div className="cr-sidebar-card">
+                <div className="cr-sidebar-header">
+                  <h3 className="cr-sidebar-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                    </svg>
+                    <span>Filter Positions</span>
+                  </h3>
+                  {hasActiveFilters && (
+                    <button type="button" className="cr-sidebar-reset-btn" onClick={handleResetAll}>
+                      Reset all
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter Block 1: Categories */}
+                {categories.length > 0 && (
+                  <div className="cr-filter-group">
+                    <div className="cr-filter-heading">
+                      <span>Category</span>
+                    </div>
+                    <div className="cr-filter-list">
+                      <label className={`cr-filter-radio-item ${selectedCategory === "all" ? "is-selected" : ""}`}>
+                        <div className="cr-filter-label-left">
+                          <input
+                            type="radio"
+                            name="category_filter"
+                            className="cr-filter-radio"
+                            checked={selectedCategory === "all"}
+                            onChange={() => setSelectedCategory("all")}
+                          />
+                          <span className="cr-filter-text">All Categories</span>
+                        </div>
+                        <span className="cr-filter-count">{jobs.length}</span>
+                      </label>
+                      {categories.map(cat => (
+                        <label key={cat.id} className={`cr-filter-radio-item ${selectedCategory === cat.slug ? "is-selected" : ""}`}>
+                          <div className="cr-filter-label-left">
+                            <input
+                              type="radio"
+                              name="category_filter"
+                              className="cr-filter-radio"
+                              checked={selectedCategory === cat.slug}
+                              onChange={() => setSelectedCategory(cat.slug)}
+                            />
+                            <span className="cr-filter-text">{cat.name}</span>
+                          </div>
+                          <span className="cr-filter-count">{cat.job_count}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Filter Block: Specialization & Tags */}
+                {tagCounts.length > 0 && (
+                  <div className="cr-filter-group">
+                    <div className="cr-filter-heading" onClick={() => setOpenTagAccordion(!openTagAccordion)}>
+                      <span>Specialization Tags</span>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: openTagAccordion ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </div>
+                    {openTagAccordion && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, paddingTop: 4 }}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTag("all")}
+                          style={{
+                            border: selectedTag === "all" ? "1px solid #0284c7" : "1px solid #e2e8f0",
+                            background: selectedTag === "all" ? "#f0f9ff" : "#ffffff",
+                            color: selectedTag === "all" ? "#0284c7" : "#475569",
+                            fontSize: 11.5,
+                            fontWeight: selectedTag === "all" ? 600 : 500,
+                            padding: "4px 10px",
+                            borderRadius: 14,
+                            cursor: "pointer",
+                            transition: "all 0.15s",
+                          }}
+                        >
+                          All Tags
+                        </button>
+                        {tagCounts.map(({ tag, count }) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => setSelectedTag(selectedTag === tag ? "all" : tag)}
+                            style={{
+                              border: selectedTag === tag ? "1px solid #0ea5e9" : "1px solid #e2e8f0",
+                              background: selectedTag === tag ? "#0ea5e9" : "#ffffff",
+                              color: selectedTag === tag ? "#ffffff" : "#334155",
+                              fontSize: 11.5,
+                              fontWeight: 500,
+                              padding: "4px 10px",
+                              borderRadius: 14,
+                              cursor: "pointer",
+                              transition: "all 0.15s",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 4,
+                            }}
+                          >
+                            <span>#{tag}</span>
+                            <span style={{ fontSize: 10, opacity: selectedTag === tag ? 0.9 : 0.6 }}>{count}</span>
+                          </button>
                         ))}
                       </div>
+                    )}
+                  </div>
+                )}
 
-                      {/* Apply Button */}
-                      <div className="cr-job-card-footer">
-                        <button className="cr-btn-apply-card" onClick={() => handleApplyJob(job)}>
-                          <span>Apply Now</span>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                            <polyline points="12 5 19 12 12 19" />
-                          </svg>
-                        </button>
-                      </div>
+                {/* Filter Block 2: Department / Position Title */}
+                {departmentCounts.length > 0 && (
+                  <div className="cr-filter-group">
+                    <div className="cr-filter-heading" onClick={() => setOpenDeptAccordion(!openDeptAccordion)}>
+                      <span>Department</span>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: openDeptAccordion ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
                     </div>
-                  );
-                })
-              )}
-            </div>
+                    {openDeptAccordion && (
+                      <div className="cr-filter-list">
+                        <label className={`cr-filter-radio-item ${selectedDepartment === "all" ? "is-selected" : ""}`}>
+                          <div className="cr-filter-label-left">
+                            <input
+                              type="radio"
+                              name="dept_filter"
+                              className="cr-filter-radio"
+                              checked={selectedDepartment === "all"}
+                              onChange={() => setSelectedDepartment("all")}
+                            />
+                            <span className="cr-filter-text">All Departments</span>
+                          </div>
+                          <span className="cr-filter-count">{jobs.length}</span>
+                        </label>
+                        {departmentCounts.map(({ dept, count }) => (
+                          <label key={dept} className={`cr-filter-radio-item ${selectedDepartment === dept ? "is-selected" : ""}`}>
+                            <div className="cr-filter-label-left">
+                              <input
+                                type="radio"
+                                name="dept_filter"
+                                className="cr-filter-radio"
+                                checked={selectedDepartment === dept}
+                                onChange={() => setSelectedDepartment(dept)}
+                              />
+                              <span className="cr-filter-text">{dept}</span>
+                            </div>
+                            <span className="cr-filter-count">{count}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Filter Block 3: Job Type */}
+                {jobTypeCounts.length > 0 && (
+                  <div className="cr-filter-group">
+                    <div className="cr-filter-heading" onClick={() => setOpenTypeAccordion(!openTypeAccordion)}>
+                      <span>Employment Type</span>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: openTypeAccordion ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </div>
+                    {openTypeAccordion && (
+                      <div className="cr-filter-list">
+                        <label className={`cr-filter-radio-item ${selectedJobType === "all" ? "is-selected" : ""}`}>
+                          <div className="cr-filter-label-left">
+                            <input
+                              type="radio"
+                              name="type_filter"
+                              className="cr-filter-radio"
+                              checked={selectedJobType === "all"}
+                              onChange={() => setSelectedJobType("all")}
+                            />
+                            <span className="cr-filter-text">All Types</span>
+                          </div>
+                          <span className="cr-filter-count">{jobs.length}</span>
+                        </label>
+                        {jobTypeCounts.map(({ type, count }) => (
+                          <label key={type} className={`cr-filter-radio-item ${selectedJobType === type ? "is-selected" : ""}`}>
+                            <div className="cr-filter-label-left">
+                              <input
+                                type="radio"
+                                name="type_filter"
+                                className="cr-filter-radio"
+                                checked={selectedJobType === type}
+                                onChange={() => setSelectedJobType(type)}
+                              />
+                              <span className="cr-filter-text">{formatJobType(type)}</span>
+                            </div>
+                            <span className="cr-filter-count">{count}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Filter Block 4: Location */}
+                {locationCounts.length > 0 && (
+                  <div className="cr-filter-group">
+                    <div className="cr-filter-heading" onClick={() => setOpenLocAccordion(!openLocAccordion)}>
+                      <span>Location</span>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: openLocAccordion ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </div>
+                    {openLocAccordion && (
+                      <div className="cr-filter-list">
+                        <label className={`cr-filter-radio-item ${selectedLocation === "all" ? "is-selected" : ""}`}>
+                          <div className="cr-filter-label-left">
+                            <input
+                              type="radio"
+                              name="loc_filter"
+                              className="cr-filter-radio"
+                              checked={selectedLocation === "all"}
+                              onChange={() => setSelectedLocation("all")}
+                            />
+                            <span className="cr-filter-text">All Locations</span>
+                          </div>
+                          <span className="cr-filter-count">{jobs.length}</span>
+                        </label>
+                        {locationCounts.map(({ loc, count }) => (
+                          <label key={loc} className={`cr-filter-radio-item ${selectedLocation === loc ? "is-selected" : ""}`}>
+                            <div className="cr-filter-label-left">
+                              <input
+                                type="radio"
+                                name="loc_filter"
+                                className="cr-filter-radio"
+                                checked={selectedLocation === loc}
+                                onChange={() => setSelectedLocation(loc)}
+                              />
+                              <span className="cr-filter-text">{loc}</span>
+                            </div>
+                            <span className="cr-filter-count">{count}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Filter Block 5: Experience */}
+                <div className="cr-filter-group">
+                  <div className="cr-filter-heading" onClick={() => setOpenExpAccordion(!openExpAccordion)}>
+                    <span>Experience (Years)</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: openExpAccordion ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </div>
+                  {openExpAccordion && (
+                    <div className="cr-exp-filter-wrap">
+                      <div className="cr-exp-inputs">
+                        <input
+                          type="number"
+                          min="0"
+                          max="50"
+                          className="cr-exp-input"
+                          placeholder="Min"
+                          value={expMin}
+                          onChange={e => setExpMin(e.target.value)}
+                        />
+                        <span className="cr-exp-sep">to</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="50"
+                          className="cr-exp-input"
+                          placeholder="Max"
+                          value={expMax}
+                          onChange={e => setExpMax(e.target.value)}
+                        />
+                      </div>
+                      <button type="button" className="cr-exp-btn-apply" onClick={applyExpFilter}>
+                        Apply Experience Filter
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </aside>
           </div>
         </div>
       </section>
 
       {/* ────────────────────────────────────────────────────────
-          3. BOTTOM OPEN APPLICATION BANNER (Navbar aligned width)
+          4. BOTTOM OPEN APPLICATION BANNER (Clean Institutional Card)
           ──────────────────────────────────────────────────────── */}
-      <section className="cr-open-banner-section">
-        <div className="cr-open-banner-card">
-          <div className="cr-open-banner-left">
-            <div className="cr-open-banner-eyebrow">
-              {settings.open_form_title || "DON'T SEE THE RIGHT ROLE?"}
+      <section className="cr-bottom-banner-section">
+        <div className="cr-container">
+          <div className="cr-bottom-banner-card">
+            <div className="cr-banner-left">
+              <div className="cr-banner-eyebrow">
+                {settings.open_form_title || "Can't find the right role?"}
+              </div>
+              <h2 className="cr-banner-title">
+                {settings.open_form_subtitle || "Submit an Open Application with your CV"}
+              </h2>
+              <p className="cr-banner-desc">
+                We are always seeking passionate educators, healthcare specialists, academic coordinators, and laboratory mentors. Submit your resume, and our recruitment team will reach out as matching vacancies arise.
+              </p>
             </div>
-            <h2 className="cr-open-banner-title">
-              {settings.open_form_subtitle || "Submit an Open Application with your CV"}
-            </h2>
-            <p className="cr-open-banner-desc">
-              We are constantly scouting exceptional talent across faculty, AI engineering, academic administration, and growth. Share your profile and we will get in touch when a matching vacancy opens up.
-            </p>
-          </div>
-          <div className="cr-open-banner-right">
-            <button className="cr-btn-banner-apply" onClick={handleOpenGeneralApply}>
-              Apply with CV
-            </button>
+            <div className="cr-banner-right">
+              <button type="button" className="cr-banner-btn" onClick={handleOpenGeneralApply}>
+                <span>Submit Your CV</span>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </section>
 
       <PublicFooter />
 
-      {/* ────────────────────────────────────────────────────────
-          4. APPLY NOW MODAL (POPUP with SLIM SCROLLER)
-          ──────────────────────────────────────────────────────── */}
+      {/* Full Job Details Modal */}
+      <JobDetailModal
+        open={Boolean(detailModalJob)}
+        onClose={() => setDetailModalJob(null)}
+        job={detailModalJob}
+        onApply={handleApplyJob}
+        formatSalaryLPA={formatSalaryLPA}
+        formatJobType={formatJobType}
+      />
+
+      {/* Application Modal */}
       <ApplyModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -821,7 +1109,7 @@ function CareerPageContent() {
 
 export default function CareerPage() {
   return (
-    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#f8fafc", padding: 40, textAlign: "center", color: "#64748b" }}>Loading careers...</div>}>
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#f8fafc" }} />}>
       <CareerPageContent />
     </Suspense>
   );

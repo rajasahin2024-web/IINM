@@ -154,6 +154,7 @@ export const adminMenuData: MenuItem[] = [
         href: "/admin/cms/career",
         icon: "briefcase",
         children: [
+          { label: "Job Categories",   href: "/admin/cms/career/categories",   icon: "folder" },
           { label: "Career Positions", href: "/admin/cms/career/positions", icon: "layers" },
           { label: "Job Posts",        href: "/admin/cms/career/jobs",      icon: "file-text" },
           { label: "Job Requests",     href: "/admin/cms/career/applications", icon: "inbox" },
