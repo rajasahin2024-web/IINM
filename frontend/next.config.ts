@@ -10,6 +10,8 @@ const nextConfig: NextConfig = {
     // Tailscale / local network IPs used during development
     "100.99.40.44",
     "169.254.83.107",
+    // Public dev server IP (browsers access http://82.112.226.111:2021)
+    "82.112.226.111",
   ],
 
   async headers() {
