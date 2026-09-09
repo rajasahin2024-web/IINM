@@ -94,6 +94,7 @@ app.add_middleware(
         "http://localhost:2021",
         "http://127.0.0.1:2021",
         "http://147.93.29.113:2021",
+        "http://82.112.226.111:2021",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
