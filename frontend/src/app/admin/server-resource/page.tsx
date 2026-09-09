@@ -320,7 +320,7 @@ function ServerResourcePageInner() {
   const fetchData = useCallback(async () => {
     setFetching(true);
     try {
-      const res = await apiFetch(`${API_BASE_URL}/api/server-resource/overview`);
+      const res = await apiFetch(`${API_BASE_URL}/server-resource/overview`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json: ServerResource = await res.json();
       setData(json);
