@@ -12,6 +12,8 @@ const nextConfig: NextConfig = {
     "169.254.83.107",
     // Public dev server IP (browsers access http://82.112.226.111:2021)
     "82.112.226.111",
+    // Cloudflare quick tunnel (ngrok alternative) — ephemeral domain
+    "parent-stockholm-perception-chose.trycloudflare.com",
   ],
 
   async headers() {

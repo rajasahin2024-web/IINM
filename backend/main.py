@@ -95,6 +95,8 @@ app.add_middleware(
         "http://127.0.0.1:2021",
         "http://147.93.29.113:2021",
         "http://82.112.226.111:2021",
+        # Cloudflare quick tunnel (ngrok alternative) — ephemeral domain
+        "https://parent-stockholm-perception-chose.trycloudflare.com",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
