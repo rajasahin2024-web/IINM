@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+// Server-side middleware talks to the backend over a fast, cert-free
+// internal HTTP URL (avoids self-signed-cert TLS errors). Falls back to the
+// public NEXT_PUBLIC_API_URL if the internal var is absent.
+const API_BASE = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "";
 
 // In-memory cache for maintenance check (avoids hitting API on every single request)
 let cachedMaintenance: { status: "ok" | "down" | "maintenance"; timestamp: number } | null = null;

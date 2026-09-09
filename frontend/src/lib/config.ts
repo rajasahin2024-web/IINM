@@ -1,5 +1,17 @@
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
-export const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "";
+// Server-side (SSR/middleware/route handlers) talks to the backend over a
+// fast, cert-free internal HTTP URL. The browser uses the same-origin public
+// HTTPS URL (set via NEXT_PUBLIC_*). This avoids self-signed-cert TLS errors
+// in server-side fetch AND mixed-content blocking in the browser.
+const isServer = typeof window === "undefined";
+
+export const API_BASE_URL =
+  (isServer && (process.env.API_URL || process.env.INTERNAL_API_URL)) ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "";
+export const BASE_URL =
+  (isServer && (process.env.INTERNAL_BASE_URL)) ||
+  process.env.NEXT_PUBLIC_BASE_URL ||
+  "";
 
 /**
  * Backend root URL (no /api suffix) for resolving relative upload paths

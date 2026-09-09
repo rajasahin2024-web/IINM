@@ -95,6 +95,8 @@ app.add_middleware(
         "http://127.0.0.1:2021",
         "http://147.93.29.113:2021",
         "http://82.112.226.111:2021",
+        # HTTPS via nginx SSL vhost (self-signed, direct IP)
+        "https://82.112.226.111",
         # Cloudflare quick tunnel (ngrok alternative) — ephemeral domain
         "https://parent-stockholm-perception-chose.trycloudflare.com",
     ],
