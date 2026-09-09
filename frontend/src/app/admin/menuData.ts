@@ -225,4 +225,12 @@ export const adminMenuData: MenuItem[] = [
       },
     ],
   },
+
+  // ─── 7. Server ────────────────────────
+  {
+    label: "Server",
+    href: "/admin/server-resource",
+    icon: "cpu",
+    type: "link",
+  },
 ];
