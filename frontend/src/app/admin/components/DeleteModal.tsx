@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import DOMPurify from 'dompurify';
+import DOMPurify from 'isomorphic-dompurify';
 interface DeleteModalProps {
   title?: string;
   description?: string;

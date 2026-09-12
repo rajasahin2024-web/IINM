@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState, useMemo } from "react";
-import DOMPurify from "dompurify";
+import DOMPurify from "isomorphic-dompurify";
 import Link from "next/link";
 import PublicNavbar from "@/components/PublicNavbar";
 import PublicFooter from "@/components/PublicFooter";
@@ -49,11 +49,13 @@ export default function BlogDetailClient({ slug, initialData }: BlogDetailClient
   const postRate=async()=>{if(!data||rVal<1){T("Select a star rating.","error");return;}const res=await fetch(`${API}/blogs/${data.post.id}/ratings`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:rName.trim()||null,rating:rVal,review:rReview.trim()||null})});if(res.ok){const rt=await res.json();setRatings((p:any)=>({...p,average:rt.average,count:rt.count}));setRVal(0);setRReview("");setRName("");T("Thank you!");}else T("Failed.","error");};
   const react=async(type:string)=>{if(!data)return;const res=await fetch(`${API}/blogs/${data.post.id}/reactions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reaction_type:type})});if(res.ok){const d2=await res.json();setData((p:any)=>p?{...p,reactions:d2.breakdown}:null);}};
 
+  const postContent=data?.post?.content;
+  const safeContent=useMemo(()=>DOMPurify.sanitize(postContent||"",{ALLOWED_TAGS:["p","br","hr","span","div","h1","h2","h3","h4","h5","h6","strong","b","em","i","u","s","sub","sup","small","ul","ol","li","blockquote","pre","code","a","img","table","thead","tbody","tr","th","td","figure","figcaption"],ALLOWED_ATTR:["href","title","target","rel","src","alt","width","height","loading","fetchpriority","style","class","colspan","rowspan"],ALLOW_DATA_ATTR:false}),[postContent]);
+
   if(load)return<div style={{minHeight:"100vh",background:"#fff"}}><PublicNavbar/><div style={{maxWidth:1200,margin:"0 auto",padding:"120px 24px 60px"}}><Sk h={520} mb={32}/><Sk h={36} w="70%" mb={16} d="0.1s"/><Sk h={18} w="40%" mb={40} d="0.2s"/><Sk h={14} w="100%" mb={10} d="0.3s"/><Sk h={14} w="96%" mb={10} d="0.35s"/><Sk h={14} w="92%" mb={10} d="0.4s"/></div></div>;
   if(!data)return null;
 
   const post=data.post;const author=data.author;const avg=data.rating.average;
-  const safeContent=useMemo(()=>DOMPurify.sanitize(post.content||"",{ALLOWED_TAGS:["p","br","hr","span","div","h1","h2","h3","h4","h5","h6","strong","b","em","i","u","s","sub","sup","small","ul","ol","li","blockquote","pre","code","a","img","table","thead","tbody","tr","th","td","figure","figcaption"],ALLOWED_ATTR:["href","title","target","rel","src","alt","width","height","loading","fetchpriority","style","class","colspan","rowspan"],ALLOW_DATA_ATTR:false}),[post.content]);
   const reacts=[{k:"clap",l:"Clap",i:"👏"},{k:"like",l:"Like",i:"👍"},{k:"love",l:"Love",i:"❤️"},{k:"fire",l:"Fire",i:"🔥"},{k:"rocket",l:"Rocket",i:"🚀"}];
   const S=({f,s=20}:{f:boolean;s?:number})=><svg width={s} height={s} viewBox="0 0 24 24" fill={f?"#f59e0b":"#e2e8f0"}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
   const btn={background:"#0a1628",color:"#fff",fontSize:14,fontWeight:700,padding:"12px 28px",borderRadius:999,border:"none",cursor:"pointer",transition:"all 0.2s ease"};

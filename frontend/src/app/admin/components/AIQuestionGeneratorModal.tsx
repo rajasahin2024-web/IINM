@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import ReactDOM from "react-dom";
 import { useToast } from "./ToastProvider";
 import { API_BASE_URL } from "@/lib/config";
-import DOMPurify from 'dompurify';
+import DOMPurify from 'isomorphic-dompurify';
 
 /* ─── Types ─── */
 interface QuestionType { id: number; code: string; name: string; is_active: boolean; }

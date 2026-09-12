@@ -3,6 +3,14 @@ import type { NextConfig } from "next";
 const isDev = process.env.NODE_ENV === "development";
 
 const nextConfig: NextConfig = {
+  // Allow an isolated build dir (NEXT_DIST_DIR=.next-verify npm run build)
+  // so verification builds don't clobber a running dev server's .next/.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
+  // isomorphic-dompurify's server entry pulls in jsdom, which cannot be
+  // bundled (dynamic requires). Keep both external in server bundles; the
+  // client bundle still resolves the plain dompurify browser build.
+  serverExternalPackages: ["isomorphic-dompurify", "jsdom"],
+
   allowedDevOrigins: [
     "iinmedu.com",
     "api.iinmedu.com",
