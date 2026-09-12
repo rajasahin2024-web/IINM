@@ -1,6 +1,27 @@
 "use client";
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { API_BASE_URL } from "@/lib/config";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Clock3,
+  Eye,
+  EyeOff,
+  Fingerprint,
+  Globe,
+  GraduationCap,
+  Loader2,
+  Lock,
+  Mail,
+  MapPin,
+  MonitorSmartphone,
+  Newspaper,
+  ShieldAlert,
+  ShieldCheck,
+  Users,
+  X,
+} from "lucide-react";
 
 /**
  * Cross-browser stable hardware fingerprint.
@@ -25,7 +46,7 @@ function generateDeviceFingerprint(): string {
     else platform = "Unknown";
   }
   const lang = (navigator as any).language || "";
-  const mem = (navigator as any).deviceMemory || 0;
+  const mem = (navigator as any) .deviceMemory || 0;
 
   const raw = `${screen_w}x${screen_h}x${color_d}|cpu:${cpu_cores}|tz:${timezone}|os:${platform}|lang:${lang}|mem:${mem}`;
 
@@ -40,13 +61,6 @@ function generateDeviceFingerprint(): string {
   const toHex = (n: number) => (n >>> 0).toString(16).padStart(8, "0");
   return `${toHex(h1)}${toHex(h2)}${toHex(h1 ^ h2)}${toHex(Math.imul(h1, h2) >>> 0)}`;
 }
-
-const BrainIcon = () => (
-  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z" />
-    <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z" />
-  </svg>
-);
 
 interface SiteSettingsData {
   site_name: string;
@@ -63,9 +77,20 @@ interface LocationInfo {
   registered_at: string | null;
 }
 
+const inputCls =
+  "h-12 w-full border border-slate-300 bg-white pl-11 pr-4 text-sm text-slate-900 transition-colors duration-200 placeholder:text-slate-400 hover:border-slate-400 focus:border-[#0a1628] focus:outline-none focus:ring-2 focus:ring-[#0a1628]/15 sm:text-base";
+
+const capabilityCards = [
+  { icon: GraduationCap, title: "Courses & Batches", desc: "Catalog, pricing and batch schedules" },
+  { icon: Newspaper, title: "Content & Media", desc: "Blogs, pages, notices and banners" },
+  { icon: Users, title: "Students & Admissions", desc: "Admissions, invoices and receipts" },
+  { icon: MonitorSmartphone, title: "Devices & Access", desc: "Approve devices, audit sign-ins" },
+] as const;
+
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState("");
@@ -75,6 +100,7 @@ export default function Login() {
   const [publicIp, setPublicIp] = useState<string | null>(null);
   const [toast, setToast] = useState<{ visible: boolean; msg: string; type?: string }>({ visible: false, msg: "" });
   const [siteSettings, setSiteSettings] = useState<SiteSettingsData>({ site_name: "IINM", logo_url: "" });
+  const [logoError, setLogoError] = useState(false);
 
   const showToast = (msg: string, type: string = "warning") => {
     setToast({ visible: true, msg, type });
@@ -312,526 +338,323 @@ export default function Login() {
     }
   };
 
+  const brandName = (siteSettings.site_name || "IINM").split("|")[0].trim() || "IINM";
+  const logoSrc = siteSettings.logo_url && !logoError ? siteSettings.logo_url : null;
+  const toastSuccess = toast.type === "success";
+
+  const ipDisplay = publicIp || location?.ip_address || "";
+  const locDisplay =
+    location && location.location &&
+    location.location !== "Unknown Location" &&
+    location.location !== "Location not provided"
+      ? location.location
+      : "";
+  const deviceDisplay =
+    [location?.device_name, location?.device_model].filter(Boolean).join(" · ") ||
+    "This device";
+
+  const brandLockup = (
+    <>
+      {logoSrc ? (
+        <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden border border-white/15 bg-white">
+          <Image
+            src={logoSrc}
+            alt={brandName}
+            width={40}
+            height={40}
+            unoptimized
+            onError={() => setLogoError(true)}
+            className="h-9 w-9 object-contain"
+          />
+        </span>
+      ) : (
+        <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center bg-[#e63946] text-xl font-medium text-white">
+          {brandName.charAt(0)}
+        </span>
+      )}
+      <span className="truncate text-lg font-medium tracking-tight text-white">
+        {brandName}
+      </span>
+    </>
+  );
+
   /* ── Loading / checking state ── */
   if (checking) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fafc" }}>
-        <div style={{ textAlign: "center", color: "#64748b", fontSize: "14px", fontWeight: "500" }}>
-          <div style={{
-            width: "40px", height: "40px", border: "3px solid #e2e8f0",
-            borderTopColor: "#2baee0", borderRadius: "50%",
-            animation: "spin 0.8s linear infinite", margin: "0 auto 16px"
-          }} />
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6">
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex flex-col items-center gap-4 text-sm font-medium text-slate-500"
+        >
+          <Loader2 className="h-10 w-10 animate-spin text-[#0a1628] motion-reduce:animate-none" aria-hidden />
           Verifying security protocols…
         </div>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
-  /* ── Login form with Premium Split Layout ── */
   return (
-    <div className="login-container">
+    <div className="min-h-screen bg-slate-100 lg:grid lg:grid-cols-12 lg:bg-white">
 
-      {/* Left Side: The Form Area */}
-      <div className="login-form-side">
-
-        {/* ── Toast inside white panel, top-right ── */}
-        {toast.visible && (
-          <div className={`auth-toast auth-toast--${toast.type || "warning"}`}>
-            <div className="auth-toast-icon">
-              {toast.type === "success" ? (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                </svg>
-              )}
+      {/* ── Toast — top-right, aria-live ── */}
+      {toast.visible && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-x-4 top-4 z-50 motion-safe:animate-[login-toast-in_0.45s_cubic-bezier(0.16,1,0.3,1)_both] sm:inset-x-auto sm:right-6 sm:top-6 sm:w-96"
+        >
+          <div
+            className={`flex items-start gap-3 border border-white/10 bg-[#0a1628] p-4 shadow-2xl ${
+              toastSuccess ? "border-l-4 border-l-emerald-400" : "border-l-4 border-l-amber-400"
+            }`}
+          >
+            <span
+              className={`flex h-9 w-9 flex-shrink-0 items-center justify-center ${
+                toastSuccess ? "bg-emerald-400/15 text-emerald-400" : "bg-amber-400/15 text-amber-400"
+              }`}
+            >
+              {toastSuccess
+                ? <CheckCircle2 className="h-5 w-5" aria-hidden />
+                : <ShieldAlert className="h-5 w-5" aria-hidden />}
+            </span>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <p className={`text-sm font-medium ${toastSuccess ? "text-emerald-300" : "text-amber-300"}`}>
+                {toastSuccess ? "Success" : "Already Signed In"}
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-slate-400">{toast.msg}</p>
             </div>
-            <div className="auth-toast-body">
-              <div className="auth-toast-title">
-                {toast.type === "success" ? "Success" : "Already Signed In"}
-              </div>
-              <div className="auth-toast-msg">{toast.msg}</div>
-            </div>
-            <button className="auth-toast-close" onClick={() => setToast({ visible: false, msg: "" })}>✕</button>
-          </div>
-        )}
-        {/* Top left brand logo */}
-        <div className="login-brand">
-          <div className="logo-icon-small">
-            {siteSettings.logo_url ? (
-              <img
-                src={siteSettings.logo_url}
-                alt={siteSettings.site_name}
-              />
-            ) : (
-              <BrainIcon />
-            )}
-          </div>
-          <span className="brand-text">{siteSettings.site_name || "IINM"}</span>
-        </div>
-
-        <div className="login-form-wrapper">
-          <div className="login-header">
-            <h1 className="login-title">IINM Administrator Portal</h1>
-            {/* <p className="login-subtitle">Enter your details to access the admin portal.</p> */}
-          </div>
-
-          <form onSubmit={handleLogin} className="login-form">
-
-            {/* Email — floating label */}
-            <div className="float-group">
-              <input
-                id="email"
-                type="email"
-                placeholder="admin@iinm.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-              />
-              <label htmlFor="email">Email Address</label>
-            </div>
-
-            {/* Password — floating label + forgot link */}
-            <div className="float-group">
-              <input
-                id="password"
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
-              />
-              <label htmlFor="password">Password</label>
-              <a href="#" className="forgot-link float-forgot">Forgot password?</a>
-            </div>
-
-            {error && <div className="error-banner">{error}</div>}
-
-            <button type="submit" className="login-button" disabled={loading}>
-              {loading ? "Authenticating…" : "Sign In"}
+            <button
+              type="button"
+              aria-label="Dismiss notification"
+              onClick={() => setToast({ visible: false, msg: "" })}
+              className="-mr-1 -mt-1 flex h-11 w-11 flex-shrink-0 items-center justify-center border-0 bg-transparent text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+            >
+              <X className="h-4 w-4" aria-hidden />
             </button>
-
-            {/* ── Location Info Card (from DB) ── */}
-            <div className="location-card">
-              {locationLoading ? (
-                <div className="location-loading">
-                  <div className="location-spinner" />
-                  <span>Loading location…</span>
-                </div>
-              ) : location ? (
-                <>
-                  {location.location && location.location !== "Unknown Location" && location.location !== "Location not provided" && (
-                    <div className="location-name">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{display:'inline',marginRight:'5px',verticalAlign:'middle',flexShrink:0}}>
-                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-                      </svg>
-                      {location.location}
-                    </div>
-                  )}
-                  <div className="location-coords">
-                    {location.lat !== null && location.lng !== null && (
-                      <span>📍 {location.lat?.toFixed(4)}°, {location.lng?.toFixed(4)}°</span>
-                    )}
-                    <span className="location-ip">IP: {publicIp || location.ip_address}</span>
-                  </div>
-                </>
-              ) : (
-                <div className="location-unavailable">No location data</div>
-              )}
-            </div>
-          </form>
-        </div>
-      </div>
-
-      {/* Right Side: The Premium Visual Area */}
-      <div className="login-visual-side">
-        <div className="visual-content">
-          <div className="visual-badge">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
-            Zero-Trust Network
           </div>
-          <h2 className="visual-title">Secure Admin Portal</h2>
-          <p className="visual-subtitle">
-            Manage your entire learning platform from our unified, highly secure dashboard. All device access is strictly monitored and authorized.
+        </div>
+      )}
+
+      {/* ── Info panel — navy; 8 of 12 columns on desktop ── */}
+      <section className="relative overflow-hidden bg-[#0a1628] lg:col-span-8 lg:flex lg:min-h-screen lg:flex-col">
+        <div aria-hidden className="absolute inset-x-0 top-0 h-1 bg-[#e63946]" />
+        <div aria-hidden className="login-grid pointer-events-none absolute inset-0" />
+
+        <header className="relative z-10 flex items-center gap-3 px-5 pt-9 sm:px-8 lg:px-14 lg:pt-10 xl:px-20">
+          {brandLockup}
+        </header>
+
+        {/* Mobile hero — app-style header block */}
+        <div className="relative z-10 px-5 pb-20 pt-10 sm:px-8 lg:hidden">
+          <span className="inline-flex items-center gap-2 border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200">
+            <ShieldCheck className="h-4 w-4 text-[#e63946]" aria-hidden />
+            Device-verified access
+          </span>
+          <h1 className="mt-5 text-3xl font-semibold leading-tight tracking-tight text-white">
+            {brandName} Admin Portal
+          </h1>
+          <p className="mt-3 max-w-sm text-sm leading-relaxed text-slate-400">
+            Sign in with your administrator credentials. Every device is fingerprinted and explicitly authorized.
+          </p>
+        </div>
+
+        {/* Desktop panel content */}
+        <div className="relative z-10 hidden flex-1 flex-col justify-center px-14 py-14 lg:flex xl:px-20">
+          <span className="inline-flex w-fit items-center gap-2 border border-white/15 bg-white/5 px-3.5 py-1.5 text-xs font-medium text-slate-200">
+            <ShieldCheck className="h-4 w-4 text-[#e63946]" aria-hidden />
+            Device-verified access
+          </span>
+          <h1 className="mt-6 max-w-xl text-4xl font-semibold leading-[1.12] tracking-tight text-white xl:text-5xl">
+            {brandName} Admin Portal<span className="text-[#e63946]">.</span>
+          </h1>
+          <p className="mt-4 max-w-lg text-sm leading-relaxed text-slate-400 xl:text-base">
+            Manage courses, content, students and site settings from one secure dashboard.
+            Access is limited to fingerprinted, explicitly authorized devices.
           </p>
 
-          <div className="abstract-ui">
-            <div className="ui-header" />
-            <div className="ui-row">
-              <div className="ui-card flex-1" />
-              <div className="ui-card flex-1" />
-              <div className="ui-card flex-2" />
-            </div>
-            <div className="ui-row">
-              <div className="ui-card flex-full height-tall" />
-            </div>
+          {/* Capability cards — hairline grid */}
+          <div className="mt-12 grid max-w-3xl grid-cols-2 gap-px border border-white/10 bg-white/10">
+            {capabilityCards.map(({ icon: Icon, title, desc }) => (
+              <div key={title} className="bg-[#0a1628] p-5">
+                <span className="flex h-9 w-9 items-center justify-center bg-white/10 text-slate-200">
+                  <Icon className="h-4 w-4" aria-hidden />
+                </span>
+                <p className="mt-3.5 text-sm font-medium text-white">{title}</p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-500">{desc}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-10 flex max-w-3xl flex-wrap items-center gap-x-8 gap-y-3 border-t border-white/10 pt-6 text-xs text-slate-400">
+            <span className="flex items-center gap-2">
+              <Fingerprint className="h-4 w-4 text-[#e63946]" aria-hidden />
+              Hardware fingerprinting
+            </span>
+            <span className="flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-[#e63946]" aria-hidden />
+              Geo-verified sign-in
+            </span>
+            <span className="flex items-center gap-2">
+              <Clock3 className="h-4 w-4 text-[#e63946]" aria-hidden />
+              48-hour sessions
+            </span>
           </div>
         </div>
+      </section>
 
-        <div className="glass-orb orb-1"></div>
-        <div className="glass-orb orb-2"></div>
-      </div>
+      {/* ── Login column — 4 of 12 columns on desktop ── */}
+      <main className="relative px-4 pb-12 sm:px-6 lg:col-span-4 lg:flex lg:min-h-screen lg:items-center lg:border-l lg:border-slate-200 lg:bg-slate-50 lg:px-8 xl:px-12">
+        <div className="mx-auto -mt-12 w-full max-w-md lg:mt-0">
+
+          {/* Login box */}
+          <div className="border border-slate-200 bg-white p-6 shadow-sm shadow-slate-900/5 sm:p-7">
+            <h2 className="text-xl font-semibold tracking-tight text-slate-900">Sign in</h2>
+            <p className="mt-1 text-sm text-slate-500">Administrator access only.</p>
+
+            <form onSubmit={handleLogin} className="mt-6 flex flex-col gap-4">
+              <div>
+                <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" aria-hidden />
+                  <input
+                    id="email"
+                    type="email"
+                    placeholder="admin@iinm.com"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    required
+                    autoComplete="email"
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" aria-hidden />
+                  <input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                    className={`${inputCls} pr-12`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(v => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center border-0 bg-transparent text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0a1628]"
+                  >
+                    {showPassword
+                      ? <EyeOff className="h-5 w-5" aria-hidden />
+                      : <Eye className="h-5 w-5" aria-hidden />}
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-2.5 border border-[#e63946]/30 bg-[#e63946]/10 px-4 py-3 text-sm text-[#a82633]"
+                >
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="mt-1 flex h-12 w-full items-center justify-center gap-2 border-0 bg-[#0a1628] text-sm font-medium text-white transition-colors duration-200 hover:bg-[#12233d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a1628] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:text-base"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+                    Authenticating…
+                  </>
+                ) : (
+                  "Sign In"
+                )}
+              </button>
+            </form>
+
+            <p className="mt-5 flex items-center gap-2 border-t border-slate-100 pt-4 text-xs text-slate-400">
+              <Fingerprint className="h-4 w-4 flex-shrink-0 text-[#e63946]" aria-hidden />
+              Protected by hardware fingerprinting
+            </p>
+          </div>
+
+          {/* Location box — session context rows */}
+          <div className="mt-4 border border-slate-200 bg-white">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4">
+              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center bg-[#e63946]/10 text-[#e63946]">
+                <ShieldCheck className="h-5 w-5" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-slate-900">Session security</p>
+                <p className="truncate text-xs text-slate-400">Verified against this device</p>
+              </div>
+            </div>
+            <ul className="divide-y divide-slate-100">
+              <li className="flex items-center gap-3 px-5 py-3.5">
+                <MapPin className="h-4 w-4 flex-shrink-0 text-slate-400" aria-hidden />
+                <span className="w-20 flex-shrink-0 text-xs text-slate-400">Location</span>
+                {locationLoading ? (
+                  <span className="ml-auto flex items-center gap-2 text-xs text-slate-400">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    Detecting…
+                  </span>
+                ) : (
+                  <span className="ml-auto truncate text-right text-xs text-slate-700" title={locDisplay || undefined}>
+                    {locDisplay || "Unavailable"}
+                  </span>
+                )}
+              </li>
+              <li className="flex items-center gap-3 px-5 py-3.5">
+                <Globe className="h-4 w-4 flex-shrink-0 text-slate-400" aria-hidden />
+                <span className="w-20 flex-shrink-0 text-xs text-slate-400">IP address</span>
+                <span className="ml-auto truncate text-right font-mono text-xs text-slate-700">
+                  {ipDisplay || "—"}
+                </span>
+              </li>
+              <li className="flex items-center gap-3 px-5 py-3.5">
+                <Fingerprint className="h-4 w-4 flex-shrink-0 text-slate-400" aria-hidden />
+                <span className="w-20 flex-shrink-0 text-xs text-slate-400">Device</span>
+                <span className="ml-auto flex items-center gap-1.5 truncate text-right text-xs text-slate-700">
+                  <span className="truncate" title={deviceDisplay}>{deviceDisplay}</span>
+                  <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-emerald-500" aria-hidden />
+                </span>
+              </li>
+            </ul>
+          </div>
+
+          <p className="mt-5 text-center text-xs text-slate-400">
+            Authorized devices only · All sign-ins are logged
+          </p>
+        </div>
+      </main>
 
       <style>{`
-        .login-container {
-          display: flex;
-          min-height: 100vh;
-          font-family: 'Inter', system-ui, sans-serif;
-          background-color: #ffffff;
-        }
-
-        .login-form-side {
-          flex: 0 0 100%;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 40px 24px;
-          position: relative;
-        }
-
-        .login-brand {
-          position: absolute;
-          top: 30px;
-          left: 24px;
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-        .logo-icon-small {
-          width: 52px; height: 52px; border-radius: 12px;
-          background-color: #f0f9ff; color: #0284c7;
-          display: flex; align-items: center; justify-content: center;
-          overflow: hidden;
-        }
-        .logo-icon-small img {
-          width: 100%; height: 100%; object-fit: contain;
-        }
-        .logo-icon-small svg {
-          width: 32px; height: 32px;
-        }
-        .brand-text {
-          font-size: 20px;
-          font-weight: 800;
-          color: #0f172a;
-          letter-spacing: 0.5px;
-        }
-
-        @media(min-width: 1024px) {
-          .login-form-side {
-            flex: 0 0 40%;
-            padding: 0 60px;
-          }
-          .login-brand {
-            top: 40px;
-            left: 60px;
-          }
-        }
-        .login-form-wrapper {
-          width: 100%;
-          max-width: 400px;
-        }
-        
-        .login-header { margin-bottom: 40px; }
-        .login-title {
-          margin: 0; font-size: 32px; font-weight: 800;
-          color: #0f172a; letter-spacing: -0.5px;
-        }
-        .login-subtitle { margin: 8px 0 0 0; font-size: 15px; color: #64748b; }
-
-        .login-form { display: flex; flex-direction: column; gap: 28px; }
-
-        /* ── Floating Label ── */
-        .float-group {
-          position: relative;
-          width: 100%;
-        }
-
-        .float-group input {
-          width: 100%;
-          padding: 14px 16px;
-          border-radius: 10px;
-          border: 1.5px solid #e2e8f0;
-          background-color: #ffffff;
-          font-size: 14px;
-          color: #0f172a;
-          outline: none;
-          transition: border-color 0.2s ease, box-shadow 0.2s ease;
-          box-sizing: border-box;
-          font-family: inherit;
-        }
-
-        .float-group input::placeholder {
-          color: transparent;
-        }
-
-        .float-group input:focus::placeholder {
-          color: #94a3b8;
-        }
-
-        .float-group label {
-          position: absolute;
-          left: 14px;
-          top: 50%;
-          transform: translateY(-50%);
-          font-size: 14px;
-          color: #94a3b8;
-          font-weight: 400;
-          pointer-events: none;
-          transition: all 0.2s cubic-bezier(.4,0,.2,1);
-          background: transparent;
-          z-index: 1;
-        }
-
-        /* Float label up when focused or has value */
-        .float-group input:focus ~ label,
-        .float-group input:not(:placeholder-shown) ~ label {
-          top: -9px;
-          transform: none;
-          font-size: 11px;
-          font-weight: 600;
-          color: #0284c7;
-          background: #fff;
-          padding: 0 4px;
-          letter-spacing: 0.3px;
-        }
-
-        .float-group input:not(:placeholder-shown):not(:focus) ~ label {
-          color: #64748b;
-        }
-
-        .float-group input:focus {
-          border-color: #0284c7;
-          box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
-        }
-
-        /* Forgot link floated in the password group */
-        .float-forgot {
-          position: absolute;
-          right: 0;
-          top: -22px;
-          font-size: 12px;
-          color: #0284c7;
-          text-decoration: none;
-          font-weight: 600;
-        }
-        .float-forgot:hover { text-decoration: underline; }
-        .forgot-link { font-size: 13px; color: #0284c7; text-decoration: none; font-weight: 600; }
-        .forgot-link:hover { text-decoration: underline; }
-
-        .login-button {
-          width: 100%; padding: 14px; border-radius: 0;
-          background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-          color: white; font-size: 16px; font-weight: 600;
-          border: none; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; margin-top: 4px;
-        }
-        .login-button:hover:not(:disabled) {
-          transform: translateY(-2px); box-shadow: 0 8px 20px rgba(2, 132, 199, 0.3);
-        }
-        .login-button:disabled { opacity: 0.7; cursor: not-allowed; }
-
-
-        /* Location card */
-        .location-card {
-          margin-top: 4px;
-          padding: 14px 16px;
-          border-radius: 12px;
-          background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-          border: 1px solid #bae6fd;
-          font-size: 13px;
-        }
-        .location-card-header {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-weight: 700;
-          color: #0369a1;
-          margin-bottom: 10px;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          font-size: 11px;
-        }
-        .location-loading {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          color: #64748b;
-          font-size: 13px;
-        }
-        .location-spinner {
-          width: 14px; height: 14px;
-          border: 2px solid #bae6fd;
-          border-top-color: #0284c7;
-          border-radius: 50%;
-          animation: spin 0.8s linear infinite;
-          flex-shrink: 0;
-        }
-        .location-details { display: flex; flex-direction: column; gap: 4px; }
-        .location-main { font-size: 15px; font-weight: 700; color: #0f172a; }
-        .location-sub { font-size: 13px; color: #475569; font-weight: 500; }
-        .location-coords {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-top: 6px;
-          padding-top: 6px;
-          border-top: 1px solid #bae6fd;
-          color: #64748b;
-          font-size: 11px;
-          flex-wrap: wrap;
-          gap: 4px;
-        }
-        .location-ip {
-          background: #dbeafe;
-          color: #1d4ed8;
-          padding: 2px 6px;
-          border-radius: 4px;
-          font-weight: 600;
-          font-family: monospace;
-        }
-        .location-unavailable { color: #94a3b8; font-style: italic; font-size: 13px; }
-        .location-name {
-          font-size: 13px;
-          font-weight: 600;
-          color: #0f172a;
-          margin-bottom: 8px;
-          line-height: 1.5;
-          display: flex;
-          align-items: flex-start;
-          gap: 2px;
-        }
-        .location-address {
-          font-size: 12px;
-          color: #334155;
-          margin-top: 4px;
-          line-height: 1.5;
-          background: rgba(255,255,255,0.6);
-          padding: 5px 8px;
-          border-radius: 6px;
-          border: 1px solid #e0f2fe;
-        }
-        .location-reg-date {
-          font-size: 10px;
-          color: #94a3b8;
-          margin-top: 4px;
-          padding-top: 4px;
-          border-top: 1px dashed #bae6fd;
-        }
-
-        .error-banner {
-          padding: 12px; border-radius: 8px; background-color: #fef2f2;
-          color: #b91c1c; font-size: 14px; font-weight: 500; border: 1px solid #fecaca;
-        }
-        .success-banner {
-          padding: 12px; border-radius: 8px; background-color: #f0fdf4;
-          color: #15803d; font-size: 14px; font-weight: 500; border: 1px solid #bbf7d0;
-        }
-
-        .login-visual-side {
-          display: none; position: relative; background-color: #0f172a; overflow: hidden;
-        }
-        @media(min-width: 1024px) {
-          .login-visual-side { display: flex; flex: 1; align-items: center; justify-content: center; padding: 60px; }
-        }
-
-        .visual-content { position: relative; z-index: 10; max-width: 600px; color: white; }
-        
-        .visual-badge {
-          display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px;
-          background-color: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px);
-          border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 100px;
-          font-size: 13px; font-weight: 600; color: #bae6fd; margin-bottom: 24px;
-        }
-        
-        .visual-title { font-size: 48px; font-weight: 800; margin: 0 0 16px 0; letter-spacing: -1px; line-height: 1.1; }
-        .visual-subtitle { font-size: 18px; color: #94a3b8; line-height: 1.6; margin: 0 0 40px 0; }
-
-        .abstract-ui {
-          width: 100%; background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(20px);
-          border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; padding: 24px;
-          display: flex; flex-direction: column; gap: 16px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-        }
-        .ui-header { width: 30%; height: 16px; border-radius: 4px; background: rgba(255, 255, 255, 0.15); }
-        .ui-row { display: flex; gap: 16px; }
-        .ui-card { height: 80px; border-radius: 12px; background: rgba(255, 255, 255, 0.08); }
-        .ui-card.flex-1 { flex: 1; } .ui-card.flex-2 { flex: 2; }
-        .ui-card.flex-full { flex: 1; } .ui-card.height-tall { height: 160px; }
-
-        .glass-orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.5; z-index: 1; }
-        .orb-1 { width: 400px; height: 400px; background-color: #0284c7; top: -100px; right: -100px; }
-        .orb-2 { width: 500px; height: 500px; background-color: #3b82f6; bottom: -200px; left: -100px; opacity: 0.3; }
-
-        /* ── Auth Toast ── */
-        @keyframes toastSlideIn {
+        @keyframes login-toast-in {
           from { transform: translateX(120%); opacity: 0; }
           to   { transform: translateX(0);    opacity: 1; }
         }
-        .auth-toast {
-          position: absolute;
-          top: 20px;
-          right: 20px;
-          z-index: 9999;
-          display: flex;
-          align-items: flex-start;
-          gap: 12px;
-          background: #0f172a;
-          color: #f1f5f9;
-          border: 1px solid #1e293b;
-          border-left: 4px solid #f59e0b;
-          border-radius: 12px;
-          padding: 14px 16px;
-          max-width: 360px;
-          box-shadow: 0 20px 40px rgba(0,0,0,0.4);
-          animation: toastSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+        .login-grid {
+          background-image:
+            linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+          background-size: 44px 44px;
         }
-        .auth-toast--success {
-          border-left-color: #22c55e;
-        }
-        .auth-toast--success .auth-toast-icon {
-          background: rgba(34, 197, 94, 0.15);
-          color: #22c55e;
-        }
-        .auth-toast--success .auth-toast-title {
-          color: #4ade80;
-        }
-        .auth-toast--warning {
-        }
-        .auth-toast-icon {
-          flex-shrink: 0;
-          width: 32px; height: 32px;
-          background: rgba(245, 158, 11, 0.15);
-          border-radius: 8px;
-          display: flex; align-items: center; justify-content: center;
-          color: #f59e0b;
-        }
-        .auth-toast--warning .auth-toast-icon {
-          background: rgba(245, 158, 11, 0.15);
-          color: #f59e0b;
-        }
-        .auth-toast-body { flex: 1; }
-        .auth-toast-title {
-          font-size: 13px;
-          font-weight: 700;
-          color: #fbbf24;
-          margin-bottom: 3px;
-        }
-        .auth-toast-msg {
-          font-size: 12px;
-          color: #94a3b8;
-          line-height: 1.5;
-        }
-        .auth-toast-close {
-          background: none; border: none; cursor: pointer;
-          color: #475569; font-size: 13px; padding: 0;
-          flex-shrink: 0; line-height: 1;
-        }
-        .auth-toast-close:hover { color: #f1f5f9; }
       `}</style>
     </div>
   );
