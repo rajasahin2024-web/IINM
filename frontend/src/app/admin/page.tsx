@@ -47,24 +47,19 @@ function StatCard({ label, value, sub, icon, accent, onClick }: {
 }) {
   return (
     <div
+      className={`stat-card${onClick ? " clickable" : ""}`}
       onClick={onClick}
-      style={{
-        background: "#fff", borderRadius: 12, padding: "14px 16px",
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        border: "1px solid #f1f5f9", boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-        cursor: onClick ? "pointer" : "default", transition: "0.2s",
-        minHeight: 74,
-      }}
-      onMouseEnter={e => { if (onClick) { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 16px rgba(0,0,0,0.08)"; (e.currentTarget as HTMLDivElement).style.transform = "translateY(-1px)"; } }}
-      onMouseLeave={e => { if (onClick) { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 1px 3px rgba(0,0,0,0.05)"; (e.currentTarget as HTMLDivElement).style.transform = "none"; } }}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
     >
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</div>
-        <div style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", lineHeight: 1 }}>{value}</div>
-        {sub && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 3, whiteSpace: "nowrap" }}>{sub}</div>}
-      </div>
-      <div style={{ width: 38, height: 38, borderRadius: 9, background: `${accent}18`, color: accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginLeft: 8 }}>
+      <div className="stat-icon" style={{ background: `${accent}18`, color: accent }}>
         <Icon name={icon} size={18} />
+      </div>
+      <div className="stat-info">
+        <div className="stat-label">{label}</div>
+        <div className="stat-value">{value}</div>
+        {sub && <div className="stat-sub">{sub}</div>}
       </div>
     </div>
   );
@@ -110,8 +105,8 @@ function RevenueChart({ data }: { data: { month: string; amount: number }[] }) {
   const gridLines = [0, 0.25, 0.5, 0.75, 1];
 
   return (
-    <div style={{ position: "relative", width: "100%" }}>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", overflow: "visible" }}>
+    <div className="d-chart">
+      <svg viewBox={`0 0 ${W} ${H}`}>
         <defs>
           <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%"   stopColor="#0ea5e9" stopOpacity="0.22" />
@@ -192,9 +187,9 @@ function RevenueChart({ data }: { data: { month: string; amount: number }[] }) {
 // ─── Section Header ──────────────────────────────────────
 function SectionHeader({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-      <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#0f172a", letterSpacing: "0.3px" }}>{title}</h3>
-      {action && <button onClick={onAction} style={{ background: "none", border: "none", fontSize: 12, color: "#0ea5e9", fontWeight: 600, cursor: "pointer", padding: 0 }}>{action} →</button>}
+    <div className="d-sec-head">
+      <h3 className="d-sec-title">{title}</h3>
+      {action && <button type="button" className="d-sec-action" onClick={onAction}>{action} →</button>}
     </div>
   );
 }
@@ -204,19 +199,19 @@ function BatchBar({ name, enrolled, capacity, status, startDate }: { name: strin
   const pct = Math.min(Math.round((enrolled / capacity) * 100), 100);
   const color = status === "Ongoing" ? "#10b981" : "#f59e0b";
   return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+    <div className="bb">
+      <div className="bb-head">
         <div>
-          <span style={{ fontSize: 12, fontWeight: 600, color: "#0f172a" }}>{name}</span>
-          {startDate && <span style={{ fontSize: 11, color: "#94a3b8", marginLeft: 8 }}>{new Date(startDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>}
+          <span className="bb-name">{name}</span>
+          {startDate && <span className="bb-date">{new Date(startDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 11, color: "#64748b" }}>{enrolled}/{capacity}</span>
-          <span style={{ fontSize: 10, fontWeight: 700, color, background: `${color}18`, padding: "2px 7px", borderRadius: 100 }}>{status}</span>
+        <div className="bb-meta">
+          <span className="bb-count">{enrolled}/{capacity}</span>
+          <span className="bb-status" style={{ color, background: `${color}18` }}>{status}</span>
         </div>
       </div>
-      <div style={{ height: 5, background: "#f1f5f9", borderRadius: 4, overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${pct}%`, background: color, borderRadius: 4, transition: "width 0.8s ease" }} />
+      <div className="bb-track">
+        <div className="bb-fill" style={{ width: `${pct}%`, background: color }} />
       </div>
     </div>
   );
@@ -258,48 +253,40 @@ function DashboardView() {
 
   return (
     <>
-      <style>{`
-        @keyframes toastSlideIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
-        .dash-card { animation: fadeUp 0.3s ease both; }
-        .quick-btn { display:flex; align-items:center; gap:8px; padding:9px 14px; border-radius:8px; border:1.5px solid #e2e8f0; background:#fff; font-size:12px; font-weight:700; color:#374151; cursor:pointer; transition:0.15s; white-space:nowrap; }
-        .quick-btn:hover { background:#f8fafc; border-color:#cbd5e1; transform:translateY(-1px); box-shadow:0 3px 10px rgba(0,0,0,0.07); }
-      `}</style>
-
       {/* Toast */}
       {toast.visible && (
-        <div style={{ position: "fixed", top: 24, right: 24, zIndex: 9999, display: "flex", alignItems: "flex-start", gap: 12, background: "#0f172a", color: "#f1f5f9", border: "1px solid #1e293b", borderLeft: "4px solid #f59e0b", borderRadius: 12, padding: "14px 16px", maxWidth: 360, boxShadow: "0 20px 40px rgba(0,0,0,0.35)", animation: "toastSlideIn 0.4s both" }}>
+        <div className="dash-toast">
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#fbbf24", marginBottom: 2 }}>Session Notice</div>
-            <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.5 }}>{toast.msg}</div>
+            <div className="dash-toast-title">Session Notice</div>
+            <div className="dash-toast-msg">{toast.msg}</div>
           </div>
-          <button onClick={() => setToast({ visible: false, msg: "" })} style={{ background: "none", border: "none", cursor: "pointer", color: "#475569", fontSize: 14, padding: 0 }}>✕</button>
+          <button type="button" className="dash-toast-close" aria-label="Dismiss" onClick={() => setToast({ visible: false, msg: "" })}>✕</button>
         </div>
       )}
 
       {/* ── Page Header ── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
+      <div className="dash-header">
         <div>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#0f172a" }}>Dashboard</h1>
-          <p style={{ margin: "2px 0 0", color: "#94a3b8", fontSize: 12 }}>
+          <h1 className="dash-title">Dashboard</h1>
+          <p className="dash-date">
             {new Date().toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div className="dash-chips">
           {pendingDevices.length > 0 && (
-            <div onClick={() => router.push("/admin/devices")} style={{ display: "flex", alignItems: "center", gap: 6, background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, color: "#92400e", cursor: "pointer" }}>
+            <div className="dash-chip dash-chip-warn" onClick={() => router.push("/admin/devices")}>
               <Icon name="alert-triangle" size={14} /> {pendingDevices.length} device request{pendingDevices.length > 1 ? "s" : ""} pending
             </div>
           )}
-          <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "6px 12px" }}>
-            <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e" }} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#15803d" }}>System Active</span>
+          <div className="dash-chip dash-chip-ok">
+            <div className="dash-chip-dot" />
+            <span>System Active</span>
           </div>
         </div>
       </div>
 
       {/* ── ROW 1: Stat Cards ── */}
-      <div className="dash-card" style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 10, marginBottom: 14 }}>
+      <div className="dash-card dash-stats">
         <StatCard label="Courses" value={isReady ? c!.total_courses : "—"} sub={isReady ? `${c!.active_courses} active` : ""} icon="book" accent="#3b82f6" onClick={() => router.push("/admin/masters/catalog/courses")} />
         <StatCard label="Students" value={isReady ? c!.total_students : "—"} sub={isReady ? `${c!.active_students} active` : ""} icon="users" accent="#8b5cf6" onClick={() => router.push("/admin/academic")} />
         <StatCard label="Batches" value={isReady ? c!.active_batches : "—"} sub={isReady ? `${c!.total_batches} total` : ""} icon="layers" accent="#10b981" onClick={() => router.push("/admin/batch")} />
@@ -309,63 +296,65 @@ function DashboardView() {
       </div>
 
       {/* ── ROW 2: Revenue Chart + Finance Summary ── */}
-      <div className="dash-card" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16, animationDelay: "0.05s" }}>
+      <div className="dash-card dash-grid three" style={{ animationDelay: "0.05s" }}>
         {/* Revenue Chart */}
-        <div style={{ background: "#fff", borderRadius: 12, padding: "16px 18px", border: "1px solid #f1f5f9", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", gridColumn: "span 2" }}>
+        <div className="d-card span-2">
           <SectionHeader title="Revenue — Last 6 Months" />
           {!isReady ? (
-            <div style={{ height: 80, display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: 12 }}>Loading…</div>
+            <div className="d-empty">Loading…</div>
           ) : (
             <RevenueChart data={r!.monthly_chart} />
           )}
         </div>
         {/* Finance KPIs */}
-        <div style={{ background: "#fff", borderRadius: 12, padding: "16px 18px", border: "1px solid #f1f5f9", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div className="d-card">
           <SectionHeader title="Finance" />
-          <div>
-            <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>TOTAL COLLECTED</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: "#0f172a" }}>{isReady ? fmtRs(r!.total_revenue) : "—"}</div>
-          </div>
-          <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 12 }}>
-            <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>OUTSTANDING DUES</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: isReady ? (r!.overdue_count > 0 ? "#ef4444" : "#10b981") : "#0f172a" }}>
-              {isReady ? r!.overdue_count : "—"} {isReady && r!.overdue_count > 0 && <span style={{ fontSize: 11, fontWeight: 600 }}>students</span>}
+          <div className="fin-grid">
+            <div>
+              <div className="fin-label">TOTAL COLLECTED</div>
+              <div className="fin-value">{isReady ? fmtRs(r!.total_revenue) : "—"}</div>
             </div>
-          </div>
-          <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 12 }}>
-            <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>DEVICE ACCESS</div>
-            <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
-              {[["Approved", d?.approved ?? "—", "#10b981"], ["Pending", d?.pending ?? "—", "#f59e0b"], ["Rejected", d?.rejected ?? "—", "#ef4444"]].map(([lbl, val, col]) => (
-                <div key={lbl as string} style={{ fontSize: 11, fontWeight: 700, color: col as string }}>
-                  <span style={{ color: "#64748b", fontWeight: 500 }}>{lbl} </span>{val}
-                </div>
-              ))}
+            <div className="fin-item-div">
+              <div className="fin-label">OUTSTANDING DUES</div>
+              <div className="fin-value" style={{ fontSize: 18, color: isReady ? (r!.overdue_count > 0 ? "#ef4444" : "#10b981") : "#0f172a" }}>
+                {isReady ? r!.overdue_count : "—"} {isReady && r!.overdue_count > 0 && <span style={{ fontSize: 11, fontWeight: 600 }}>students</span>}
+              </div>
+            </div>
+            <div className="fin-item-div fin-devices">
+              <div className="fin-label">DEVICE ACCESS</div>
+              <div className="fin-chips">
+                {[["Approved", d?.approved ?? "—", "#10b981"], ["Pending", d?.pending ?? "—", "#f59e0b"], ["Rejected", d?.rejected ?? "—", "#ef4444"]].map(([lbl, val, col]) => (
+                  <div key={lbl as string} className="fin-chip-num" style={{ color: col as string }}>
+                    <span className="fin-chip-lbl">{lbl} </span>{val}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {/* ── ROW 3: Recent Students + Recent Courses ── */}
-      <div className="dash-card" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, animationDelay: "0.1s" }}>
+      <div className="dash-card dash-grid two" style={{ animationDelay: "0.1s" }}>
         {/* Recent Students */}
-        <div style={{ background: "#fff", borderRadius: 12, padding: "16px 18px", border: "1px solid #f1f5f9", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+        <div className="d-card">
           <SectionHeader title="Recent Students" action="+ Register Student" onAction={() => router.push("/admin/academic/register")} />
           {!isReady ? (
-            <div style={{ color: "#94a3b8", fontSize: 12, textAlign: "center", padding: "20px 0" }}>Loading…</div>
+            <div className="d-empty">Loading…</div>
           ) : data!.recent_students.length === 0 ? (
-            <div style={{ color: "#94a3b8", fontSize: 12, textAlign: "center", padding: "20px 0" }}>No students yet</div>
+            <div className="d-empty">No students yet</div>
           ) : (
-            <div style={{ maxHeight: 240, overflowY: "auto", display: "flex", flexDirection: "column", gap: 0 }}>
-              {data!.recent_students.map((s, i) => (
-                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: i < data!.recent_students.length - 1 ? "1px solid #f8fafc" : "none" }}>
-                  <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#f0f9ff", color: "#0284c7", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+            <div className="d-list">
+              {data!.recent_students.map((s) => (
+                <div key={s.id} className="d-row">
+                  <div className="d-avatar">
                     {s.name.charAt(0).toUpperCase()}
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
-                    <div style={{ fontSize: 11, color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.email}</div>
+                  <div className="d-row-main">
+                    <div className="d-row-title">{s.name}</div>
+                    <div className="d-row-sub">{s.email}</div>
                   </div>
-                  <span style={{ fontSize: 10, fontWeight: 700, flexShrink: 0, color: s.is_active ? "#10b981" : "#94a3b8", background: s.is_active ? "#f0fdf4" : "#f8fafc", padding: "2px 7px", borderRadius: 100 }}>
+                  <span className="d-pill" style={{ color: s.is_active ? "#10b981" : "#94a3b8", background: s.is_active ? "#f0fdf4" : "#f8fafc" }}>
                     {s.is_active ? "Active" : "Inactive"}
                   </span>
                 </div>
@@ -375,21 +364,21 @@ function DashboardView() {
         </div>
 
         {/* Recent Courses + Quick Stats */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ background: "#fff", borderRadius: 12, padding: "16px 18px", border: "1px solid #f1f5f9", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+        <div className="dash-col">
+          <div className="d-card">
             <SectionHeader title="Recent Courses" action="View All" onAction={() => router.push("/admin/masters/catalog/courses")} />
             {!isReady ? (
-              <div style={{ color: "#94a3b8", fontSize: 12 }}>Loading…</div>
+              <div className="d-empty">Loading…</div>
             ) : data!.recent_courses.length === 0 ? (
-              <div style={{ color: "#94a3b8", fontSize: 12 }}>No courses yet</div>
+              <div className="d-empty">No courses yet</div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                {data!.recent_courses.map((course, i) => (
-                  <div key={course.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 0", borderBottom: i < data!.recent_courses.length - 1 ? "1px solid #f8fafc" : "none" }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "70%" }}>{course.title}</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: course.is_active ? "#10b981" : "#94a3b8", background: course.is_active ? "#f0fdf4" : "#f8fafc", padding: "2px 7px", borderRadius: 100 }}>{course.is_active ? "Active" : "Draft"}</span>
-                      <span style={{ fontSize: 11, color: "#94a3b8" }}>{relTime(course.created_at)}</span>
+              <div>
+                {data!.recent_courses.map((course) => (
+                  <div key={course.id} className="d-row" style={{ justifyContent: "space-between" }}>
+                    <div className="d-row-title" style={{ maxWidth: "65%" }}>{course.title}</div>
+                    <div className="d-row-end">
+                      <span className="d-pill" style={{ color: course.is_active ? "#10b981" : "#94a3b8", background: course.is_active ? "#f0fdf4" : "#f8fafc" }}>{course.is_active ? "Active" : "Draft"}</span>
+                      <span className="d-time">{relTime(course.created_at)}</span>
                     </div>
                   </div>
                 ))}
@@ -398,7 +387,7 @@ function DashboardView() {
           </div>
 
           {/* ── ROW 4 mini: Quick Stats ── */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+          <div className="mini-stats">
             {[
               { label: "Questions", value: c?.total_questions ?? "—", icon: "help-circle", color: "#6366f1" },
               { label: "Materials", value: c?.total_materials ?? "—", icon: "video", color: "#0ea5e9" },
@@ -407,12 +396,12 @@ function DashboardView() {
               { label: "Total Batches", value: c?.total_batches ?? "—", icon: "layers", color: "#8b5cf6" },
               { label: "Purchases", value: c?.month_purchases ?? "—", icon: "shopping-bag", color: "#ec4899" },
             ].map(item => (
-              <div key={item.label} style={{ background: "#fff", borderRadius: 10, padding: "10px 12px", border: "1px solid #f1f5f9", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                  <div style={{ color: item.color }}><Icon name={item.icon} size={13} /></div>
-                  <span style={{ fontSize: 10, fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.5px" }}>{item.label}</span>
+              <div key={item.label} className="mini-stat">
+                <div className="mini-stat-head">
+                  <div style={{ color: item.color, display: "flex", flexShrink: 0 }}><Icon name={item.icon} size={13} /></div>
+                  <span className="mini-stat-label">{item.label}</span>
                 </div>
-                <div style={{ fontSize: 18, fontWeight: 800, color: "#0f172a" }}>{isReady ? fmt(Number(item.value)) : "—"}</div>
+                <div className="mini-stat-value">{isReady ? fmt(Number(item.value)) : "—"}</div>
               </div>
             ))}
           </div>
@@ -420,23 +409,23 @@ function DashboardView() {
       </div>
 
       {/* ── ROW 5: Upcoming Installments & Batch Overview ── */}
-      <div className="dash-card" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, animationDelay: "0.15s" }}>
+      <div className="dash-card dash-grid two" style={{ animationDelay: "0.15s" }}>
         {/* Upcoming Installments */}
-        <div style={{ background: "#fff", borderRadius: 12, padding: "16px 18px", border: "1px solid #f1f5f9", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+        <div className="d-card">
           <SectionHeader title="Upcoming Installments" action="View All" onAction={() => router.push("/admin/academic/purchase")} />
           {!isReady ? (
-            <div style={{ color: "#94a3b8", fontSize: 12, textAlign: "center", padding: "20px 0" }}>Loading…</div>
+            <div className="d-empty">Loading…</div>
           ) : (data!.upcoming_installments || []).length === 0 ? (
-            <div style={{ color: "#94a3b8", fontSize: 12, textAlign: "center", padding: "20px 0" }}>No upcoming installments</div>
+            <div className="d-empty">No upcoming installments</div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 0, maxHeight: 240, overflowY: "auto" }}>
-              {(data!.upcoming_installments || []).map((inst, i) => (
-                <div key={inst.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: i < (data!.upcoming_installments || []).length - 1 ? "1px solid #f8fafc" : "none" }}>
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#0f172a" }}>{inst.student_name}</div>
-                    <div style={{ fontSize: 11, color: "#94a3b8" }}>Installment {inst.installment_no} • Due: {inst.due_date ? new Date(inst.due_date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "N/A"}</div>
+            <div className="d-list">
+              {(data!.upcoming_installments || []).map((inst) => (
+                <div key={inst.id} className="d-row" style={{ justifyContent: "space-between" }}>
+                  <div className="d-row-main">
+                    <div className="d-row-title">{inst.student_name}</div>
+                    <div className="d-row-sub">Installment {inst.installment_no} • Due: {inst.due_date ? new Date(inst.due_date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "N/A"}</div>
                   </div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#ef4444" }}>{fmtRs(inst.amount)}</div>
+                  <div className="d-amt">{fmtRs(inst.amount)}</div>
                 </div>
               ))}
             </div>
@@ -444,14 +433,14 @@ function DashboardView() {
         </div>
 
         {/* Batch Overview */}
-        <div style={{ background: "#fff", borderRadius: 12, padding: "16px 18px", border: "1px solid #f1f5f9", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+        <div className="d-card">
           <SectionHeader title="Batch Overview" action="Manage Batches" onAction={() => router.push("/admin/batch")} />
           {!isReady ? (
-             <div style={{ color: "#94a3b8", fontSize: 12, textAlign: "center", padding: "20px 0" }}>Loading…</div>
+             <div className="d-empty">Loading…</div>
           ) : data!.batch_overview.length === 0 ? (
-             <div style={{ color: "#94a3b8", fontSize: 12, textAlign: "center", padding: "20px 0" }}>No active batches</div>
+             <div className="d-empty">No active batches</div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxHeight: 240, overflowY: "auto" }}>
+            <div className="d-list">
               {data!.batch_overview.map(b => (
                 <BatchBar key={b.id} name={b.name} enrolled={b.enrolled} capacity={b.capacity} status={b.status} startDate={b.start_date} />
               ))}
@@ -461,9 +450,9 @@ function DashboardView() {
       </div>
 
       {/* ── ROW 6: Quick Actions ── */}
-      <div className="dash-card" style={{ background: "#fff", borderRadius: 12, padding: "14px 18px", border: "1px solid #f1f5f9", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", animationDelay: "0.2s" }}>
+      <div className="dash-card d-card" style={{ animationDelay: "0.2s" }}>
         <SectionHeader title="Quick Actions" />
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="quick-grid">
           {[
             { label: "Add Student", icon: "user-plus", color: "#8b5cf6", path: "/admin/academic/register" },
             { label: "Create Course", icon: "book", color: "#3b82f6", path: "/admin/masters/catalog/courses" },
@@ -474,8 +463,8 @@ function DashboardView() {
             { label: "Fees & Dues", icon: "credit-card", color: "#ec4899", path: "/admin/academic/purchase" },
             { label: "Site Settings", icon: "settings", color: "#64748b", path: "/admin/settings/site" },
           ].map(a => (
-            <button key={a.label} className="quick-btn" onClick={() => router.push(a.path)}>
-              <span style={{ color: a.color }}><Icon name={a.icon} size={14} /></span>
+            <button key={a.label} type="button" className="quick-btn" onClick={() => router.push(a.path)}>
+              <span className="quick-icon" style={{ background: `${a.color}14`, color: a.color }}><Icon name={a.icon} size={15} /></span>
               {a.label}
             </button>
           ))}

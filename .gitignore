@@ -34,6 +34,9 @@ backend/*.log
 .DS_Store
 Thumbs.db
 
+# Agent scratch (run-local temp files, tokens)
+.scratch/
+
 # IDE
 .vscode/
 .idea/

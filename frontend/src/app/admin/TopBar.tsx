@@ -224,7 +224,7 @@ export default function TopBar({ onNavigate, onLogout, activePath }: TopBarProps
             <img
               src={siteSettings.dark_logo_url || siteSettings.logo_url}
               alt={siteSettings.site_name || "IINM"}
-              style={{ height: "40px", width: "40px", objectFit: "contain", borderRadius: "8px", background: "#1e293b" }}
+              style={{ height: "40px", width: "40px", objectFit: "contain", background: "#1e293b" }}
             />
           ) : (
             <div className="tb-brand-icon">I</div>
@@ -245,11 +245,11 @@ export default function TopBar({ onNavigate, onLogout, activePath }: TopBarProps
 
       {/* ── Quick Tools ── */}
       <div className="tb-right">
-        <div className="tb-icon-btn" title="Search">
+        <div className="tb-icon-btn tb-hide-md" title="Search">
           <Icon name="search" />
         </div>
 
-        <div className="tb-icon-btn" title="Notifications">
+        <div className="tb-icon-btn tb-hide-sm" title="Notifications">
           <Icon name="bell" />
           <span className="tb-badge-dot" />
         </div>
@@ -285,7 +285,7 @@ export default function TopBar({ onNavigate, onLogout, activePath }: TopBarProps
               <img
                 src={siteSettings.dark_logo_url || siteSettings.logo_url}
                 alt={siteSettings.site_name || "IINM"}
-                style={{ height: "38px", width: "38px", objectFit: "contain", borderRadius: "6px", background: "#1e293b" }}
+                style={{ height: "38px", width: "38px", objectFit: "contain", background: "#1e293b" }}
               />
             ) : (
               <div className="tb-brand-icon">I</div>
