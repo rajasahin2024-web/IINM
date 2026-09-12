@@ -1,8 +1,15 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+/* Preflight strips list markers site-wide; restore UA defaults so CMS/TinyMCE
+   and other semantic lists keep bullets/numbering. Component CSS and the
+   list-none/list-* utilities still override this (later cascade layers). */
+@layer base {
+  ul,
+  ol {
+    list-style: revert;
+  }
+}
+
 html, body { height: 100%; width: 100%; }
 body { font-family: var(--font-inter, 'Inter', system-ui, -apple-system, sans-serif); }
 
