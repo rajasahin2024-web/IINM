@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { API_BASE_URL, BASE_URL } from "@/lib/config";
 import { toast } from "react-hot-toast";
 import CourseCard, { CourseCardType } from "@/components/CourseCard";
@@ -31,6 +32,7 @@ interface LocationInfo {
 }
 
 export default function StudentSignIn() {
+  const router = useRouter();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -348,6 +350,7 @@ export default function StudentSignIn() {
           fontWeight: "500",
         },
       });
+      router.push("/student");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "An unexpected error occurred";
       setError(msg === "Failed to fetch" ? "Unable to connect to server. Please check your connection." : msg);
@@ -539,15 +542,18 @@ export default function StudentSignIn() {
               </button>
             </div>
 
-            {/* Need Help Link */}
+            {/* Forgot Password + Need Help Links */}
             <div className="spl-forgot-row">
+              <Link href="/forgot-password" className="spl-help-link spl-forgot-link">
+                Forgot password?
+              </Link>
               <a
                 href="https://wa.me/?text=Hello%20IINM%20Support%2C%20I%20need%20assistance%20recovering%20my%20student%20password."
                 target="_blank"
                 rel="noreferrer"
                 className="spl-help-link"
               >
-                Need password assistance?
+                Need help?
               </a>
             </div>
 
@@ -984,8 +990,14 @@ export default function StudentSignIn() {
 
         .spl-forgot-row {
           display: flex;
-          justify-content: flex-end;
+          justify-content: space-between;
+          align-items: center;
           margin-top: -6px;
+        }
+
+        .spl-forgot-link {
+          color: #0a1628;
+          font-weight: 600;
         }
 
         .spl-help-link {

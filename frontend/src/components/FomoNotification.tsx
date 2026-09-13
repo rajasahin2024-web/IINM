@@ -37,8 +37,14 @@ export default function FomoNotification() {
   const displayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const currentIndexRef = useRef(0);
 
-  // Do not show on admin and auth pages (login, signin)
-  const isHiddenPage = pathname?.startsWith("/admin") || pathname === "/login" || pathname === "/signin";
+  // Do not show on admin, student panel, and auth pages (login, signin, password reset)
+  const isHiddenPage =
+    pathname?.startsWith("/admin") ||
+    pathname?.startsWith("/student") ||
+    pathname === "/login" ||
+    pathname === "/signin" ||
+    pathname === "/forgot-password" ||
+    pathname === "/reset-password";
 
   useEffect(() => {
     if (isHiddenPage) return;
