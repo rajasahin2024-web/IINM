@@ -126,8 +126,7 @@
 .stu-avatar-sm {
   width: 32px;
   height: 32px;
-  font-size: 13px;
-}
+  }
 
 /* ─────────────── Sidebar (desktop) ─────────────── */
 
@@ -184,8 +183,7 @@
   transition: color 0.15s ease, background-color 0.15s ease;
 }
 
-.stu-bottom-item .material-symbols-rounded {
-  font-size: 22px;
+.stu-bottom-item .stu-icon {
 }
 
 .stu-bottom-item.active {
@@ -316,7 +314,12 @@
   font-weight: 500;
 }
 
-.stu-card-batch .material-symbols-rounded {
+.stu-card-installment {
+  border-top: none;
+  padding-top: 0;
+}
+
+.stu-card-batch .stu-icon {
   font-size: 16px;
   color: #94a3b8;
 }
@@ -400,8 +403,7 @@
   color: #94a3b8;
 }
 
-.stu-pay-invoice .material-symbols-rounded {
-  font-size: 14px;
+.stu-pay-invoice .stu-icon {
 }
 
 /* ─────────────── Progress bar ─────────────── */
@@ -476,7 +478,7 @@
   gap: 10px;
 }
 
-.stu-empty .material-symbols-rounded {
+.stu-empty .stu-icon {
   font-size: 40px;
   color: #cbd5e1;
 }
@@ -538,7 +540,7 @@
   align-items: center;
 }
 
-.stu-hero-meta .material-symbols-rounded {
+.stu-hero-meta .stu-icon {
   font-size: 15px;
   vertical-align: -3px;
   margin-right: 4px;
@@ -595,7 +597,7 @@
   gap: 8px;
 }
 
-.stu-section-title .material-symbols-rounded {
+.stu-section-title .stu-icon {
   font-size: 19px;
   color: #e63946;
 }
@@ -619,8 +621,7 @@
   gap: 10px;
   padding: 10px 0;
   border-bottom: 1px solid #f1f5f9;
-  font-size: 13px;
-}
+  }
 
 .stu-routine-row:last-child {
   border-bottom: none;
@@ -639,7 +640,7 @@
   gap: 5px;
 }
 
-.stu-routine-time .material-symbols-rounded {
+.stu-routine-time .stu-icon {
   font-size: 15px;
   color: #94a3b8;
 }
@@ -676,8 +677,7 @@
   gap: 4px;
 }
 
-.stu-live-when .material-symbols-rounded {
-  font-size: 14px;
+.stu-live-when .stu-icon {
 }
 
 .stu-join-btn {
@@ -801,8 +801,7 @@
   flex-shrink: 0;
 }
 
-.stu-material-icon .material-symbols-rounded {
-  font-size: 17px;
+.stu-material-icon .stu-icon {
 }
 
 .stu-material-name {
@@ -933,9 +932,8 @@
     transition: background-color 0.15s ease, color 0.15s ease;
   }
 
-  .stu-nav-item .material-symbols-rounded {
-    font-size: 19px;
-  }
+  .stu-nav-item .stu-icon {
+}
 
   .stu-nav-item:hover {
     background: rgba(255, 255, 255, 0.06);
@@ -1019,8 +1017,7 @@
   }
 
   .stu-page-title {
-    font-size: 24px;
-  }
+}
 
   .stu-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -1045,8 +1042,7 @@
   }
 
   .stu-hero-title {
-    font-size: 23px;
-  }
+}
 }
 
 @media (min-width: 1280px) {

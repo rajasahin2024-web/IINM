@@ -11,6 +11,7 @@ import {
 import { getSiteSettings, type SiteSettings } from "@/lib/siteSettingsCache";
 import { resolveAssetUrl } from "@/lib/config";
 import { StudentContext } from "./context";
+import SIcon from "./icons";
 import "./student.css";
 
 /* ────────────────────────────────────────────────────────────
@@ -116,11 +117,11 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
               href="/student"
               className={`stu-nav-item ${isActive("/student") ? "active" : ""}`}
             >
-              <span className="material-symbols-rounded" aria-hidden="true">grid_view</span>
+              <SIcon name="grid" size={19} />
               My Courses
             </Link>
             <Link href="/courses" className="stu-nav-item">
-              <span className="material-symbols-rounded" aria-hidden="true">explore</span>
+              <SIcon name="explore" size={19} />
               Browse Courses
             </Link>
           </nav>
@@ -136,7 +137,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
               </div>
             </div>
             <button type="button" className="stu-logout-btn" onClick={logout}>
-              <span className="material-symbols-rounded" aria-hidden="true">logout</span>
+              <SIcon name="logout" size={19} />
               Sign out
             </button>
           </div>
@@ -166,15 +167,15 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             href="/student"
             className={`stu-bottom-item ${isActive("/student") ? "active" : ""}`}
           >
-            <span className="material-symbols-rounded" aria-hidden="true">grid_view</span>
+            <SIcon name="grid" size={19} />
             Courses
           </Link>
           <Link href="/courses" className="stu-bottom-item">
-            <span className="material-symbols-rounded" aria-hidden="true">explore</span>
+            <SIcon name="explore" size={19} />
             Browse
           </Link>
           <button type="button" className="stu-bottom-item" onClick={logout}>
-            <span className="material-symbols-rounded" aria-hidden="true">logout</span>
+            <SIcon name="logout" size={19} />
             Sign out
           </button>
         </nav>

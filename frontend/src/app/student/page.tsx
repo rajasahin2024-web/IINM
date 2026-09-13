@@ -12,6 +12,7 @@ import {
 } from "@/lib/studentApi";
 import { resolveAssetUrl } from "@/lib/config";
 import { useStudent } from "./context";
+import SIcon from "./icons";
 
 function CourseCardItem({ card }: { card: StudentCourseCard }) {
   const router = useRouter();
@@ -45,7 +46,7 @@ function CourseCardItem({ card }: { card: StudentCourseCard }) {
 
         {card.batchName && (
           <div className="stu-card-batch">
-            <span className="material-symbols-rounded" aria-hidden="true">groups</span>
+            <SIcon name="groups" size={16} />
             <span>
               {card.batchName}
               {card.batchMode ? ` · ${card.batchMode}` : ""}
@@ -76,15 +77,15 @@ function CourseCardItem({ card }: { card: StudentCourseCard }) {
           </span>
           {card.invoiceUuid && (
             <span className="stu-pay-invoice" title="Invoice reference">
-              <span className="material-symbols-rounded" aria-hidden="true">receipt_long</span>
+              <SIcon name="receipt" size={14} />
               {card.invoiceUuid.slice(0, 8)}
             </span>
           )}
         </div>
 
         {card.isInstallment && card.nextInstallment?.dueDate && (
-          <div className="stu-card-batch" style={{ borderTop: "none", paddingTop: 0 }}>
-            <span className="material-symbols-rounded" aria-hidden="true">event_repeat</span>
+          <div className="stu-card-batch stu-card-installment">
+            <SIcon name="repeat" size={16} />
             <span>
               Next installment {formatINR(card.nextInstallment.amount)} due{" "}
               {new Date(card.nextInstallment.dueDate).toLocaleDateString("en-IN", {
@@ -146,7 +147,7 @@ export default function StudentHomePage() {
 
       {error ? (
         <div className="stu-empty" role="alert">
-          <span className="material-symbols-rounded" aria-hidden="true">cloud_off</span>
+          <SIcon name="cloud-off" size={40} />
           <p className="stu-empty-title">Couldn&apos;t load courses</p>
           <p className="stu-empty-sub">{error}</p>
           <button className="stu-btn-primary" onClick={() => window.location.reload()}>
@@ -161,7 +162,7 @@ export default function StudentHomePage() {
         </div>
       ) : cards.length === 0 ? (
         <div className="stu-empty">
-          <span className="material-symbols-rounded" aria-hidden="true">school</span>
+          <SIcon name="school" size={40} />
           <p className="stu-empty-title">No courses yet</p>
           <p className="stu-empty-sub">
             You are not enrolled in any course yet. Browse the catalogue or contact admissions to

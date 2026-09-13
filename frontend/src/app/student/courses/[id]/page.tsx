@@ -12,6 +12,7 @@ import {
   type StudentMaterial,
 } from "@/lib/studentApi";
 import { resolveAssetUrl } from "@/lib/config";
+import SIcon from "../../icons";
 
 /* ── Material helpers ── */
 
@@ -25,17 +26,17 @@ function materialHref(m: StudentMaterial): string | null {
 function materialIcon(fileType: string | null): string {
   switch ((fileType ?? "").toLowerCase()) {
     case "video":
-      return "play_circle";
+      return "play";
     case "pdf":
-      return "picture_as_pdf";
+      return "pdf";
     case "youtube":
-      return "smart_display";
+      return "youtube";
     case "image":
       return "image";
     case "document":
-      return "description";
+      return "file";
     default:
-      return "attach_file";
+      return "file";
   }
 }
 
@@ -96,9 +97,7 @@ function ChapterBlock({
             {doneCount}/{chapter.materials.length} done
           </span>
         )}
-        <span className="material-symbols-rounded stu-chapter-chevron" aria-hidden="true">
-          expand_more
-        </span>
+        <SIcon name="chevron" size={18} className="stu-chapter-chevron" />
       </button>
       <div className="stu-materials">
         {chapter.materials.length === 0 ? (
@@ -109,15 +108,13 @@ function ChapterBlock({
             const inner = (
               <>
                 <span className="stu-material-icon" aria-hidden="true">
-                  <span className="material-symbols-rounded">{materialIcon(m.fileType)}</span>
+                  <SIcon name={materialIcon(m.fileType)} size={17} />
                 </span>
                 <span className="stu-material-name">{m.title}</span>
                 <span className="stu-material-type">{m.fileType ?? "file"}</span>
                 {m.isCompleted && (
                   <span className="stu-material-done" aria-label="Completed">
-                    <span className="material-symbols-rounded" aria-hidden="true" style={{ fontSize: 18 }}>
-                      check_circle
-                    </span>
+                    <SIcon name="check-circle" size={18} />
                   </span>
                 )}
               </>
@@ -143,15 +140,13 @@ export default function StudentCoursePage() {
   const params = useParams();
   const courseId = Number(params?.id);
 
+  const invalidId = !Number.isFinite(courseId);
   const [data, setData] = useState<StudentCourseDashboard | null>(null);
   const [nowTs, setNowTs] = useState<number | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(invalidId ? "Invalid course link." : "");
 
   useEffect(() => {
-    if (!Number.isFinite(courseId)) {
-      setError("Invalid course link.");
-      return;
-    }
+    if (invalidId) return;
     let cancelled = false;
     getStudentCourse(courseId)
       .then((d) => {
@@ -174,7 +169,7 @@ export default function StudentCoursePage() {
     return () => {
       cancelled = true;
     };
-  }, [courseId, router]);
+  }, [courseId, invalidId, router]);
 
   const upcomingClasses = useMemo(() => {
     if (!data) return [];
@@ -191,7 +186,7 @@ export default function StudentCoursePage() {
   if (error) {
     return (
       <div className="stu-empty" role="alert">
-        <span className="material-symbols-rounded" aria-hidden="true">lock</span>
+        <SIcon name="lock" size={40} />
         <p className="stu-empty-title">Unavailable</p>
         <p className="stu-empty-sub">{error}</p>
         <Link href="/student" className="stu-btn-primary" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
@@ -219,9 +214,7 @@ export default function StudentCoursePage() {
   return (
     <>
       <Link href="/student" className="stu-back-link">
-        <span className="material-symbols-rounded" aria-hidden="true" style={{ fontSize: 16 }}>
-          arrow_back
-        </span>
+        <SIcon name="arrow-left" size={16} />
         My courses
       </Link>
 
@@ -239,26 +232,26 @@ export default function StudentCoursePage() {
           <div className="stu-hero-meta">
             {data.batchName && (
               <span>
-                <span className="material-symbols-rounded" aria-hidden="true">groups</span>
+                <SIcon name="groups" size={15} />
                 {data.batchName}
                 {data.batchMode ? ` · ${data.batchMode}` : ""}
               </span>
             )}
             {data.instructorName && (
               <span>
-                <span className="material-symbols-rounded" aria-hidden="true">person</span>
+                <SIcon name="person" size={15} />
                 {data.instructorName}
               </span>
             )}
             {data.skillLevel && (
               <span>
-                <span className="material-symbols-rounded" aria-hidden="true">signal_cellular_alt</span>
+                <SIcon name="signal" size={15} />
                 {data.skillLevel}
               </span>
             )}
             {data.startDate && (
               <span>
-                <span className="material-symbols-rounded" aria-hidden="true">event</span>
+                <SIcon name="calendar" size={14} />
                 {formatWhen(data.startDate)}
                 {data.endDate ? ` → ${formatWhen(data.endDate)}` : ""}
               </span>
@@ -286,14 +279,12 @@ export default function StudentCoursePage() {
         <section className="stu-section" aria-labelledby="stu-schedule-h">
           <div className="stu-section-head">
             <h2 className="stu-section-title" id="stu-schedule-h">
-              <span className="material-symbols-rounded" aria-hidden="true">calendar_month</span>
+              <SIcon name="calendar" size={19} />
               Class schedule
             </h2>
             {data.meetingUrl && (
               <a href={data.meetingUrl} target="_blank" rel="noreferrer" className="stu-join-btn">
-                <span className="material-symbols-rounded" aria-hidden="true" style={{ fontSize: 16 }}>
-                  video_call
-                </span>
+                <SIcon name="video-call" size={16} />
                 Join class
               </a>
             )}
@@ -305,7 +296,7 @@ export default function StudentCoursePage() {
                   <div className="stu-routine-row" key={`${r.dayOfWeek}-${i}`}>
                     <span className="stu-routine-day">{r.dayOfWeek}</span>
                     <span className="stu-routine-time">
-                      <span className="material-symbols-rounded" aria-hidden="true">schedule</span>
+                      <SIcon name="clock" size={15} />
                       {r.startTime ?? "—"}
                       {r.endTime ? ` – ${r.endTime}` : ""}
                     </span>
@@ -321,7 +312,7 @@ export default function StudentCoursePage() {
                     <div className="stu-live-info">
                       <span className="stu-live-title">{c.title}</span>
                       <span className="stu-live-when">
-                        <span className="material-symbols-rounded" aria-hidden="true">event</span>
+                        <SIcon name="calendar" size={14} />
                         {formatWhen(c.scheduledAt)}
                         {c.chapterTitle ? ` · ${c.chapterTitle}` : ""}
                       </span>
@@ -343,7 +334,7 @@ export default function StudentCoursePage() {
       <section className="stu-section" aria-labelledby="stu-content-h">
         <div className="stu-section-head">
           <h2 className="stu-section-title" id="stu-content-h">
-            <span className="material-symbols-rounded" aria-hidden="true">menu_book</span>
+            <SIcon name="book" size={19} />
             Course content
           </h2>
           <span className="stu-chapter-meta">
@@ -372,7 +363,7 @@ export default function StudentCoursePage() {
         <section className="stu-section" aria-labelledby="stu-pay-h">
           <div className="stu-section-head">
             <h2 className="stu-section-title" id="stu-pay-h">
-              <span className="material-symbols-rounded" aria-hidden="true">payments</span>
+              <SIcon name="payments" size={19} />
               Payment summary
             </h2>
             {data.invoiceUuid && (
@@ -382,9 +373,7 @@ export default function StudentCoursePage() {
                 style={{ marginBottom: 0 }}
               >
                 Invoice {data.invoiceUuid.slice(0, 8)}
-                <span className="material-symbols-rounded" aria-hidden="true" style={{ fontSize: 15 }}>
-                  open_in_new
-                </span>
+                <SIcon name="external" size={15} />
               </Link>
             )}
           </div>
