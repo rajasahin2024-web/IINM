@@ -5,8 +5,6 @@ import shutil
 import json
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-import smtplib
-from email.message import EmailMessage
 import logging
 from datetime import datetime
 from typing import Optional, List
@@ -26,7 +24,7 @@ from models import (
     Course,
 )
 from routers.auth import require_device
-from helpers import rewrite_url
+from helpers import rewrite_url, send_email
 from security import validate_upload, ALLOWED_IMAGE_EXTENSIONS, ALLOWED_DOC_EXTENSIONS, ALLOWED_VIDEO_EXTENSIONS, MAX_IMAGE_SIZE_BYTES, MAX_VIDEO_SIZE_BYTES
 
 router = APIRouter(
@@ -107,27 +105,14 @@ async def test_email_configuration(req: TestEmailRequest, device: str = Depends(
             detail="Incomplete SMTP configuration. Please configure and save settings first."
         )
 
+    html_body = (
+        "<p>Hello,</p>"
+        "<p>This is a test message from your IINM Platform to verify the SMTP configuration.</p>"
+        "<p>If you received this, your email settings are correct.</p>"
+        "<p>Best Regards,<br>IINM System Administrator</p>"
+    )
     try:
-        msg = EmailMessage()
-        msg.set_content(
-            "Hello,\n\nThis is a test message from your IINM Platform to verify the SMTP configuration.\n\n"
-            "If you received this, your email settings are correct.\n\n"
-            "Best Regards,\nIINM System Administrator"
-        )
-        msg['Subject'] = 'IINM Platform: Test SMTP Connection'
-        msg['From'] = f"{settings.from_name} <{settings.from_email}>" if settings.from_name else settings.from_email
-        msg['To'] = req.test_email
-
-        server = smtplib.SMTP(settings.smtp_host, settings.smtp_port or 587)
-        if settings.use_tls:
-            server.starttls()
-        
-        if settings.smtp_password:
-            server.login(settings.smtp_user, settings.smtp_password)
-            
-        server.send_message(msg)
-        server.quit()
-        
+        send_email(db, to=req.test_email, subject="IINM Platform: Test SMTP Connection", html_body=html_body)
         return {"status": "success", "message": "Test email sent successfully"}
     except Exception as e:
         logging.error(f"SMTP Test Failed: {str(e)}")

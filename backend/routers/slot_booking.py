@@ -28,7 +28,7 @@ from pydantic import BaseModel, EmailStr
 from database import get_db
 from cache import cache
 import models
-from helpers import rewrite_url
+from helpers import rewrite_url, send_email
 from security import (
     check_public_rate_limit,
     get_client_ip,
@@ -147,40 +147,30 @@ def _send_booking_email(db: Session, student: models.Student, course: models.Cou
                         invoice_uuid: str, class_start_date: Optional[date]):
     """Send a booking confirmation email via SMTP. Fails silently if not configured."""
     try:
-        import smtplib
-        from email.message import EmailMessage
-        settings = db.query(models.EmailSettings).first()
-        if not settings or not settings.smtp_host or not settings.from_email:
-            logger.warning("SMTP not configured — skipping booking email.")
-            return
-        msg = EmailMessage()
         site = db.query(models.SiteSettings).first()
         site_name = (site.site_name if site else "IINM") or "IINM"
-        msg["Subject"] = f"Slot Booked — {course.title} | {site_name}"
-        msg["From"] = f"{settings.from_name} <{settings.from_email}>" if settings.from_name else settings.from_email
-        msg["To"] = student.email
         start_str = class_start_date.strftime("%d %B %Y") if class_start_date else "To be announced"
         batch_str = batch.name if batch else "To be assigned"
-        body = (
-            f"Hello {student.first_name},\n\n"
-            f"Congratulations! Your slot has been successfully booked.\n\n"
-            f"Course: {course.title}\n"
-            f"Batch: {batch_str}\n"
-            f"Class Start Date: {start_str}\n"
-            f"Booking Amount Paid: Rs. {booking_amount:,.2f}\n"
-            f"Receipt No: {invoice_uuid}\n\n"
-            f"IMPORTANT: Admission fees must be paid before the class start date "
-            f"to get confirmed admission and your platform login credentials.\n\n"
-            f"Best Regards,\n{site_name} Team"
+        html_body = (
+            f"<p>Hello {student.first_name},</p>"
+            f"<p>Congratulations! Your slot has been successfully booked.</p>"
+            f"<p>"
+            f"Course: <strong>{course.title}</strong><br>"
+            f"Batch: {batch_str}<br>"
+            f"Class Start Date: {start_str}<br>"
+            f"Booking Amount Paid: Rs. {booking_amount:,.2f}<br>"
+            f"Receipt No: {invoice_uuid}"
+            f"</p>"
+            f"<p><strong>IMPORTANT:</strong> Admission fees must be paid before the class start date "
+            f"to get confirmed admission and your platform login credentials.</p>"
+            f"<p>Best Regards,<br>{site_name} Team</p>"
         )
-        msg.set_content(body)
-        server = smtplib.SMTP(settings.smtp_host, settings.smtp_port or 587)
-        if settings.use_tls:
-            server.starttls()
-        if settings.smtp_password:
-            server.login(settings.smtp_user, settings.smtp_password)
-        server.send_message(msg)
-        server.quit()
+        send_email(
+            db,
+            to=student.email,
+            subject=f"Slot Booked — {course.title} | {site_name}",
+            html_body=html_body,
+        )
     except Exception as e:
         logger.warning(f"Booking email failed: {e}")
 

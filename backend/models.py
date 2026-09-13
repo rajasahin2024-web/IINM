@@ -635,6 +635,20 @@ class Student(Base):
 
 
 
+class StudentPasswordReset(Base):
+    """Single-use, HMAC-hashed password reset tokens for student panel."""
+    __tablename__ = "student_password_resets"
+    id           = Column(Integer, primary_key=True, index=True)
+    student_id   = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash   = Column(String(64), nullable=False, index=True)   # HMAC-SHA256 hex of the raw token
+    expires_at   = Column(DateTime(timezone=True), nullable=False)
+    used_at      = Column(DateTime(timezone=True), nullable=True)   # set when consumed or invalidated
+    requested_ip = Column(String(64), nullable=True)
+    created_at   = Column(DateTime(timezone=True), server_default=func.now())
+
+    student      = relationship("Student")
+
+
 class BatchEnrollment(Base):
     __tablename__ = "batch_enrollments"
     id         = Column(Integer, primary_key=True, index=True)

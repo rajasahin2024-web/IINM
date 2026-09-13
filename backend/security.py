@@ -4,6 +4,9 @@ Provides file upload validation and rate limiting helpers.
 """
 import os
 import time
+import hmac
+import base64
+import secrets
 import hashlib
 from typing import Optional
 from fastapi import HTTPException, UploadFile
@@ -16,6 +19,64 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+
+# ─── Student session tokens (HMAC-signed, stateless) ─────────────────────────
+
+STUDENT_TOKEN_TTL_SECONDS = 48 * 60 * 60  # 48 hours
+STUDENT_TOKEN_COOKIE = "iinm_student_token"
+
+
+def get_student_auth_secret() -> Optional[str]:
+    """Secret used to sign student session tokens and hash reset tokens.
+    Falls back to DEVICE_ADMIN_SECRET so the feature works without a dedicated
+    env var, but STUDENT_AUTH_SECRET should be set in production."""
+    return os.getenv("STUDENT_AUTH_SECRET") or os.getenv("DEVICE_ADMIN_SECRET")
+
+
+def make_student_token(student_id: int) -> str:
+    secret = get_student_auth_secret()
+    if not secret:
+        raise RuntimeError("STUDENT_AUTH_SECRET is not configured")
+    expiry = int(time.time()) + STUDENT_TOKEN_TTL_SECONDS
+    payload = f"{student_id}:{expiry}"
+    signature = hmac.new(
+        secret.encode('utf-8'),
+        payload.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+    token = base64.urlsafe_b64encode(f"{payload}:{signature}".encode('utf-8')).decode('utf-8').rstrip('=')
+    return token
+
+
+def verify_student_token(token: str) -> Optional[int]:
+    """Verify a student session token; returns student_id or None."""
+    secret = get_student_auth_secret()
+    if not secret:
+        return None
+    try:
+        padded = token + '=' * (-len(token) % 4)
+        decoded = base64.urlsafe_b64decode(padded).decode('utf-8')
+        student_id_str, expiry_str, signature = decoded.rsplit(':', 2)
+        student_id = int(student_id_str)
+        expiry = int(expiry_str)
+        if time.time() > expiry:
+            return None
+        expected = hmac.new(
+            secret.encode('utf-8'),
+            f"{student_id}:{expiry}".encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            return None
+        return student_id
+    except Exception:
+        return None
+
+
+def hash_reset_token(raw_token: str) -> str:
+    """HMAC-SHA256 a raw reset token for storage — never store plaintext."""
+    secret = get_student_auth_secret() or ""
+    return hmac.new(secret.encode('utf-8'), raw_token.encode('utf-8'), hashlib.sha256).hexdigest()
 
 try:
     import httpx

@@ -11,17 +11,18 @@ import os
 import uuid
 import logging
 import secrets
-import hashlib
-import hmac
-import base64
 import time
 from typing import Optional
 
 from database import engine, SessionLocal, Base, get_db
 from cache import cache as app_cache
 from models import AdminUser, DeviceSession, DeviceAdminUser, Student
-from routers import courses, materials, questions, question_types, settings, comprehensions, topics, difficulty, batches, student, academic, progress, exams, dashboard, blogs, testimonials, contact, about, faq, leadership, invoice, slot_booking, seo, career, pages, mission_vision, certification, our_team, sample_certificate, notices, verification, server_resource
-from security import check_public_rate_limit, get_client_ip, verify_password
+from routers import courses, materials, questions, question_types, settings, comprehensions, topics, difficulty, batches, student, academic, progress, exams, dashboard, blogs, testimonials, contact, about, faq, leadership, invoice, slot_booking, seo, career, pages, mission_vision, certification, our_team, sample_certificate, notices, verification, server_resource, student_auth
+from security import (
+    check_public_rate_limit, get_client_ip, verify_password,
+    make_student_token, verify_student_token, get_student_auth_secret,
+    STUDENT_TOKEN_TTL_SECONDS, STUDENT_TOKEN_COOKIE,
+)
 
 # ── Database Setup ──────────────────────────────────────────────────────────
 # create_all: Creates all tables on a FRESH database (safe — skips if exists).
@@ -73,6 +74,7 @@ app.include_router(sample_certificate.router)
 app.include_router(notices.router)
 app.include_router(verification.router)
 app.include_router(server_resource.router)
+app.include_router(student_auth.router)
 # Ensure upload directories exist
 os.makedirs("uploads", exist_ok=True)
 os.makedirs("uploads/sample_certificates", exist_ok=True)
@@ -198,11 +200,16 @@ if not DEVICE_ADMIN_SECRET:
 # Student login secret — used to sign session cookies. Falls back to device admin
 # secret so the feature works without a separate env var, but a dedicated secret is
 # strongly recommended for production.
-STUDENT_AUTH_SECRET = os.getenv("STUDENT_AUTH_SECRET") or DEVICE_ADMIN_SECRET
+STUDENT_AUTH_SECRET = get_student_auth_secret()
 if not STUDENT_AUTH_SECRET:
     logging.warning(
         "STUDENT_AUTH_SECRET is not set in environment. "
         "Student login will be disabled until it is configured."
+    )
+elif not os.getenv("STUDENT_AUTH_SECRET"):
+    logging.warning(
+        "STUDENT_AUTH_SECRET is not set — falling back to DEVICE_ADMIN_SECRET. "
+        "Set a dedicated STUDENT_AUTH_SECRET in production."
     )
 
 # ── Token store with expiry (48 hours) ──
@@ -257,43 +264,11 @@ def _require_admin_device(
     return x_device_token
 
 # ── Student session helpers ──────────────────────────────────────────────────
-_STUDENT_TOKEN_TTL_SECONDS = 48 * 60 * 60  # 48 hours
-
-def _make_student_token(student_id: int) -> str:
-    if not STUDENT_AUTH_SECRET:
-        raise RuntimeError("STUDENT_AUTH_SECRET is not configured")
-    expiry = int(time.time()) + _STUDENT_TOKEN_TTL_SECONDS
-    payload = f"{student_id}:{expiry}"
-    signature = hmac.new(
-        STUDENT_AUTH_SECRET.encode('utf-8'),
-        payload.encode('utf-8'),
-        hashlib.sha256
-    ).hexdigest()
-    token = base64.urlsafe_b64encode(f"{payload}:{signature}".encode('utf-8')).decode('utf-8').rstrip('=')
-    return token
-
-def _verify_student_token(token: str) -> int | None:
-    if not STUDENT_AUTH_SECRET:
-        return None
-    try:
-        # Restore base64 padding
-        padded = token + '=' * (-len(token) % 4)
-        decoded = base64.urlsafe_b64decode(padded).decode('utf-8')
-        student_id_str, expiry_str, signature = decoded.rsplit(':', 2)
-        student_id = int(student_id_str)
-        expiry = int(expiry_str)
-        if time.time() > expiry:
-            return None
-        expected = hmac.new(
-            STUDENT_AUTH_SECRET.encode('utf-8'),
-            f"{student_id}:{expiry}".encode('utf-8'),
-            hashlib.sha256
-        ).hexdigest()
-        if not hmac.compare_digest(signature, expected):
-            return None
-        return student_id
-    except Exception:
-        return None
+# Token signing/verification lives in security.py so routers can use it without
+# importing main (circular import). Aliases kept for existing call sites.
+_STUDENT_TOKEN_TTL_SECONDS = STUDENT_TOKEN_TTL_SECONDS
+_make_student_token = make_student_token
+_verify_student_token = verify_student_token
 
 # ── Cache Management Endpoints ───────────────────────────────────────────────
 # Must be defined AFTER _require_admin_device (default args evaluate at def time).
@@ -614,7 +589,7 @@ async def student_login(req: StudentLoginRequest, request: Request, db: Session 
     )
     is_https = request.url.scheme == "https"
     response.set_cookie(
-        "iinm_student_token",
+        STUDENT_TOKEN_COOKIE,
         token,
         max_age=_STUDENT_TOKEN_TTL_SECONDS,
         httponly=True,
