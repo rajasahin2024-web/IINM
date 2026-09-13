@@ -568,7 +568,7 @@ async def student_login(req: StudentLoginRequest, request: Request, db: Session 
         raise HTTPException(status_code=401, detail="Invalid credentials or account is inactive")
 
     if not student.is_active:
-        raise HTTPException(status_code=403, detail="Invalid credentials or account is inactive")
+        raise HTTPException(status_code=401, detail="Invalid credentials or account is inactive")
 
     if not verify_password(req.password, student.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials or account is inactive")
