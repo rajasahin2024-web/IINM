@@ -78,7 +78,7 @@ export default function CourseLayout({ children }: { children: React.ReactNode }
   const router = useRouter();
   const pathname = usePathname();
   const params = useParams();
-  const { profile, logout } = useStudent();
+  const { profile, logout, siteName, darkLogoUrl } = useStudent();
   const courseId = Number(params?.id);
   const invalidId = !Number.isFinite(courseId);
 
@@ -87,6 +87,14 @@ export default function CourseLayout({ children }: { children: React.ReactNode }
   const [error, setError] = useState(invalidId ? "Invalid course link." : "");
   const [drawerPath, setDrawerPath] = useState<string | null>(null);
   const [badges, setBadges] = useState({ liveExam: false, newNotices: false });
+  const [navCollapsed, setNavCollapsed] = useState(() => {
+    try {
+      return typeof window !== "undefined" &&
+        localStorage.getItem("stu_nav_collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
   const drawerOpen = drawerPath === pathname;
 
   const load = useCallback(() => {
@@ -142,6 +150,18 @@ export default function CourseLayout({ children }: { children: React.ReactNode }
     };
   }, [course, courseId, invalidId, pathname]);
 
+  // Desktop sidebar collapse — remembered across visits. Lazy read is
+  // safe: the course shell renders only after client-side data loads.
+  const toggleNav = useCallback(() => {
+    setNavCollapsed((c) => {
+      const next = !c;
+      try {
+        localStorage.setItem("stu_nav_collapsed", next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  }, []);
+
   // Lock body scroll while the drawer is open. drawerPath === pathname means
   // the drawer auto-closes on navigation without an extra effect.
   useEffect(() => {
@@ -155,6 +175,20 @@ export default function CourseLayout({ children }: { children: React.ReactNode }
   const groups = useMemo(() => navGroups(base), [base]);
 
   const isActive = (href: string) => pathname === href;
+
+  const pageLabel = useMemo(() => {
+    if (pathname === base) return "Overview";
+    for (const g of groups) {
+      for (const item of g.items) {
+        if (pathname === item.href || pathname.startsWith(`${item.href}/`)) {
+          return item.label;
+        }
+      }
+    }
+    if (pathname.startsWith("/student/help")) return "Help & Support";
+    if (pathname.startsWith("/student/profile")) return "My Profile";
+    return "";
+  }, [groups, pathname, base]);
 
   if (error) {
     return (
@@ -211,13 +245,17 @@ export default function CourseLayout({ children }: { children: React.ReactNode }
 
   return (
     <CourseContext.Provider value={{ courseId, course, reload: load, nowTs, badges }}>
-      <div className="stu-shell">
+      <div className={`stu-shell${navCollapsed ? " stu-shell-collapsed" : ""}`}>
         {/* ════════ Desktop sidebar (≥1024px) ════════ */}
         <aside className="stu-sidebar stu-course-sidebar">
           <div className="stu-sidebar-brand">
-            <Link href="/student" className="stu-back-brand" aria-label="Back to my courses">
-              <SIcon name="arrow-left" size={16} />
-              <span className="stu-brand-text">My Courses</span>
+            <Link href="/student" className="stu-brand-home" aria-label="Back to my courses">
+              {darkLogoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={darkLogoUrl} alt={siteName} className="stu-sidebar-logo" />
+              ) : (
+                <span className="stu-brand-text">{siteName}</span>
+              )}
             </Link>
             <span className="stu-portal-tag">Student Portal</span>
           </div>
@@ -265,11 +303,16 @@ export default function CourseLayout({ children }: { children: React.ReactNode }
                 </span>
                 <span className="stu-profile-email">{profile.email}</span>
               </div>
+              <button
+                type="button"
+                className="stu-profile-logout"
+                onClick={logout}
+                aria-label="Sign out"
+                title="Sign out"
+              >
+                <SIcon name="logout" size={18} />
+              </button>
             </div>
-            <button type="button" className="stu-logout-btn" onClick={logout}>
-              <SIcon name="logout" size={19} />
-              Sign out
-            </button>
           </div>
         </aside>
 
@@ -348,10 +391,47 @@ export default function CourseLayout({ children }: { children: React.ReactNode }
           </div>
         )}
 
-        {/* ════════ Content ════════ */}
-        <main className="stu-main">
-          <div className="stu-content stu-content-fluid">{children}</div>
-        </main>
+        {/* ════════ Content column (desktop topbar + main) ════════ */}
+        <div className="stu-body">
+          <header className="stu-desktop-topbar">
+            <button
+              type="button"
+              className="stu-nav-toggle"
+              onClick={toggleNav}
+              aria-label={navCollapsed ? "Show sidebar" : "Hide sidebar"}
+              aria-expanded={!navCollapsed}
+              title={navCollapsed ? "Show sidebar" : "Hide sidebar"}
+            >
+              <SIcon name="menu" size={20} />
+            </button>
+            <nav className="stu-dtop-crumb" aria-label="Breadcrumb">
+              <Link href="/student" className="stu-dtop-crumb-link">
+                My Courses
+              </Link>
+              <SIcon name="chevron-right" size={14} className="stu-dtop-crumb-sep" />
+              <Link href={`${base}/overview`} className="stu-dtop-crumb-course">
+                {course.title}
+              </Link>
+              {pageLabel && pageLabel !== "Overview" && (
+                <>
+                  <SIcon name="chevron-right" size={14} className="stu-dtop-crumb-sep" />
+                  <span className="stu-dtop-crumb-cur">{pageLabel}</span>
+                </>
+              )}
+            </nav>
+            <div className="stu-dtop-actions">
+              <Link href="/student" className="stu-dtop-icon" aria-label="Back to my courses" title="Back to my courses">
+                <SIcon name="grid" size={19} />
+              </Link>
+              <Link href="/student/profile" className="stu-dtop-icon" aria-label="My profile" title="My profile">
+                <span className="stu-avatar stu-avatar-sm" aria-hidden="true">{initials}</span>
+              </Link>
+            </div>
+          </header>
+          <main className="stu-main">
+            <div className="stu-content stu-content-fluid">{children}</div>
+          </main>
+        </div>
 
         {/* ════════ Mobile bottom nav (<1024px) ════════ */}
         <nav className="stu-bottom-nav" aria-label="Course navigation">

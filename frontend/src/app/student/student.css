@@ -154,6 +154,9 @@
   max-width: none;
 }
 
+/* Desktop-only content topbar (enabled inside the ≥1024px block). */
+.stu-desktop-topbar { display: none; }
+
 /* ─────────────── Bottom nav (mobile app chrome) ─────────────── */
 
 .stu-bottom-nav {
@@ -886,39 +889,46 @@
     flex-direction: column;
     flex: 0 0 264px;
     width: 264px;
-    min-height: 100vh;
+    height: 100vh;
+    align-self: flex-start;
     position: sticky;
     top: 0;
     background: #0a1628;
     color: #f8fafc;
     border-right: 3px solid #e63946;
+    transition: margin-left 0.25s ease;
+  }
+
+  .stu-shell-collapsed .stu-sidebar {
+    margin-left: -264px;
   }
 
   .stu-sidebar-brand {
-    padding: 20px 18px 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 18px 18px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
   }
 
   .stu-sidebar-logo {
-    height: 36px;
-    max-width: 150px;
+    height: 34px;
+    max-width: 160px;
     object-fit: contain;
   }
 
   .stu-portal-tag {
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: 1.4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.8px;
     text-transform: uppercase;
     color: #e63946;
   }
 
   .stu-sidebar-nav {
     flex: 1;
-    padding: 14px 10px;
+    padding: 10px 10px 16px;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -927,33 +937,44 @@
   .stu-nav-item {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 11px 12px;
-    color: #cbd5e1;
+    gap: 11px;
+    padding: 10px 12px;
+    color: #b9c4d6;
     font-size: 13.5px;
-    font-weight: 600;
+    font-weight: 500;
     text-decoration: none;
     border-left: 3px solid transparent;
     transition: background-color 0.15s ease, color 0.15s ease;
   }
 
   .stu-nav-item .stu-icon {
-}
+    color: #7e8ea6;
+    transition: color 0.15s ease;
+  }
 
   .stu-nav-item:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.05);
     color: #fff;
+  }
+
+  .stu-nav-item:hover .stu-icon {
+    color: #cbd5e1;
   }
 
   .stu-nav-item.active {
-    background: rgba(230, 57, 70, 0.15);
+    background: rgba(230, 57, 70, 0.14);
     border-left-color: #e63946;
     color: #fff;
+    font-weight: 600;
+  }
+
+  .stu-nav-item.active .stu-icon {
+    color: #ff6470;
   }
 
   .stu-sidebar-footer {
-    padding: 14px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 12px 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -989,32 +1010,132 @@
     text-overflow: ellipsis;
   }
 
-  .stu-logout-btn {
-    display: flex;
+  .stu-profile-logout {
+    margin-left: auto;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    height: 40px;
-    width: 100%;
     background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    color: #e2e8f0;
-    font-size: 13px;
-    font-weight: 600;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: #cbd5e1;
     cursor: pointer;
     font-family: inherit;
-    transition: background-color 0.2s ease, border-color 0.2s ease;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   }
 
-  .stu-logout-btn:hover {
+  .stu-profile-logout:hover {
     background: #e63946;
     border-color: #e63946;
     color: #fff;
   }
 
+  /* Desktop topbar above the content column */
+  .stu-desktop-topbar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    height: 56px;
+    padding: 0 20px;
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    flex-shrink: 0;
+  }
+
+  .stu-nav-toggle {
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    color: #475569;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+  }
+
+  .stu-nav-toggle:hover {
+    border-color: #0a1628;
+    color: #0a1628;
+    background: #f8fafc;
+  }
+
+  .stu-dtop-crumb {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .stu-dtop-crumb-link {
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.15s ease;
+  }
+
+  .stu-dtop-crumb-link:hover { color: #e63946; }
+
+  .stu-dtop-crumb-course {
+    color: #0f172a;
+    font-size: 13.5px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+
+  .stu-dtop-crumb-course:hover { color: #e63946; }
+
+  .stu-dtop-crumb-sep { color: #cbd5e1; flex-shrink: 0; }
+
+  .stu-dtop-crumb-cur {
+    color: #475569;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .stu-dtop-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .stu-dtop-icon {
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: #475569;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.15s ease, background-color 0.15s ease;
+  }
+
+  .stu-dtop-icon:hover { color: #0a1628; background: #f1f5f9; }
+
   .stu-main {
     padding-bottom: 0;
-    min-height: 100vh;
   }
 
   .stu-content {
@@ -1074,6 +1195,15 @@
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* Content column: on desktop it holds the topbar + main; on mobile it is a
+   plain wrapper so the mobile header/main flow is unchanged. */
+.stu-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 .stu-topbar-icon {
   display: inline-flex;
@@ -1184,27 +1314,28 @@
 .stu-btn-sm { min-height: 36px; padding: 0 12px; font-size: 12px; }
 
 /* Course sidebar block */
-.stu-back-brand {
+.stu-brand-home {
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: #f8fafc;
+  min-width: 0;
   text-decoration: none;
 }
-.stu-back-brand:hover { color: #e63946; }
 .stu-course-block {
-  padding: 14px 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 14px 12px 4px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-left: 3px solid #e63946;
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
 .stu-course-block-label {
   font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 1.2px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
   text-transform: uppercase;
-  color: #94a3b8;
+  color: #8fa0b8;
 }
 .stu-course-block-title {
   font-size: 14px;
@@ -1216,15 +1347,20 @@
   font-size: 11.5px;
   color: #94a3b8;
 }
-.stu-nav-group { margin-bottom: 8px; }
+.stu-nav-group { margin-bottom: 4px; }
+.stu-nav-group + .stu-nav-group {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  margin-top: 8px;
+  padding-top: 2px;
+}
 .stu-nav-group-title {
   display: block;
-  padding: 10px 12px 4px;
+  padding: 12px 12px 6px;
   font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 1.2px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: #64748b;
+  color: #7d8da6;
 }
 .stu-nav-label { flex: 1; }
 .stu-nav-badge {
@@ -1312,20 +1448,22 @@
 .stu-drawer .stu-nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   padding: 12px;
   min-height: 44px;
-  color: #cbd5e1;
+  color: #b9c4d6;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   text-decoration: none;
   border-left: 3px solid transparent;
 }
+.stu-drawer .stu-nav-item .stu-icon { color: #7e8ea6; }
 .stu-drawer .stu-nav-item.active {
-  background: rgba(230, 57, 70, 0.15);
+  background: rgba(230, 57, 70, 0.14);
   border-left-color: #e63946;
   color: #fff;
 }
+.stu-drawer .stu-nav-item.active .stu-icon { color: #ff6470; }
 
 /* Overview */
 .stu-ov-hero {
@@ -1909,7 +2047,7 @@ a.stu-help-card:hover { border-color: #0a1628; box-shadow: 0 6px 18px rgba(10, 2
 
   .stu-exam-card { flex-direction: row; align-items: center; }
   .stu-palette { flex-wrap: wrap; overflow-x: visible; }
-  .stu-exam-bar { top: 0; }
+  .stu-exam-bar { top: 56px; }
 
   .stu-form-grid { grid-template-columns: 1fr 1fr; }
   .stu-help-grid { grid-template-columns: repeat(4, 1fr); }
@@ -1924,7 +2062,7 @@ a.stu-help-card:hover { border-color: #0a1628; box-shadow: 0 6px 18px rgba(10, 2
 @media (prefers-reduced-motion: reduce) {
   .stu-skel::after { animation: none; }
   .stu-spinner { animation-duration: 1.6s; }
-  .stu-card, .stu-bottom-item, .stu-nav-item { transition: none; }
+  .stu-card, .stu-bottom-item, .stu-nav-item, .stu-sidebar { transition: none; }
   .stu-drawer { animation: none; }
   .stu-timer.low { animation: none; }
 }

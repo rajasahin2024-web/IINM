@@ -5,6 +5,8 @@ import type { StudentProfile } from "@/lib/studentApi";
 export interface StudentContextValue {
   profile: StudentProfile;
   logout: () => Promise<void>;
+  siteName: string;
+  darkLogoUrl: string;
 }
 
 export const StudentContext = createContext<StudentContextValue | null>(null);
