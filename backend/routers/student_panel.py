@@ -37,7 +37,7 @@ from pydantic import BaseModel, Field
 
 from database import get_db
 import models
-from helpers import rewrite_url
+from helpers import rewrite_url_relative
 from security import hash_password, verify_password
 from routers.student_auth import require_student, _ACTIVE_ENROLLMENT_STATUSES
 from routers.verification import format_reg_no
@@ -755,7 +755,7 @@ def course_payments(course_id: int, student: models.Student = Depends(require_st
             "reference_no": t.reference_no,
             "notes": t.notes,
             "status": t.status,
-            "screenshot_url": rewrite_url(t.screenshot_url) if t.screenshot_url else None,
+            "screenshot_url": rewrite_url_relative(t.screenshot_url) if t.screenshot_url else None,
             "created_at": t.created_at.isoformat() if t.created_at else None,
         }
         for t in db.query(models.PaymentTransaction)
@@ -797,8 +797,8 @@ def _notice_dict(n: models.Notice) -> dict:
         "notice_date": n.notice_date.isoformat() if n.notice_date else None,
         "category": n.category or "General",
         "description": n.description,
-        "cover_image": rewrite_url(n.cover_image),
-        "attachment_url": rewrite_url(n.attachment_url),
+        "cover_image": rewrite_url_relative(n.cover_image),
+        "attachment_url": rewrite_url_relative(n.attachment_url),
         "attachment_name": n.attachment_name,
         "is_pinned": bool(n.is_pinned),
         "batch_id": n.batch_id,
@@ -911,7 +911,7 @@ def course_certificate(course_id: int, student: models.Student = Depends(require
             "completion_date": completion_date.isoformat() if completion_date else None,
             "verification_code": f"IINM-VRF-{verification_hash[:8]}",
             "verification_url": f"/verification?reg={reg_no}",
-            "certificate_image_url": rewrite_url(course.certificate_image_url),
+            "certificate_image_url": rewrite_url_relative(course.certificate_image_url),
         },
         "progress": {
             "total_materials": total_materials,
@@ -937,7 +937,7 @@ def _profile_dict(s: models.Student) -> dict:
         "state": s.state,
         "pin_code": s.pin_code,
         "address": s.address,
-        "profile_photo_url": rewrite_url(s.profile_photo_url),
+        "profile_photo_url": rewrite_url_relative(s.profile_photo_url),
         "highest_qualification": s.highest_qualification,
         "current_occupation": s.current_occupation,
         "student_category": s.student_category,

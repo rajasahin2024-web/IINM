@@ -39,6 +39,28 @@ def rewrite_url(url: str | None) -> str | None:
     return url
 
 
+def rewrite_url_relative(url: str | None) -> str | None:
+    """Student-facing variant of rewrite_url: emits relative /uploads/... paths.
+
+    The Next.js frontend proxies /uploads/* to the backend (next.config.ts
+    rewrite), so same-origin relative URLs satisfy the CSP img-src 'self' rule,
+    whereas absolute http://localhost:2007 URLs are blocked by the browser.
+    Only use this for responses consumed by the frontend's own pages — keep
+    rewrite_url (absolute) for emails, SEO/OG tags, and server-side fetches.
+    """
+    if not url:
+        return url
+    if url.startswith("/uploads/"):
+        return url
+    # Absolute URLs pointing back at this backend's uploads → make relative
+    if url.startswith(f"{BASE_URL}/uploads/"):
+        return url[len(BASE_URL):]
+    m = re.match(r"https?://[^/]+:8000(/uploads/.*)", url)
+    if m:
+        return m.group(1)
+    return rewrite_url(url)
+
+
 def rewrite_dict_urls(data: dict, url_fields: list[str]) -> dict:
     """Rewrite URLs in specific fields of a dictionary."""
     result = dict(data)

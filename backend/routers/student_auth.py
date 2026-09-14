@@ -22,13 +22,13 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import func, and_
 from pydantic import BaseModel, Field
 
 from database import get_db
 import models
-from helpers import send_email, rewrite_url
+from helpers import send_email, rewrite_url_relative
 from security import (
     check_public_rate_limit,
     get_client_ip,
@@ -176,6 +176,9 @@ def _batch_payload(batch: Optional[models.Batch]) -> Optional[dict]:
         "start_date": batch.start_date.isoformat() if batch.start_date else None,
         "end_date": batch.end_date.isoformat() if batch.end_date else None,
         "meeting_url": batch.meeting_url,
+        "instructors": [
+            {"id": i.id, "name": i.name} for i in (batch.instructors or [])
+        ],
     }
 
 
@@ -326,7 +329,7 @@ def get_student_me(student: models.Student = Depends(require_student)):
         "last_name": student.last_name,
         "email": student.email,
         "phone": student.phone,
-        "profile_photo_url": rewrite_url(student.profile_photo_url),
+        "profile_photo_url": rewrite_url_relative(student.profile_photo_url),
         "city": student.city,
         "state": student.state,
         "created_at": student.created_at.isoformat() if student.created_at else None,
@@ -362,7 +365,10 @@ def my_courses(student: models.Student = Depends(require_student), db: Session =
     )
     enrollments = (
         db.query(models.BatchEnrollment)
-        .options(joinedload(models.BatchEnrollment.batch).joinedload(models.Batch.course))
+        .options(
+            joinedload(models.BatchEnrollment.batch).joinedload(models.Batch.course),
+            joinedload(models.BatchEnrollment.batch).selectinload(models.Batch.instructors),
+        )
         .filter(
             models.BatchEnrollment.student_id == sid,
             models.BatchEnrollment.status != "cancelled",
@@ -390,7 +396,9 @@ def my_courses(student: models.Student = Depends(require_student), db: Session =
     next_inst = _next_installments_map(db, [p.id for p in purchase_by_course.values()])
 
     courses = (
-        {c.id: c for c in db.query(models.Course).filter(models.Course.id.in_(course_ids)).all()}
+        {c.id: c for c in db.query(models.Course)
+            .options(selectinload(models.Course.instructors))
+            .filter(models.Course.id.in_(course_ids)).all()}
         if course_ids else {}
     )
 
@@ -403,11 +411,26 @@ def my_courses(student: models.Student = Depends(require_student), db: Session =
         enrollment = enrollment_by_course.get(cid)
         prog = progress.get(cid, {"total": 0, "completed": 0})
         pct = round((prog["completed"] / prog["total"]) * 100) if prog["total"] else 0
+        # Instructor comes from the enrollment's batch; fall back to the
+        # course-level instructors / free-text name for purchase-only students.
+        batch_instructors = (
+            [{"id": i.id, "name": i.name} for i in enrollment.batch.instructors]
+            if enrollment and enrollment.batch else []
+        )
+        instructors = batch_instructors or [
+            {"id": i.id, "name": i.name} for i in (course.instructors or [])
+        ]
+        instructor_name = (
+            ", ".join(i["name"] for i in instructors if i["name"])
+            or course.instructor_name
+        )
         cards.append({
             "course_id": course.id,
             "title": course.title,
             "slug": course.slug,
-            "thumbnail_url": rewrite_url(course.thumbnail_url),
+            "thumbnail_url": rewrite_url_relative(course.thumbnail_url),
+            "instructor_name": instructor_name,
+            "instructors": instructors,
             "batch": _batch_payload(enrollment.batch if enrollment else None),
             "enrollment": _enrollment_payload(enrollment),
             "payment": _payment_payload(purchase, next_inst.get(purchase.id) if purchase else None),
@@ -444,7 +467,7 @@ def course_dashboard(course_id: int, student: models.Student = Depends(require_s
     enrollments = (
         db.query(models.BatchEnrollment)
         .join(models.Batch, models.BatchEnrollment.batch_id == models.Batch.id)
-        .options(joinedload(models.BatchEnrollment.batch))
+        .options(joinedload(models.BatchEnrollment.batch).selectinload(models.Batch.instructors))
         .filter(
             models.BatchEnrollment.student_id == sid,
             models.Batch.course_id == course_id,
@@ -525,11 +548,11 @@ def course_dashboard(course_id: int, student: models.Student = Depends(require_s
                 "id": m.id,
                 "title": m.title,
                 "file_type": m.file_type,
-                "file_url": rewrite_url(m.file_url),
-                "hls_url": rewrite_url(m.hls_url) if m.hls_status == "ready" else None,
+                "file_url": rewrite_url_relative(m.file_url),
+                "hls_url": rewrite_url_relative(m.hls_url) if m.hls_status == "ready" else None,
                 "hls_status": m.hls_status,
                 "youtube_url": m.youtube_url,
-                "thumbnail_url": rewrite_url(m.thumbnail_url),
+                "thumbnail_url": rewrite_url_relative(m.thumbnail_url),
                 "order_position": m.order_position,
                 "is_completed": done,
                 "watch_time_sec": p.watch_time_sec if p else 0,
@@ -569,7 +592,7 @@ def course_dashboard(course_id: int, student: models.Student = Depends(require_s
             "title": course.title,
             "slug": course.slug,
             "description": course.description,
-            "thumbnail_url": rewrite_url(course.thumbnail_url),
+            "thumbnail_url": rewrite_url_relative(course.thumbnail_url),
             "instructor_name": course.instructor_name,
             "skill_level": course.skill_level,
         },
