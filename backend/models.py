@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Date, ForeignKey, Boolean, Float, Table, text, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, Date, ForeignKey, Boolean, Float, Table, Index, text, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database import Base
@@ -885,6 +885,58 @@ class BatchExamAssignment(Base):
 
     batch           = relationship("Batch")
     exam            = relationship("Exam", back_populates="assignments")
+    attempts        = relationship("StudentExamAttempt", back_populates="assignment", cascade="all, delete-orphan")
+
+
+class StudentExamAttempt(Base):
+    """A student's attempt at a batch-assigned exam (server-side timer authority)."""
+    __tablename__ = "student_exam_attempts"
+    id             = Column(Integer, primary_key=True, index=True)
+    assignment_id  = Column(Integer, ForeignKey("batch_exam_assignments.id", ondelete="CASCADE"), nullable=False, index=True)
+    student_id     = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False, index=True)
+    attempt_no     = Column(Integer, nullable=False, default=1)
+    status         = Column(String(20), nullable=False, default="in_progress")  # in_progress | submitted | expired
+    started_at     = Column(DateTime(timezone=True), server_default=func.now())
+    submitted_at   = Column(DateTime(timezone=True), nullable=True)
+    score          = Column(Float, nullable=True)
+    total_marks    = Column(Float, nullable=True)
+    passed         = Column(Boolean, nullable=True)
+    question_order = Column(JSON, nullable=True)   # frozen question order when shuffle_questions is on
+
+    created_at     = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at     = Column(DateTime(timezone=True), onupdate=func.now())
+
+    assignment = relationship("BatchExamAssignment", back_populates="attempts")
+    student    = relationship("Student")
+    answers    = relationship("StudentExamAnswer", back_populates="attempt", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        # One active attempt per student per assignment (enforced at DB level).
+        Index(
+            "uq_student_exam_attempts_active",
+            "assignment_id", "student_id",
+            unique=True,
+            postgresql_where=text("status = 'in_progress'"),
+        ),
+    )
+
+
+class StudentExamAnswer(Base):
+    """Per-question saved answer inside an attempt. is_correct/marks_awarded are
+    NULL until submit-time scoring (written answers may stay unscored)."""
+    __tablename__ = "student_exam_answers"
+    id                  = Column(Integer, primary_key=True, index=True)
+    attempt_id          = Column(Integer, ForeignKey("student_exam_attempts.id", ondelete="CASCADE"), nullable=False, index=True)
+    question_id         = Column(Integer, ForeignKey("questions.id", ondelete="CASCADE"), nullable=False)
+    selected_option_ids = Column(JSON, nullable=True)    # list[question_options.id] for MSA/MMA/TOF
+    answer_text         = Column(Text, nullable=True)    # written payload (SAQ and other types)
+    is_correct          = Column(Boolean, nullable=True)
+    marks_awarded       = Column(Float, nullable=True)
+    created_at          = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at          = Column(DateTime(timezone=True), onupdate=func.now())
+
+    attempt  = relationship("StudentExamAttempt", back_populates="answers")
+    question = relationship("Question")
 
 
 # ==========================================
@@ -2045,10 +2097,13 @@ class Notice(Base):
     cover_image     = Column(String(512), nullable=True)
     attachment_url  = Column(String(512), nullable=True)
     attachment_name = Column(String(255), nullable=True)
+    batch_id        = Column(Integer, ForeignKey("batches.id", ondelete="SET NULL"), nullable=True, index=True)  # NULL = institute-wide
     is_active       = Column(Boolean, default=True, server_default=text('true'))
     is_pinned       = Column(Boolean, default=False, server_default=text('false'))
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
     updated_at      = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+    batch           = relationship("Batch")
 
 
 

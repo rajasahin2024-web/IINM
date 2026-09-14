@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import or_, desc
 from typing import Optional
 from datetime import date, datetime
@@ -8,7 +8,7 @@ import uuid
 import shutil
 
 from database import get_db
-from models import Notice
+from models import Notice, Batch
 from helpers import rewrite_url
 from routers.auth import require_device
 from security import validate_upload, ALLOWED_IMAGE_EXTENSIONS
@@ -37,6 +37,8 @@ def _to_dict(n: Notice) -> dict:
         "attachment_name": n.attachment_name,
         "is_active":       bool(n.is_active),
         "is_pinned":       bool(n.is_pinned),
+        "batch_id":        n.batch_id,
+        "batch_name":      n.batch.name if n.batch else None,
         "created_at":      n.created_at.isoformat() if n.created_at else None,
         "updated_at":      n.updated_at.isoformat() if n.updated_at else None,
     }
@@ -63,7 +65,9 @@ def get_public_notices(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Notice).filter(Notice.is_active == True)
+    # Public board is institute-wide only — batch-targeted notices stay in the student panel.
+    query = (db.query(Notice).options(selectinload(Notice.batch))
+             .filter(Notice.is_active == True, Notice.batch_id.is_(None)))
 
     if q and q.strip():
         term = f"%{q.strip()}%"
@@ -100,7 +104,8 @@ def get_public_notices(
 def get_public_notice_detail(notice_id: int, db: Session = Depends(get_db)):
     notice = (
         db.query(Notice)
-        .filter(Notice.id == notice_id, Notice.is_active == True)
+        .filter(Notice.id == notice_id, Notice.is_active == True,
+                Notice.batch_id.is_(None))
         .first()
     )
     if not notice:
@@ -130,7 +135,7 @@ def get_all_admin_notices(
     status: Optional[str] = Query(None),  # 'all', 'active', 'draft', 'pinned'
     db: Session = Depends(get_db),
 ):
-    query = db.query(Notice)
+    query = db.query(Notice).options(selectinload(Notice.batch))
 
     if q and q.strip():
         term = f"%{q.strip()}%"
@@ -170,11 +175,15 @@ def create_notice(
     description: Optional[str] = Form(None),
     is_active:   bool = Form(True),
     is_pinned:   bool = Form(False),
+    batch_id:    Optional[int] = Form(None),  # None/0 = institute-wide
     cover_image: Optional[UploadFile] = File(None),
     attachment:  Optional[UploadFile] = File(None),
     db:          Session = Depends(get_db),
 ):
     parsed_date = _parse_date(notice_date)
+    target_batch_id = batch_id if batch_id else None
+    if target_batch_id and not db.query(Batch).filter(Batch.id == target_batch_id).first():
+        raise HTTPException(status_code=400, detail="Batch not found")
 
     # 1. Handle Cover Image
     cover_image_url = None
@@ -209,6 +218,7 @@ def create_notice(
         attachment_name=attachment_name,
         is_active=is_active,
         is_pinned=is_pinned,
+        batch_id=target_batch_id,
     )
     db.add(notice)
     db.commit()
@@ -226,6 +236,7 @@ def update_notice(
     description:        Optional[str] = Form(None),
     is_active:          bool = Form(True),
     is_pinned:          bool = Form(False),
+    batch_id:           Optional[int] = Form(None),  # 0 clears targeting -> institute-wide
     remove_cover_image: bool = Form(False),
     remove_attachment:  bool = Form(False),
     cover_image:        Optional[UploadFile] = File(None),
@@ -243,6 +254,12 @@ def update_notice(
     notice.description = description
     notice.is_active = is_active
     notice.is_pinned = is_pinned
+
+    if batch_id is not None:
+        target_batch_id = batch_id if batch_id > 0 else None
+        if target_batch_id and not db.query(Batch).filter(Batch.id == target_batch_id).first():
+            raise HTTPException(status_code=400, detail="Batch not found")
+        notice.batch_id = target_batch_id
 
     # Cover image removal/update
     if remove_cover_image and notice.cover_image:
