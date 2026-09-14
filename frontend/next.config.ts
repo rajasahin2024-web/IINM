@@ -41,7 +41,9 @@ const nextConfig: NextConfig = {
             value: [
               "default-src 'self'",
               `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://challenges.cloudflare.com https://www.youtube.com https://www.gstatic.com https://checkout.razorpay.com https://api.razorpay.com https://cdn.razorpay.com`,
-              "style-src 'self' 'unsafe-inline'",
+              // fonts.googleapis.com: Material Symbols stylesheet (<link> in
+              // layout.tsx) and Inter @imports inside admin <style> blocks.
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               // In development, images are served from the backend on
               // http://localhost:2007 (not https), so we must allow that
               // origin explicitly — otherwise every <img src="http://localhost:2007/uploads/...">
@@ -55,7 +57,7 @@ const nextConfig: NextConfig = {
               `connect-src 'self' https: https://api.razorpay.com${isDev ? ` ${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:2007"}` : ""}`,
               // Allow worker-src for html2pdf.js canvas rendering
               "worker-src 'self' blob:",
-              "font-src 'self' data:",
+              "font-src 'self' data: https://fonts.gstatic.com",
               "object-src 'none'",
               "base-uri 'self'",
               "form-action 'self'",

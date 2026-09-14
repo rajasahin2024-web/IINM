@@ -48,6 +48,7 @@ export interface StudentCourseCard {
   title: string;
   slug: string | null;
   thumbnailUrl: string | null;
+  instructorName: string | null;
   batchId: number | null;
   batchName: string | null;
   batchMode: string | null;
@@ -494,6 +495,13 @@ function firstNum(...vals: unknown[]): number | null {
   return null;
 }
 
+/** "a, b" from an instructors list like [{id, name}] — null when empty/absent. */
+function joinNames(v: unknown): string | null {
+  if (!Array.isArray(v)) return null;
+  const names = v.map(asRec).map((i) => str(i.name)).filter((n): n is string => n !== null);
+  return names.length > 0 ? names.join(", ") : null;
+}
+
 function normalizeInstallment(v: unknown): StudentInstallment | null {
   const r = asRec(v);
   if (Object.keys(r).length === 0) return null;
@@ -528,6 +536,9 @@ function normalizeCourseCard(raw: Rec): StudentCourseCard {
     title: firstStr(raw.title, course.title) ?? "Untitled course",
     slug: firstStr(raw.slug, course.slug),
     thumbnailUrl: firstStr(raw.thumbnail_url, raw.thumbnail, course.thumbnail_url),
+    instructorName:
+      firstStr(raw.instructor_name, raw.instructor, course.instructor_name) ??
+      joinNames(raw.instructors ?? batch.instructors),
     batchId: firstNum(raw.batch_id, batch.id),
     batchName: firstStr(raw.batch_name, batch.name),
     batchMode: firstStr(raw.batch_mode, batch.mode),

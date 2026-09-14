@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import "../app/courses/courses.css";
+import { resolveAssetUrl } from "@/lib/config";
 
 export interface CourseCardType {
   id: number;
@@ -67,9 +68,9 @@ export function StarRating({ rating }: { rating: number }) {
 }
 
 export default function CourseCard({
-  course, baseUrl, listView, wishlisted, onWishlist, onPlayVideo,
+  course, listView, wishlisted, onWishlist, onPlayVideo,
 }: {
-  course: CourseCardType; baseUrl: string; listView: boolean; wishlisted: boolean; onWishlist: (id: number) => void; onPlayVideo: (url: string) => void;
+  course: CourseCardType; baseUrl?: string; listView: boolean; wishlisted: boolean; onWishlist: (id: number) => void; onPlayVideo: (url: string) => void;
 }) {
   const router = useRouter();
   const [hovered, setHovered] = useState(false);
@@ -103,9 +104,7 @@ export default function CourseCard({
     : (course.instructor_name || "IINM");
 
   const initials = displayInstructorName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
-  const thumb = course.thumbnail_url
-    ? (course.thumbnail_url.startsWith("http") ? course.thumbnail_url : `${baseUrl}${course.thumbnail_url}`)
-    : "";
+  const thumb = resolveAssetUrl(course.thumbnail_url);
 
   if (listView) {
     return (

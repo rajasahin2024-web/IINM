@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { API_BASE_URL, BASE_URL } from "@/lib/config";
+import { API_BASE_URL, BASE_URL, resolveAssetUrl } from "@/lib/config";
 import { toast } from "react-hot-toast";
 import CourseCard, { CourseCardType } from "@/components/CourseCard";
 import "../courses/courses.css";
@@ -33,8 +33,12 @@ interface LocationInfo {
 
 export default function StudentSignIn() {
   const router = useRouter();
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
+  // Uncontrolled inputs: values are read via FormData on submit. Controlled
+  // inputs tied to useState get wiped whenever a post-mount re-render lands
+  // (settings/courses/location fetches) if the DOM value was set without an
+  // onChange — pre-hydration typing, browser autofill, password managers —
+  // which made the submit click appear to "do nothing" (required validation
+  // on freshly-cleared fields).
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -310,18 +314,16 @@ export default function StudentSignIn() {
   const currentCourse = displayCourses[activeCourseIndex % displayCourses.length];
   const currentReview = displayReviews[activeReviewIndex % displayReviews.length];
 
-  const resolveImage = (url: string | null | undefined) => {
-    if (!url) return "";
-    if (url.startsWith("http://") || url.startsWith("https://")) return url;
-    if (url.startsWith("/")) return `${BASE_URL}${url}`;
-    return url;
-  };
+  const resolveImage = (url: string | null | undefined) => resolveAssetUrl(url);
 
   const darkLogo = siteSettings.dark_logo_url || siteSettings.logo_url;
   const mainLogo = siteSettings.logo_url || siteSettings.dark_logo_url;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const identifier = String(fd.get("identifier") ?? "").trim();
+    const password = String(fd.get("password") ?? "");
     setLoading(true);
     setError("");
 
@@ -330,7 +332,7 @@ export default function StudentSignIn() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ identifier: identifier.trim(), password }),
+        body: JSON.stringify({ identifier, password }),
       });
 
       if (!res.ok) {
@@ -493,9 +495,8 @@ export default function StudentSignIn() {
             <div className="spl-float-group">
               <input
                 id="identifier"
+                name="identifier"
                 type="text"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
                 placeholder=" "
                 required
                 autoComplete="username"
@@ -510,9 +511,8 @@ export default function StudentSignIn() {
             <div className="spl-float-group">
               <input
                 id="password"
+                name="password"
                 type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
                 placeholder=" "
                 required
                 autoComplete="current-password"

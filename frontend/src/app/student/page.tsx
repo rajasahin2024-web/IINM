@@ -60,6 +60,12 @@ function AdmissionCard({ card }: { card: StudentCourseCard }) {
           <h3 className="stu-card-title">{card.title}</h3>
 
           <div className="stu-adm-meta">
+            {card.instructorName && (
+              <span className="stu-adm-meta-item">
+                <SIcon name="person" size={15} />
+                {card.instructorName}
+              </span>
+            )}
             {card.batchName && (
               <span className="stu-adm-meta-item">
                 <SIcon name="groups" size={15} />
