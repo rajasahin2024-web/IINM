@@ -14,89 +14,122 @@ import { resolveAssetUrl } from "@/lib/config";
 import { useStudent } from "./context";
 import SIcon from "./icons";
 
-function CourseCardItem({ card }: { card: StudentCourseCard }) {
+function formatDate(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function AdmissionCard({ card }: { card: StudentCourseCard }) {
   const router = useRouter();
   const tone = enrollmentTone(card.enrollmentStatus);
   const hasDue = (card.dueAmount ?? 0) > 0.5;
   const hasPaid = (card.paidAmount ?? 0) > 0.5;
+  const admissionDate = formatDate(card.joinDate);
+  const pct = Math.round(card.progressPercent);
+
+  const open = () => router.push(`/student/courses/${card.courseId}`);
 
   return (
-    <button
-      type="button"
-      className="stu-card"
-      onClick={() => router.push(`/student/courses/${card.courseId}`)}
-      aria-label={`Open ${card.title}`}
-    >
-      <div className="stu-card-thumb">
-        {card.thumbnailUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={resolveAssetUrl(card.thumbnailUrl)} alt="" loading="lazy" />
-        ) : (
-          <div className="stu-card-thumb-fallback" aria-hidden="true">
-            {card.title.slice(0, 2).toUpperCase()}
-          </div>
-        )}
-        <span className={`stu-badge stu-badge-${tone} stu-card-status`}>
-          {enrollmentLabel(card.enrollmentStatus)}
-        </span>
-      </div>
-
-      <div className="stu-card-body">
-        <h3 className="stu-card-title">{card.title}</h3>
-
-        {card.batchName && (
-          <div className="stu-card-batch">
-            <SIcon name="groups" size={16} />
-            <span>
-              {card.batchName}
-              {card.batchMode ? ` · ${card.batchMode}` : ""}
-            </span>
-          </div>
-        )}
-
-        <div className="stu-progress">
-          <div className="stu-progress-track" role="progressbar" aria-valuenow={Math.round(card.progressPercent)} aria-valuemin={0} aria-valuemax={100}>
-            <div className="stu-progress-fill" style={{ width: `${card.progressPercent}%` }} />
-          </div>
-          <div className="stu-progress-label">
-            <span>Course progress</span>
-            <span>{Math.round(card.progressPercent)}%</span>
-          </div>
-        </div>
-
-        <div className="stu-pay-row">
-          <span>
-            {hasPaid && <span className="stu-pay-paid">Paid {formatINR(card.paidAmount)}</span>}
-            {hasPaid && hasDue && " · "}
-            {hasDue && <span className="stu-pay-due">Due {formatINR(card.dueAmount)}</span>}
-            {!hasPaid && !hasDue && (
-              <span className="stu-pay-free">
-                {card.purchaseStatus === "completed" ? "Fully paid" : "No dues"}
-              </span>
-            )}
+    <article className="stu-adm-card">
+      <button
+        type="button"
+        className="stu-adm-hit"
+        onClick={open}
+        aria-label={`Open ${card.title}`}
+      >
+        <div className="stu-card-thumb">
+          {card.thumbnailUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={resolveAssetUrl(card.thumbnailUrl)} alt="" loading="lazy" />
+          ) : (
+            <div className="stu-card-thumb-fallback" aria-hidden="true">
+              {card.title.slice(0, 2).toUpperCase()}
+            </div>
+          )}
+          <span className={`stu-badge stu-badge-${tone} stu-card-status`}>
+            {enrollmentLabel(card.enrollmentStatus)}
           </span>
-          {card.invoiceUuid && (
-            <span className="stu-pay-invoice" title="Invoice reference">
-              <SIcon name="receipt" size={14} />
-              {card.invoiceUuid.slice(0, 8)}
-            </span>
+          {card.batchMode && (
+            <span className="stu-badge stu-badge-navy stu-card-mode">{card.batchMode}</span>
           )}
         </div>
 
-        {card.isInstallment && card.nextInstallment?.dueDate && (
-          <div className="stu-card-batch stu-card-installment">
-            <SIcon name="repeat" size={16} />
-            <span>
-              Next installment {formatINR(card.nextInstallment.amount)} due{" "}
-              {new Date(card.nextInstallment.dueDate).toLocaleDateString("en-IN", {
-                day: "2-digit",
-                month: "short",
-              })}
-            </span>
+        <div className="stu-card-body">
+          <h3 className="stu-card-title">{card.title}</h3>
+
+          <div className="stu-adm-meta">
+            {card.batchName && (
+              <span className="stu-adm-meta-item">
+                <SIcon name="groups" size={15} />
+                {card.batchName}
+              </span>
+            )}
+            {admissionDate && (
+              <span className="stu-adm-meta-item">
+                <SIcon name="calendar" size={15} />
+                Admitted {admissionDate}
+              </span>
+            )}
           </div>
-        )}
+
+          <div className="stu-progress">
+            <div
+              className="stu-progress-track"
+              role="progressbar"
+              aria-valuenow={pct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div className="stu-progress-fill" style={{ width: `${pct}%` }} />
+            </div>
+            <div className="stu-progress-label">
+              <span>
+                {card.completedMaterials}/{card.totalMaterials} materials
+              </span>
+              <span>{pct}%</span>
+            </div>
+          </div>
+
+          <div className="stu-pay-row">
+            <span>
+              {hasPaid && <span className="stu-pay-paid">Paid {formatINR(card.paidAmount)}</span>}
+              {hasPaid && hasDue && " · "}
+              {hasDue && <span className="stu-pay-due">Due {formatINR(card.dueAmount)}</span>}
+              {!hasPaid && !hasDue && (
+                <span className="stu-pay-free">
+                  {card.purchaseStatus === "completed" ? "Fully paid" : "No dues"}
+                </span>
+              )}
+            </span>
+            {card.invoiceUuid && (
+              <span className="stu-pay-invoice" title="Invoice reference">
+                <SIcon name="receipt" size={14} />
+                {card.invoiceUuid.slice(0, 8)}
+              </span>
+            )}
+          </div>
+
+          {card.isInstallment && card.nextInstallment?.dueDate && (
+            <div className="stu-adm-meta-item stu-card-installment">
+              <SIcon name="repeat" size={15} />
+              <span>
+                Next installment {formatINR(card.nextInstallment.amount)} due{" "}
+                {formatDate(card.nextInstallment.dueDate)}
+              </span>
+            </div>
+          )}
+        </div>
+      </button>
+
+      <div className="stu-adm-cta-row">
+        <button type="button" className="stu-cta" onClick={open}>
+          Enter course
+          <SIcon name="arrow-right" size={16} />
+        </button>
       </div>
-    </button>
+    </article>
   );
 }
 
@@ -107,6 +140,7 @@ function CardSkeleton() {
       <div className="stu-skel stu-skel-line" style={{ width: "70%" }} />
       <div className="stu-skel stu-skel-line" style={{ width: "45%" }} />
       <div className="stu-skel stu-skel-line" style={{ width: "90%" }} />
+      <div className="stu-skel" style={{ height: 44, margin: "10px 14px 0" }} />
     </div>
   );
 }
@@ -175,7 +209,7 @@ export default function StudentHomePage() {
       ) : (
         <div className="stu-grid">
           {cards.map((c) => (
-            <CourseCardItem key={`${c.courseId}-${c.batchId ?? "x"}`} card={c} />
+            <AdmissionCard key={`${c.courseId}-${c.batchId ?? "x"}`} card={c} />
           ))}
         </div>
       )}
