@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { getSiteSettings, type SiteSettings } from "@/lib/siteSettingsCache";
 import { resolveAssetUrl } from "@/lib/config";
-import { forgotPassword } from "@/lib/studentApi";
+import { forgotPassword, StudentApiError } from "@/lib/studentApi";
 import "../student-auth.css";
 
 export default function ForgotPasswordPage() {
@@ -28,16 +28,22 @@ export default function ForgotPasswordPage() {
     setError("");
     try {
       await forgotPassword(email.trim().toLowerCase());
-      // Always show the generic confirmation — no account enumeration.
+      // 200 means the account exists and the reset email was really sent.
       setSubmitted(true);
     } catch (err) {
-      // A transport error (server unreachable) is the only failure we surface;
-      // API responses still resolve to the generic confirmation above.
-      setError(
-        err instanceof Error && err.message
-          ? err.message
-          : "Unable to connect to server. Please try again."
-      );
+      // 404 → "no account found" detail; 503 → mail service down; anything
+      // else → transport/unexpected failure. All show in the error banner.
+      if (err instanceof StudentApiError && err.status === 503) {
+        setError(
+          "Email service is temporarily unavailable. Please try again later or contact support."
+        );
+      } else {
+        setError(
+          err instanceof Error && err.message
+            ? err.message
+            : "Unable to connect to server. Please try again."
+        );
+      }
     } finally {
       setLoading(false);
     }

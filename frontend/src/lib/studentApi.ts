@@ -186,9 +186,19 @@ export async function forgotPassword(email: string): Promise<void> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
   });
-  // Endpoint always returns a generic 200; surface only transport errors.
-  if (!res.ok && res.status !== 429) return;
-  if (res.status === 429) throw new StudentApiError(429, await readDetail(res, "Please wait before requesting another reset link."));
+  // 200 = reset email actually sent (or still valid inside the resend
+  // cooldown). 404 = no account for this email, 503 = mail service down —
+  // both surface to the caller as errors.
+  if (res.ok) return;
+  const fallbacks: Record<number, string> = {
+    404: "No account found for this email address.",
+    429: "Please wait before requesting another reset link.",
+    503: "Email service is temporarily unavailable. Please contact support.",
+  };
+  throw new StudentApiError(
+    res.status,
+    await readDetail(res, fallbacks[res.status] ?? "Unable to send the reset link. Please try again.")
+  );
 }
 
 export async function resetPassword(token: string, password: string): Promise<void> {

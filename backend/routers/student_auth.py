@@ -2,7 +2,7 @@
 Student panel auth & dashboard router — mounted under /api/student.
 
 Endpoints:
-  POST /api/student/auth/forgot-password   — generic 200, emails a reset link
+  POST /api/student/auth/forgot-password   — 404 unknown email, 503 mail down, else emails a reset link
   POST /api/student/auth/reset-password    — consume token, set bcrypt password
   GET  /api/student/me                     — profile basics (cookie auth)
   POST /api/student/logout                 — clears the session cookie
@@ -10,8 +10,8 @@ Endpoints:
   GET  /api/student/courses/{course_id}    — per-course dashboard (403 w/o access)
 
 Reset tokens are single-use, HMAC-SHA256 hashed at rest, and expire after
-RESET_TOKEN_TTL_MINUTES. All public-facing failures return generic responses —
-no account enumeration.
+RESET_TOKEN_TTL_MINUTES. Forgot-password explicitly reports unknown accounts
+(product decision — enumeration is guarded by the public rate limiter).
 """
 import os
 import time
@@ -20,20 +20,19 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_
 from pydantic import BaseModel, Field
 
-from database import get_db, SessionLocal
+from database import get_db
 import models
 from helpers import send_email, rewrite_url
 from security import (
     check_public_rate_limit,
     get_client_ip,
     hash_password,
-    verify_password,
     verify_student_token,
     hash_reset_token,
     get_student_auth_secret,
@@ -50,9 +49,6 @@ RESEND_COOLDOWN_SECONDS = 60
 
 # Per-email resend cooldown (in-memory — matches existing rate-limiter style)
 _reset_cooldowns: dict[str, float] = {}
-
-# Static bcrypt hash used to equalize forgot-password timing for unknown emails
-_DUMMY_BCRYPT = hash_password("dummy-password-for-timing")
 
 _ACTIVE_ENROLLMENT_STATUSES = ("active", "waitlisted", "graduated")
 
@@ -84,25 +80,20 @@ class ResetPasswordRequest(BaseModel):
 
 # ─── Internal helpers ─────────────────────────────────────────────────────────
 
-def _send_reset_email(email: str, first_name: str, reset_url: str) -> None:
-    """Background send — opens its own session (request session is closed)."""
-    db = SessionLocal()
-    try:
-        site = db.query(models.SiteSettings).first()
-        site_name = (site.site_name if site else "IINM") or "IINM"
-        html_body = (
-            f"<p>Hello {first_name},</p>"
-            f"<p>We received a request to reset the password for your {site_name} student account.</p>"
-            f'<p><a href="{reset_url}">Click here to set a new password</a> '
-            f"(this link is valid for {RESET_TOKEN_TTL_MINUTES} minutes and can be used once).</p>"
-            f"<p>If you did not request this, you can safely ignore this email.</p>"
-            f"<p>Best Regards,<br>{site_name} Team</p>"
-        )
-        send_email(db, to=email, subject=f"Password Reset — {site_name}", html_body=html_body)
-    except Exception as e:
-        logger.warning(f"Password reset email failed: {e}")
-    finally:
-        db.close()
+def _send_reset_email(db: Session, email: str, first_name: str, reset_url: str) -> None:
+    """Send the reset email on the request's session. Raises on failure so the
+    caller can surface a 503 instead of silently returning success."""
+    site = db.query(models.SiteSettings).first()
+    site_name = (site.site_name if site else "IINM") or "IINM"
+    html_body = (
+        f"<p>Hello {first_name},</p>"
+        f"<p>We received a request to reset the password for your {site_name} student account.</p>"
+        f'<p><a href="{reset_url}">Click here to set a new password</a> '
+        f"(this link is valid for {RESET_TOKEN_TTL_MINUTES} minutes and can be used once).</p>"
+        f"<p>If you did not request this, you can safely ignore this email.</p>"
+        f"<p>Best Regards,<br>{site_name} Team</p>"
+    )
+    send_email(db, to=email, subject=f"Password Reset — {site_name}", html_body=html_body)
 
 
 def _course_progress_map(db: Session, student_id: int, course_ids: list[int]) -> dict[int, dict]:
@@ -219,36 +210,45 @@ def _next_installments_map(db: Session, purchase_ids: list[int]) -> dict[int, mo
 # ─── Auth endpoints ───────────────────────────────────────────────────────────
 
 @router.post("/auth/forgot-password")
-def forgot_password(req: ForgotPasswordRequest, request: Request,
-                    background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    """Request a password reset link. Always returns the same generic 200 —
-    the response never reveals whether the email is registered."""
+def forgot_password(req: ForgotPasswordRequest, request: Request, db: Session = Depends(get_db)):
+    """Request a password reset link.
+
+    Account existence is reported explicitly (product decision):
+      - 404 when no *active* student matches the email. Inactive accounts get
+        the same 404 so the response never distinguishes "disabled" from
+        "never registered".
+      - 503 when the reset email cannot be sent (SMTP not configured or the
+        send fails) — never a fake success.
+      - 200 only when the email was actually sent, or while inside the resend
+        cooldown (the previously sent link is still valid in that window).
+    The public rate limiter still bounds enumeration attempts.
+    """
     client_ip = get_client_ip(request)
     check_public_rate_limit(client_ip, limit=10, window=300)
 
-    generic = {"message": "If this email exists, a reset link has been sent."}
+    sent = {"message": "A password reset link has been sent to this email."}
     email = (req.email or "").strip().lower()
-    if not email or "@" not in email:
-        return generic
 
     if not get_student_auth_secret():
         logger.error("STUDENT_AUTH_SECRET/DEVICE_ADMIN_SECRET not configured — cannot issue reset tokens")
         raise HTTPException(status_code=503, detail="Password reset is not configured")
 
-    student = db.query(models.Student).filter(models.Student.email == email).first()
+    student = (
+        db.query(models.Student).filter(models.Student.email == email).first()
+        if email and "@" in email else None
+    )
+    if not student or not student.is_active:
+        raise HTTPException(status_code=404, detail="No student account found for this email")
 
     now = time.time()
-    on_cooldown = (now - _reset_cooldowns.get(email, 0)) < RESEND_COOLDOWN_SECONDS
+    # Inside the resend cooldown the already-sent link is still valid — report
+    # success without issuing a new token or resending.
+    if (now - _reset_cooldowns.get(email, 0)) < RESEND_COOLDOWN_SECONDS:
+        return sent
     # Opportunistic cleanup of stale cooldown entries
     if len(_reset_cooldowns) > 10000:
         for k in [k for k, t in _reset_cooldowns.items() if now - t > 3600]:
             _reset_cooldowns.pop(k, None)
-
-    # Both paths pay one bcrypt verify so known/unknown/inactive/cooldown
-    # requests have near-identical timing (email send runs in the background).
-    verify_password("dummy-password", _DUMMY_BCRYPT)
-    if not student or not student.is_active or on_cooldown:
-        return generic
 
     # Invalidate previous unused tokens, then issue a fresh single-use token
     now_dt = datetime.now(timezone.utc)
@@ -266,10 +266,19 @@ def forgot_password(req: ForgotPasswordRequest, request: Request,
     ))
     db.commit()
 
-    _reset_cooldowns[email] = now
+    # Send synchronously so delivery failures are observable in the response.
     reset_url = f"{FRONTEND_URL}/reset-password?token={raw_token}"
-    background_tasks.add_task(_send_reset_email, student.email, student.first_name or "Student", reset_url)
-    return generic
+    try:
+        _send_reset_email(db, student.email, student.first_name or "Student", reset_url)
+    except RuntimeError as e:
+        logger.error(f"Password reset email failed for {email}: {e}")
+        raise HTTPException(status_code=503, detail="Email service is not configured")
+    except Exception as e:
+        logger.error(f"Password reset email failed for {email}: {e}")
+        raise HTTPException(status_code=503, detail="Email service is temporarily unavailable")
+
+    _reset_cooldowns[email] = now
+    return sent
 
 
 @router.post("/auth/reset-password")
