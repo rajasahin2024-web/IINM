@@ -116,7 +116,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   if (pathname === "/student") {
     return (
       <StudentContext.Provider value={{ profile, logout }}>
-        <div className="stu-shell">
+        <div className="stu-shell stu-shell-landing">
           <header className="stu-mobile-header stu-topbar-always">
             <Link href="/student" className="stu-mobile-brand" aria-label="Student portal home">
               {darkLogo ? (

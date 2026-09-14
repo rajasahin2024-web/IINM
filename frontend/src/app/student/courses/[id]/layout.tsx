@@ -160,7 +160,7 @@ export default function CourseLayout({ children }: { children: React.ReactNode }
     return (
       <div className="stu-shell">
         <main className="stu-main stu-main-flat">
-          <div className="stu-content">
+          <div className="stu-content stu-content-fluid">
             <div className="stu-empty" role="alert">
               <SIcon name="lock" size={40} />
               <p className="stu-empty-title">Unavailable</p>
@@ -183,7 +183,7 @@ export default function CourseLayout({ children }: { children: React.ReactNode }
     return (
       <div className="stu-shell" aria-busy="true">
         <main className="stu-main stu-main-flat">
-          <div className="stu-content">
+          <div className="stu-content stu-content-fluid">
             <div className="stu-skel" style={{ height: 120, marginBottom: 16 }} />
             <div className="stu-skel stu-skel-line" style={{ width: "40%" }} />
             <div className="stu-skel stu-skel-line" />
@@ -350,7 +350,7 @@ export default function CourseLayout({ children }: { children: React.ReactNode }
 
         {/* ════════ Content ════════ */}
         <main className="stu-main">
-          <div className="stu-content">{children}</div>
+          <div className="stu-content stu-content-fluid">{children}</div>
         </main>
 
         {/* ════════ Mobile bottom nav (<1024px) ════════ */}
