@@ -17,7 +17,6 @@ import { API_BASE_URL } from "@/lib/config";
 ───────────────────────────────────────── */
 
 interface BrochurePreviewProps {
-  pdfUrl: string;          // can be relative (/api/...) or absolute
   courseId: number;
   phone: string;           // for watermark
   onClose: () => void;
@@ -27,7 +26,7 @@ const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 4;
 const BASE_SCALE = 1.5;
 
-export default function BrochurePreview({ pdfUrl, courseId, phone, onClose }: BrochurePreviewProps) {
+export default function BrochurePreview({ courseId, phone, onClose }: BrochurePreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pdfDocRef = useRef<any>(null);
@@ -42,10 +41,10 @@ export default function BrochurePreview({ pdfUrl, courseId, phone, onClose }: Br
   const [fitWidth, setFitWidth] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
 
-  // Resolve full URL — prefer backend proxy for CORS + inline disposition
-  const resolvedUrl = pdfUrl.startsWith("http")
-    ? pdfUrl
-    : `${API_BASE_URL}/api/public/courses/${courseId}/brochure-pdf`;
+  // Always fetch through the backend proxy — cdn.iinmedu.com sends no CORS
+  // headers, so fetching the absolute syllabus_url directly gets blocked.
+  // API_BASE_URL already ends in /api.
+  const resolvedUrl = `${API_BASE_URL}/public/courses/${courseId}/brochure-pdf`;
 
   // ── Detect mobile ──
   useEffect(() => {

@@ -2262,7 +2262,6 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
       {/* ── BROCHURE PDF PREVIEW (full-screen, no download) ── */}
       {brochurePreviewOpen && brochurePdfUrl && course && (
         <BrochurePreview
-          pdfUrl={brochurePdfUrl}
           courseId={course.id}
           phone={typeof window !== "undefined" ? localStorage.getItem(`brochure_submitted_${course.id}`) || "" : ""}
           onClose={() => setBrochurePreviewOpen(false)}
