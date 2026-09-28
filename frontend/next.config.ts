@@ -72,10 +72,22 @@ const nextConfig: NextConfig = {
   },
 
   async rewrites() {
+    // Proxy API + uploads to the backend over cert-free internal HTTP so the
+    // browser always talks same-origin. This is what makes
+    // http://82.112.226.111:2021 work: without it the browser would fetch
+    // https://82.112.226.111/api whose self-signed cert silently kills
+    // fetch() ("Cannot connect to server"). INTERNAL_BASE_URL is used (not
+    // NEXT_PUBLIC_BASE_URL) because server-side proxying to a self-signed
+    // https target would fail TLS verification in Node too.
+    const backend = process.env.INTERNAL_BASE_URL || "http://127.0.0.1:2007";
     return [
       {
+        source: "/api/:path*",
+        destination: `${backend}/api/:path*`,
+      },
+      {
         source: "/uploads/:path*",
-        destination: `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:2007"}/uploads/:path*`,
+        destination: `${backend}/uploads/:path*`,
       },
     ];
   },

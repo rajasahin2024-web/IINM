@@ -41,7 +41,10 @@ export function resolveAssetUrl(url: string | null | undefined): string {
       const backendHost = BACKEND_BASE_URL ? new URL(BACKEND_BASE_URL).hostname : "";
       if (
         u.pathname.startsWith("/uploads/") &&
-        (u.hostname === backendHost || u.hostname === "localhost" || u.hostname === "127.0.0.1")
+        (u.hostname === backendHost ||
+          u.hostname === "localhost" ||
+          u.hostname === "127.0.0.1" ||
+          (!isServer && u.hostname === window.location.hostname))
       ) {
         return u.pathname + u.search;
       }
