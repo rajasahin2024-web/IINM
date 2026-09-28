@@ -71,6 +71,16 @@ const nextConfig: NextConfig = {
     ];
   },
 
+  async redirects() {
+    // Short public aliases → real CMS pages. Several forms and the
+    // CMS-driven contact "terms_url" setting still emit /terms and
+    // /privacy; redirect instead of 404ing.
+    return [
+      { source: "/terms", destination: "/page/terms-conditions", permanent: true },
+      { source: "/privacy", destination: "/page/privacy-policy", permanent: true },
+    ];
+  },
+
   async rewrites() {
     // Proxy API + uploads to the backend over cert-free internal HTTP so the
     // browser always talks same-origin. This is what makes

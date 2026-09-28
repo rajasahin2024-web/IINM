@@ -937,7 +937,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
               <label className="sb-check-row">
                 <input type="checkbox" checked={agreeTerms} onChange={e => setAgreeTerms(e.target.checked)} />
                 <span className="sb-check-label">
-                  I agree to the <a href="/terms" target="_blank">Terms & Conditions</a> and <a href="/privacy" target="_blank">Privacy Policy</a>
+                  I agree to the <a href="/page/terms-conditions" target="_blank">Terms & Conditions</a> and <a href="/page/privacy-policy" target="_blank">Privacy Policy</a>
                 </span>
               </label>
 

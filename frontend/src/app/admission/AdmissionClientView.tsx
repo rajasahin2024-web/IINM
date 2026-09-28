@@ -1334,11 +1334,11 @@ export default function AdmissionClientView() {
                     />
                     <span>
                       I certify that the information provided is true, and I agree to IINM’s{" "}
-                      <Link href="/terms" target="_blank">
+                      <Link href="/page/terms-conditions" target="_blank">
                         Terms of Admission
                       </Link>{" "}
                       and{" "}
-                      <Link href="/privacy" target="_blank">
+                      <Link href="/page/privacy-policy" target="_blank">
                         Privacy Policy
                       </Link>
                       .
