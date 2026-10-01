@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zero to Launch — Chapter-wise Topic Blueprint (Theory Edition) | IINM</title>
+<style>
+  :root {
+    --ink: #1a1d29; --muted: #5a6072; --accent: #4f46e5; --accent-soft: #eef0ff;
+    --line: #e4e6f0; --green: #0f8a5f; --green-soft: #e8f7f0; --amber: #92610a;
+    --amber-soft: #fdf3e3; --teal: #0e7490; --bg: #f7f8fc; --card: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 20px 60px; font-family: "Segoe UI", system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.55; font-size: 15px; }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  header.page { background: linear-gradient(135deg, #1a1d29 0%, #2d2a6e 60%, #4f46e5 100%); color: #fff; border-radius: 16px; padding: 34px 38px; margin: 28px 0 26px; }
+  header.page .kicker { font-size: 12px; letter-spacing: 2.5px; text-transform: uppercase; opacity: .75; font-weight: 700; }
+  header.page h1 { margin: 8px 0 6px; font-size: 30px; line-height: 1.2; }
+  header.page p.sub { margin: 0 0 18px; font-size: 15px; opacity: .9; max-width: 640px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; }
+  .meta span { background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.25); padding: 4px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600; }
+  .note { background: var(--amber-soft); border: 1px solid #f0dcb8; border-left: 4px solid var(--amber); border-radius: 10px; padding: 14px 18px; margin: 0 0 26px; font-size: 13.5px; color: #5c4a1f; }
+  .note b { color: var(--amber); }
+  .part { margin: 34px 0 8px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .part h2 { margin: 0; font-size: 20px; color: var(--accent); }
+  .part .days { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+  .part p { margin: 2px 0 0; width: 100%; color: var(--muted); font-size: 13.5px; }
+  .chapter { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 26px; margin: 14px 0; box-shadow: 0 1px 3px rgba(20,24,40,.05); }
+  .ch-head { display: flex; gap: 14px; align-items: baseline; margin-bottom: 6px; flex-wrap: wrap; }
+  .num { background: var(--accent); color: #fff; font-weight: 800; font-size: 12px; border-radius: 8px; padding: 3px 10px; letter-spacing: .5px; white-space: nowrap; }
+  .num.intro { background: var(--teal); }
+  .chapter h3 { margin: 0; font-size: 17px; }
+  .day { margin-left: auto; font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .goal { font-size: 13px; color: var(--muted); margin-bottom: 14px; padding: 8px 12px; background: var(--accent-soft); border-radius: 8px; }
+  .goal b { color: var(--accent); }
+  .topics .tgroup { margin-bottom: 10px; }
+  .topics .tname { font-size: 12px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: var(--teal); margin: 12px 0 4px; }
+  .topics ul { margin: 4px 0 0; padding-left: 0; list-style: none; }
+  .topics li { padding: 5px 0 5px 30px; position: relative; font-size: 14px; border-bottom: 1px dashed #eef0f6; }
+  .topics li:last-child { border-bottom: none; }
+  .topics li::before { content: attr(data-t); position: absolute; left: 0; top: 6px; font-size: 10.5px; font-weight: 800; color: var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 1px 6px; min-width: 18px; text-align: center; }
+  .design { border: 1px solid #cfe8dd; background: var(--green-soft); border-radius: 10px; padding: 12px 16px; margin-top: 10px; }
+  .design .dlabel { font-size: 11px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: var(--green); margin-bottom: 4px; }
+  .design .dname { font-weight: 700; font-size: 14px; margin-bottom: 3px; }
+  .design p { margin: 3px 0; font-size: 13px; color: #2f4f44; }
+  .design p b { color: var(--green); }
+  table.bm { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-size: 13.5px; margin: 14px 0; }
+  table.bm th { text-align: left; background: #f0f1f8; padding: 9px 14px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+  table.bm td { padding: 9px 14px; border-top: 1px solid var(--line); vertical-align: top; }
+  table.bm td:first-child { font-weight: 700; }
+  footer.page { margin-top: 34px; padding: 18px 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
+  code { background: #f0f1f8; border-radius: 4px; padding: 1px 5px; font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page">
+  <div class="kicker">IINM · eBook Writer's Blueprint · Theory Edition</div>
+  <h1>Zero to Launch — Chapter-wise Topics &amp; Page Designs</h1>
+  <p class="sub">Every chapter broken into teachable theory topics, in writing order — each paired with the ONE sketch/design that makes that chapter's theory click at a glance. Built from the approved v3 stack-aligned syllabus (React + FastAPI + PostgreSQL).</p>
+  <div class="meta">
+    <span>Intro + 13 chapters + back matter</span>
+    <span>Theory only — no prompts, no exercises</span>
+    <span>1 teaching sketch per chapter</span>
+    <span>Book stack: React · FastAPI · PostgreSQL</span>
+  </div>
+</header>
+
+<div class="note">
+  <b>What this document is:</b> the writing plan for the book itself. Each chapter below lists the <b>theory topics in the order they should be written</b> (T1, T2, T3…) plus one <b>Design spec</b> — the single sketch/diagram that goes on the page so a reader understands the theory by looking at it.
+  <br><b>Deliberately excluded (per CEO directive):</b> no practical prompts, no "Your Move" tasks, no Prompt Vault references inside chapters — those stay in the separate Prompt Vault companion. Back matter items are listed at the end for completeness.
+</div>
+
+<div class="part"><h2>Opening · Before the Build</h2><span class="days">Read: 15 min</span><p>Hooks the reader and sets the rules of the game.</p></div>
+
+<div class="chapter">
+  <div class="ch-head"><span class="num intro">INTRO</span><h3>The Zero to Launch Promise</h3></div>
+  <div class="goal"><b>Theory goal:</b> reader understands exactly what they will own in 7 days and believes they can do it without coding.</div>
+  <div class="topics">
+    <ul>
+      <li data-t="T1"><b>What you'll hold at the end:</b> a live web app + a way to sell it + the vocabulary to talk about it like a builder.</li>
+      <li data-t="T2"><b>Why AI agents changed who gets to build software</b> — the shift from "learn to code for years" to "direct an agent this week".</li>
+      <li data-t="T3"><b>The stack preview:</b> your app is built the same way professionals build it — React (screens), FastAPI (logic), PostgreSQL (memory). The agent writes the code; you learn to run the project.</li>
+      <li data-t="T4"><b>Who this book is for</b> — students, business owners, working professionals with zero coding background — and who it isn't for.</li>
+      <li data-t="T5"><b>The 7-day map:</b> what happens each day, and why the order matters.</li>
+    </ul>
+  </div>
+  <div class="design">
+    <div class="dlabel">The one design</div>
+    <div class="dname">"The 7-Day Journey Map"</div>
+    <p><b>What it shows:</b> a single horizontal road/timeline — Day 1 (toolkit) → Days 2–3 (language + stack) → Days 4–6 (build) → Day 7 (live) → Day 7+ (first customer). Each stop has a small icon and the thing the reader owns that day.</p>
+    <p><b>Why it teaches:</b> the whole book's promise in one glance — the reader sees the destination before reading a word of theory.</p>
+  </div>
+</div>
+
+<div class="part"><h2>Part 1 · Foundation</h2><span class="days">Days 1–3</span><p>The language, the tools, the stack — and picking the right thing to build.</p></div>
+
+<div class="chapter">
+  <div class="ch-head"><span class="num">CH 1</span><h3>How AI Builds Software Now</h3><span class="day">Day 1</span></div>
+  <div class="goal"><b>Theory goal:</b> reader understands the agentic shift and their new role — confidence, not syntax.</div>
+  <div class="topics">
+    <ul>
+      <li data-t="T1"><b>Chatbot vs. AI agent:</b> a chatbot answers questions; an agent does the work — plans, writes files, runs commands, checks its own output. What "agentic" means in plain words.</li>
+      <li data-t="T2"><b>What agents are good at — and where they fail:</b> fast at standard patterns, weak at taste and judgement; why honesty here builds trust for the whole book.</li>
+      <li data-t="T3"><b>Your new job title — Product Owner, not programmer:</b> you decide what gets built and whether it's good enough; the agent handles the how.</li>
+      <li data-t="T4"><b>Three real examples</b> of software built this way: a business site, a working web app, a paid client project.</li>
+    </ul>
+  </div>
+  <div class="design">
+    <div class="dlabel">The one design</div>
+    <div class="dname">"Chatbot vs. Agent — Who Does the Work?"</div>
+    <p><b>What it shows:</b> two side-by-side panels. Left: user asks a chatbot "build me a website" → gets paragraphs of advice. Right: user tells an agent the same thing → agent draws a plan, creates files, runs commands, hands back a working folder. The reader figure labelled "Product Owner" stands above the agent, pointing at the goal.</p>
+    <p><b>Why it teaches:</b> the book's core mental model — you direct, the agent executes — shown as a picture, not argued in prose.</p>
+  </div>
+</div>
+
+<div class="chapter">
+  <div class="ch-head"><span class="num">CH 2</span><h3>Your Toolkit: What's in the Box and Why</h3><span class="day">Day 1</span></div>
+  <div class="goal"><b>Theory goal:</b> reader can name every tool in the stack, what job it does, and how talking to an agent actually works — setup mechanics stay out of the chapter.</div>
+  <div class="topics">
+    <div class="tgroup">
+      <div class="tname">The tools and their jobs</div>
+      <ul>
+        <li data-t="T1"><b>The AI agent tool</b> — your builder; what it can and can't decide for you.</li>
+        <li data-t="T2"><b>React</b> — builds the screens the user sees and clicks.</li>
+        <li data-t="T3"><b>FastAPI</b> — the backend brain: login, orders, payments, all the logic.</li>
+        <li data-t="T4"><b>PostgreSQL</b> — the database that remembers users, products, orders (free tier: Neon/Supabase).</li>
+        <li data-t="T5"><b>Vercel + Render</b> — the free hosting pair that puts the app on the internet.</li>
+        <li data-t="T6"><b>Razorpay</b> — how money enters the app (UPI/cards, Indian market).</li>
+      </ul>
+    </div>
+    <div class="tgroup">
+      <div class="tname">The economics</div>
+      <ul>
+        <li data-t="T7"><b>The free-tier map:</b> what "₹0/month to start" actually means — which tool is free at what limit, and where the first rupee eventually goes.</li>
+      </ul>
+    </div>
+    <div class="tgroup">
+      <div class="tname">How communication with an agent works (theory)</div>
+      <ul>
+        <li data-t="T8"><b>The 3-line prompt formula:</b> context (what exists), instruction (what to change), finish line (how you'll know it worked).</li>
+        <li data-t="T9"><b>The Prompt Word Bank:</b> why precise words get precise results — nouns (component, endpoint, router, table, index), verbs (add, fix, refactor), quality words (responsive, minimal, mobile-first), and finish lines ("done when the form saves and shows success").</li>
+        <li data-t="T10"><b>Why the agent writes better React/FastAPI/Postgres than anything else</b> — most tutorials and training examples exist for this stack; choosing popular tools = choosing a better-trained agent.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="design">
+    <div class="dlabel">The one design</div>
+    <div class="dname">"The Workshop Wall — Six Tools, Six Jobs"</div>
+    <p><b>What it shows:</b> one labelled illustration of a workbench wall: six tools hanging in a row, each with its name and a one-line job — Agent (the builder), React (the screens), FastAPI (the brain), Postgres (the memory), Vercel/Render (the shopfront on the internet), Razorpay (the cash counter).</p>
+    <p><b>Why it teaches:</b> six abstract tool names become six visible objects with jobs — the reader memorizes the stack by picture, not by list.</p>
+  </div>
+</div>
+
+<div class="chapter">
+  <div class="ch-head"><span class="num">CH 3</span><h3>Speak Like a Builder: The Anatomy of a Web App</h3><span class="day">Day 2</span></div>
+  <div class="goal"><b>Theory goal:</b> reader can name every part of a web app, what runs where, and how the parts talk — every name drawn from our real stack. The vocabulary spine of the whole book.</div>
+  <div class="topics">
+    <div class="tgroup">
+      <div class="tname">The three layers</div>
+      <ul>
+        <li data-t="T1"><b>Frontend — what the user sees (React):</b> every piece of UI is a <i>component</i> — a reusable block; <i>props</i> are the settings you pass it; <i>JSX</i> is the file format mixing layout + logic.</li>
+        <li data-t="T2"><b>Backend — what runs behind the screen (FastAPI):</b> the server that answers requests; <code>main.py</code> starts it, <i>routers</i> group related endpoints (<code>auth.py</code>, <code>products.py</code>, <code>orders.py</code>), <i>models</i> define data shape.</li>
+        <li data-t="T3"><b>Database — the app's memory (Postgres):</b> tables of users/products/orders; a <i>row</i> is one record, a <i>column</i> one fact; SQL is the language you ask it questions in; an <i>index</i> is what makes search instant.</li>
+      </ul>
+    </div>
+    <div class="tgroup">
+      <div class="tname">What the user-facing side looks like</div>
+      <ul>
+        <li data-t="T4"><b>The 6 types of UI you'll actually use:</b> landing page, multi-page site, form &amp; list, dashboard/admin, e-commerce catalog + checkout, mobile-responsive layout — what each is and when to pick which.</li>
+        <li data-t="T5"><b>UI building blocks by name:</b> navbar, hero, card, table, form field, modal, button states (hover/disabled/loading) — the words that make prompts precise.</li>
+      </ul>
+    </div>
+    <div class="tgroup">
+      <div class="tname">How the layers talk</div>
+      <ul>
+        <li data-t="T6"><b>REST API — the conversation between frontend and backend:</b> an endpoint is a URL with a job; GET = read, POST = create, PUT/PATCH = update, DELETE = remove; request → response in JSON, with one worked example ("click Pay → the React page POSTs the order to <code>/api/orders</code>").</li>
+        <li data-t="T7"><b>Authentication — who are you:</b> signup/login, sessions &amp; tokens; JWT as a wristband (server stamps it at login, browser shows it every request); OTP and Google login (OAuth); Firebase Auth as the done-for-you option; protected vs. public pages.</li>
+        <li data-t="T8"><b>Optimization — fast and findable:</b> image compression, lazy loading, caching, CDN, database indexing, minified code, SEO basics — each as a one-line "what it is + when it matters".</li>
+      </ul>
+    </div>
+  </div>
+  <div class="design">
+    <div class="dlabel">The one design — the book's recurring visual</div>
+    <div class="dname">"The Anatomy Map"</div>
+    <p><b>What it shows:</b> one labelled end-to-end diagram — <b>User → React frontend → REST API → FastAPI backend → PostgreSQL database</b> — with each layer's contents drawn inside its box (components in React, routers in FastAPI, tables in Postgres) and arrows labelled GET/POST/JSON. Every term in the chapter appears somewhere on this one page.</p>
+    <p><b>Why it teaches:</b> this single picture IS the chapter. It is reprinted at the start of later chapters as the reader's compass — the most important sketch in the book.</p>
+  </div>
+</div>
+
+<div class="chapter">
+  <div class="ch-head"><span class="num">CH 4</span><h3>The Stack, Up Close: React + FastAPI + PostgreSQL</h3><span class="day">Day 3</span></div>
+  <div class="goal"><b>Theory goal:</b> reader knows what each tool does, why we chose it, the handful of commands the agent runs, the project folder map, and how every module (login, search, checkout) is wired across the three layers — in small labelled pieces.</div>
+  <div class="topics">
+    <div class="tgroup">
+      <div class="tname">Part A — Why this stack (the honest reasons)</div>
+      <ul>
+        <li data-t="T1"><b>Why React:</b> reusable components; the most-used frontend library in the world → biggest job market, most tutorials, most AI-training examples (agents write React best).</li>
+        <li data-t="T2"><b>Why FastAPI:</b> Python reads like English; auto-builds a clickable test page at <code>/docs</code> — test the API in a browser without code; catches its own mistakes via type hints.</li>
+        <li data-t="T3"><b>Why PostgreSQL:</b> free forever, owned by no company, trusted from startups to banks; real SQL — the skill that transfers to every job; built-in search power (indexes, full-text).</li>
+        <li data-t="T4"><b>"Why not the others?" box:</b> plain HTML vs React; Express/Django vs FastAPI; Firebase/MongoDB vs Postgres — honest one-line tradeoffs.</li>
+      </ul>
+    </div>
+    <div class="tgroup">
+      <div class="tname">Part B — The Command Sheets (recognize, don't memorize)</div>
+      <ul>
+        <li data-t="T5"><b>React commands the agent runs:</b> <code>npm create vite@latest</code>, <code>npm install</code>, <code>npm run dev</code>, <code>npm run build</code> — each with its plain-English meaning.</li>
+        <li data-t="T6"><b>FastAPI commands:</b> <code>pip install fastapi uvicorn</code>, <code>uvicorn main:app --reload</code>, <code>pip freeze &gt; requirements.txt</code>, and the <code>/docs</code> test page.</li>
+        <li data-t="T7"><b>Postgres commands:</b> <code>CREATE TABLE</code>, <code>INSERT</code>, <code>SELECT ... WHERE ... ILIKE</code>, <code>CREATE INDEX</code>, the Neon/psql console — each as "what the agent is doing" in one line.</li>
+      </ul>
+    </div>
+    <div class="tgroup">
+      <div class="tname">Part C — The Project Map (the directory, explained)</div>
+      <ul>
+        <li data-t="T8"><b>The full folder tree:</b> <code>frontend/src/components + pages + App.jsx</code>, <code>backend/main.py + routers/ + models.py + database.py</code>, <code>database/schema.sql + seed.sql</code> — every file named with the reason it exists.</li>
+      </ul>
+    </div>
+    <div class="tgroup">
+      <div class="tname">Part D — The Module Map (features wired across 3 layers)</div>
+      <ul>
+        <li data-t="T9"><b>Login/Signup:</b> <code>Login.jsx</code> → <code>auth.py</code> POST /auth/login → <code>users</code> table — powered by JWT (or Firebase Auth for done-for-you OTP).</li>
+        <li data-t="T10"><b>Product catalog:</b> <code>Home.jsx</code> + <code>ProductCard</code> → <code>products.py</code> GET /products → <code>products</code> table — CRUD + pagination explained.</li>
+        <li data-t="T11"><b>Search:</b> search bar → <code>search.py</code> GET /search?q= → ILIKE + index, then full-text (tsvector) when the catalog grows.</li>
+        <li data-t="T12"><b>Cart &amp; checkout:</b> <code>Cart.jsx</code> → <code>orders.py</code> POST /orders → <code>orders</code> + <code>order_items</code> — the webhook: Razorpay calls YOUR endpoint to confirm; never trust the browser.</li>
+        <li data-t="T13"><b>Admin panel:</b> <code>Admin.jsx</code> → protected endpoints → all tables — a protected route demands a valid JWT with the admin role.</li>
+      </ul>
+    </div>
+    <div class="tgroup">
+      <div class="tname">Part E — How search actually works</div>
+      <ul>
+        <li data-t="T14"><b>The request walkthrough:</b> "cotton kurta" → GET /search?q= → SQL ILIKE query — what happens at each hop.</li>
+        <li data-t="T15"><b>Sequential scan vs. index:</b> without an index Postgres reads every row (fine at 50, painful at 50,000); with <code>CREATE INDEX</code> it jumps straight to matches — the book-index analogy.</li>
+        <li data-t="T16"><b>When ILIKE isn't enough:</b> full-text search (tsvector) — matching meaning, ranking results, handling typos.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="design">
+    <div class="dlabel">The one design</div>
+    <div class="dname">"The Module Wiring Diagram — One Feature Across Three Layers"</div>
+    <p><b>What it shows:</b> the Anatomy Map zoomed into ONE feature — Login — drawn as a journey: the <code>Login.jsx</code> form → arrow labelled POST /auth/login → <code>auth.py</code> router → arrow into the <code>users</code> table → back-arrow labelled "JWT wristband issued". The other four modules appear as faded rows beneath, same shape.</p>
+    <p><b>Why it teaches:</b> the reader sees the pattern once — every feature is the same three-layer trip — then understands all five modules without re-learning anything. (The folder tree and command sheets print as tables beside it; the wiring diagram is the page's teaching sketch.)</p>
+  </div>
+</div>
+
+<div class="chapter">
+  <div class="ch-head"><span class="num">CH 5</span><h3>Pick a Winner: Your First App Idea</h3><span class="day">Day 3</span></div>
+  <div class="goal"><b>Theory goal:</b> reader understands what makes an idea buildable and sellable in 7 days — and can filter their own.</div>
+  <div class="topics">
+    <ul>
+      <li data-t="T1"><b>The v1 rule:</b> one user, one problem, one page that solves it — why small first versions win.</li>
+      <li data-t="T2"><b>The 5 idea templates that sell in India:</b> local business site + booking, catalog store, landing + lead form, portfolio, booking/service app — each mapped to its UI type (Ch 3) and its module subset (Ch 4).</li>
+      <li data-t="T3"><b>The competitor scan concept:</b> 10 minutes of looking at who already sells this — what to note (price, look, what's missing).</li>
+      <li data-t="T4"><b>The scope filter:</b> if it takes more than 7 days, cut it in half — how to halve an idea without killing it.</li>
+    </ul>
+  </div>
+  <div class="design">
+    <div class="dlabel">The one design</div>
+    <div class="dname">"The Idea Funnel"</div>
+    <p><b>What it shows:</b> a funnel graphic — a cloud of ~10 raw ideas at the top ("build the next Flipkart!", "an app for everything") passing through three labelled gates: <i>one user one problem?</i> → <i>fits a template?</i> → <i>buildable in 7 days?</i> — with one clean idea coming out the bottom, tagged with its UI type and module list.</p>
+    <p><b>Why it teaches:</b> "scope" is an abstract rule; the funnel turns it into a machine the reader can run any idea through.</p>
+  </div>
+</div>
+
+<div class="part"><h2>Part 2 · Build</h2><span class="days">Days 4–6</span><p>The theory of directing an agent: plan first, then iterate — every concept named with the Ch 3–4 vocabulary.</p></div>
+
+<div class="chapter">
+  <div class="ch-head"><span class="num">CH 6</span><h3>Plan Before You Prompt</h3><span class="day">Day 4</span></div>
+  <div class="goal"><b>Theory goal:</b> reader understands why a written spec beats blind prompting, and what a good spec contains.</div>
+  <div class="topics">
+    <ul>
+      <li data-t="T1"><b>Why prompting without a plan fails:</b> the agent guesses at every gap — structure in, structure out.</li>
+      <li data-t="T2"><b>What a spec is:</b> a one-page brief — user, problem, pages (React), features/modules (the Ch 4 Module Map), what data lives where (Postgres tables).</li>
+      <li data-t="T3"><b>The module checklist concept:</b> every app idea is a subset of the 5 modules — "catalog + search + checkout, no login yet" is a complete sentence to an agent.</li>
+      <li data-t="T4"><b>How the agent reads a spec:</b> it generates the folder structure, plans files, and works the list — which is why asking for the Ch 4 directory by name gets a professional result.</li>
+    </ul>
+  </div>
+  <div class="design">
+    <div class="dlabel">The one design</div>
+    <div class="dname">"Spec In, Structure Out"</div>
+    <p><b>What it shows:</b> left panel — a messy paragraph of wishes going into the agent, producing a jumbled pile of files. Right panel — the same wishes arranged as a spec card (user / pages / modules / tables), producing the neat Ch 4 folder tree.</p>
+    <p><b>Why it teaches:</b> the single most valuable build habit — write the spec first — shown as cause and effect.</p>
+  </div>
+</div>
+
+<div class="chapter">
+  <div class="ch-head"><span class="num">CH 7</span><h3>The Build Loop: Prompt → Check → Fix</h3><span class="day">Day 4</span></div>
+  <div class="goal"><b>Theory goal:</b> reader understands the iteration cycle and the debug vocabulary that makes fixes fast.</div>
+  <div class="topics">
+    <ul>
+      <li data-t="T1"><b>Small prompts beat big prompts:</b> one component or one endpoint per round — why small changes are checkable and big ones aren't.</li>
+      <li data-t="T2"><b>The error loop:</b> paste the error, state expected vs. actual, name the part — the three ingredients of every good fix request.</li>
+      <li data-t="T3"><b>Debug vocabulary that halves fix time:</b> name the layer + the file — "the <code>Login.jsx</code> page" (React), "the /auth/login endpoint in <code>auth.py</code>" (FastAPI), "the <code>users</code> table" (Postgres).</li>
+      <li data-t="T4"><b>Reading the Command Sheets live:</b> when the agent runs <code>npm run dev</code> or <code>uvicorn main:app --reload</code>, what's actually happening — boss, not passenger.</li>
+      <li data-t="T5"><b>"The agent is stuck" playbook:</b> reset the conversation, simplify the request, split the task — when to use which.</li>
+      <li data-t="T6"><b>The checkpoint habit:</b> saving working versions before each change — the idea of git, named not taught.</li>
+    </ul>
+  </div>
+  <div class="design">
+    <div class="dlabel">The one design</div>
+    <div class="dname">"The Loop"</div>
+    <p><b>What it shows:</b> a circular diagram — <b>Prompt (small) → Agent builds → Check → Works? → yes: next piece / no: Error Loop (paste error, expected vs actual, name the file) → back to Check</b>. A side callout shows the three escape hatches: reset, simplify, split.</p>
+    <p><b>Why it teaches:</b> building with an agent feels chaotic until you see it's one repeatable loop — the sketch turns "it broke!" panic into "I'm at the Check step" calm.</p>
+  </div>
+</div>
+
+<div class="chapter">
+  <div class="ch-head"><span class="num">CH 8</span><h3>Make It Look Real</h3><span class="day">Day 5</span></div>
+  <div class="goal"><b>Theory goal:</b> reader understands what separates a demo-looking app from an agency-looking one — the vocabulary of polish.</div>
+  <div class="topics">
+    <ul>
+      <li data-t="T1"><b>The polish checklist:</b> name, colors, fonts, spacing, mobile view — and the word <i>responsive</i>: what it means and why it matters in India (most traffic is phones).</li>
+      <li data-t="T2"><b>UI states that signal quality:</b> hover, loading, empty, error — the states users subconsciously judge.</li>
+      <li data-t="T3"><b>Copy that sells:</b> the headline formula (who + outcome + time) and button text that says what happens next.</li>
+      <li data-t="T4"><b>Free assets done right:</b> images, icons, AI-generated logo — and image compression as the reader's first optimization concept.</li>
+      <li data-t="T5"><b>The "₹50,000 agency look":</b> the 5 small details that signal professional work — consistent spacing, one accent color, real photos, aligned buttons, no lorem ipsum.</li>
+    </ul>
+  </div>
+  <div class="design">
+    <div class="dlabel">The one design</div>
+    <div class="dname">"Before / After — The Same Page, Twice"</div>
+    <p><b>What it shows:</b> one phone frame split in two — left: the same store page looking like a default demo (grey, crowded, placeholder text); right: after the polish pass (one accent color, breathing space, real headline, neat buttons). Five numbered callouts mark exactly what changed.</p>
+    <p><b>Why it teaches:</b> "polish" stops being vague — the reader sees the five differences and knows the words to ask for each.</p>
+  </div>
+</div>
+
+<div class="chapter">
+  <div class="ch-head"><span class="num">CH 9</span><h3>Working Features: Login, Data, Payments</h3><span class="day">Day 6</span></div>
+  <div class="goal"><b>Theory goal:</b> reader understands how the three "real" features actually work end-to-end — stored data, logged-in users, collected money — and can say which ones their app needs.</div>
+  <div class="topics">
+    <ul>
+      <li data-t="T1"><b>The anatomy revisited:</b> circle your app's pieces on the Anatomy Map + Module Map — pages, routers, tables, endpoints.</li>
+      <li data-t="T2"><b>How storing data works:</b> <code>schema.sql</code> is the app's skeleton — the agent writes the CREATE TABLEs, you approve tables in plain English; <code>seed.sql</code> fills sample rows.</li>
+      <li data-t="T3"><b>Forms that do something:</b> a React form POSTing to a FastAPI endpoint — contact, booking, order forms are all the same pattern.</li>
+      <li data-t="T4"><b>Authentication in practice:</b> JWT via <code>auth.py</code> vs. Firebase Auth for done-for-you OTP — which to pick when, and what "protected pages" means.</li>
+      <li data-t="T5"><b>Search in practice:</b> the index is what makes it instant — optimization understood as a decision, not a chore.</li>
+      <li data-t="T6"><b>Taking money:</b> Razorpay payment link vs. full checkout, and the webhook concept — Razorpay calls YOUR endpoint to confirm payment; the browser saying "paid" is never proof.</li>
+    </ul>
+  </div>
+  <div class="design">
+    <div class="dlabel">The one design</div>
+    <div class="dname">"The Two Trust Flows"</div>
+    <p><b>What it shows:</b> two short sequence strips on one page. <b>Strip 1 — Login:</b> user enters password → server checks <code>users</code> table → issues JWT wristband → browser shows wristband on every later request → protected page opens. <b>Strip 2 — Payment:</b> customer pays on Razorpay → Razorpay calls your <code>/webhook</code> endpoint → order row marked "paid" → confirmation page. A big red cross on the wrong path: "browser says paid" ≠ paid.</p>
+    <p><b>Why it teaches:</b> JWT and webhooks are the two concepts everyone fears — as drawn stories they're just wristbands and phone calls.</p>
+  </div>
+</div>
+
+<div class="part"><h2>Part 3 · Launch</h2><span class="days">Day 7</span><p>The app goes on the public internet — the emotional payoff of the book.</p></div>
+
+<div class="chapter">
+  <div class="ch-head"><span class="num">CH 10</span><h3>Go Live: Deploy &amp; Domain</h3><span class="day">Day 7</span></div>
+  <div class="goal"><b>Theory goal:</b> reader understands what "deploying" actually means, where each layer lives, and what a domain adds.</div>
+  <div class="topics">
+    <ul>
+      <li data-t="T1"><b>What "deploy" means:</b> your code moves from your machine to a server that never sleeps — hosting, build command (<code>npm run build</code>), environment variables (where the JWT secret and database URL live), HTTPS — each in one line.</li>
+      <li data-t="T2"><b>Where each layer goes:</b> React frontend → Vercel, FastAPI backend → Render (free tier), Postgres → already lives on Neon/Supabase — why the three deploy separately but work as one app.</li>
+      <li data-t="T3"><b>Domains:</b> what a domain is, buying on GoDaddy/Hostinger (~₹500–800/yr), connecting it, HTTPS/SSL.</li>
+      <li data-t="T4"><b>The speed pass:</b> what Lighthouse measures, compressed images, mobile load — the launch-speed concept.</li>
+      <li data-t="T5"><b>The launch checklist:</b> the 12 things to verify before sharing the link — and why announcing publicly is part of launching.</li>
+    </ul>
+  </div>
+  <div class="design">
+    <div class="dlabel">The one design</div>
+    <div class="dname">"The Deployment Map"</div>
+    <p><b>What it shows:</b> the Ch 4 folder tree on the left with three arrows leaving it — <code>frontend/</code> → Vercel cloud, <code>backend/</code> → Render cloud, <code>database/</code> → Neon — all three merging under one roof labelled "yourdomain.com + HTTPS lock", with a customer's phone connecting to the roof.</p>
+    <p><b>Why it teaches:</b> deployment feels like magic until you see it's just three folders moving to three free hosts under one name.</p>
+  </div>
+</div>
+
+<div class="chapter">
+  <div class="ch-head"><span class="num">CH 11</span><h3>Test Like a Customer</h3><span class="day">Day 7</span></div>
+  <div class="goal"><b>Theory goal:</b> reader understands how to check their own product the way a buyer will — and where the stack-specific checks hide.</div>
+  <div class="topics">
+    <ul>
+      <li data-t="T1"><b>The 20-point QA mindset:</b> mobile view, speed, broken links, working forms, payment flow — checking as a customer, not as the builder.</li>
+      <li data-t="T2"><b>The stack checks:</b> does login return a JWT? does search hit the index? does the Razorpay webhook fire? — how each maps back to the Module Map.</li>
+      <li data-t="T3"><b>Making the agent test its own work:</b> the self-review concept, and FastAPI's <code>/docs</code> page as the reader's personal click-test lab — no code needed.</li>
+      <li data-t="T4"><b>The friend test:</b> watch someone use it without explaining anything — why silence is the test.</li>
+    </ul>
+  </div>
+  <div class="design">
+    <div class="dlabel">The one design</div>
+    <div class="dname">"The Customer Test Path"</div>
+    <p><b>What it shows:</b> a shopper's footprints walking through the app — Home → Search → Product → Cart → Pay → Confirmation — with checkpoint flags at each step ("did search feel instant?" / "did payment confirm via webhook?") and the three stack checks marked as hidden inspection hatches under the path.</p>
+    <p><b>Why it teaches:</b> QA stops being an intimidating checklist and becomes a walk the reader has already taken a hundred times as a customer.</p>
+  </div>
+</div>
+
+<div class="part"><h2>Part 4 · Sell</h2><span class="days">Day 7+</span><p>The differentiator — the reader came to build, they leave with a way to earn.</p></div>
+
+<div class="chapter">
+  <div class="ch-head"><span class="num">CH 12</span><h3>Your First Paying Customer</h3><span class="day">Day 7+</span></div>
+  <div class="goal"><b>Theory goal:</b> reader understands who buys websites, what to charge, and how to talk about their skills in builder language.</div>
+  <div class="topics">
+    <ul>
+      <li data-t="T1"><b>Who buys:</b> local shops, clinics, tutors, gyms, restaurants — the "no website / bad website" hunt and why local beats online freelancing for a first sale.</li>
+      <li data-t="T2"><b>Pricing your first project:</b> the ₹5k–15k starter ladder and how to quote — priced by modules, not by hours.</li>
+      <li data-t="T3"><b>Sounding like a pro:</b> quoting in builder terms — "responsive React site + booking form + admin panel, database-backed" — the Ch 3–4 vocabulary as sales language.</li>
+      <li data-t="T4"><b>The outreach channels:</b> WhatsApp message, walk-in pitch, referral ask — how each works and why WhatsApp wins in India.</li>
+      <li data-t="T5"><b>Handling the two objections:</b> "how much?" and "let me think about it" — the theory of answering without discounting yourself.</li>
+    </ul>
+  </div>
+  <div class="design">
+    <div class="dlabel">The one design</div>
+    <div class="dname">"The Local Opportunity Map + Pricing Ladder"</div>
+    <p><b>What it shows:</b> a small Indian high-street illustration — clinic, gym, bakery, tutor, boutique — each shop flagged with its likely need ("no site", "site from 2015", "no booking"). Beside it, a 3-rung ladder: ₹5k (simple site) → ₹10k (site + form/booking) → ₹15k (catalog + payments) — showing price climbs with modules, not effort.</p>
+    <p><b>Why it teaches:</b> the reader sees their own street as a market and understands pricing as a ladder they can climb — two fears answered by one picture.</p>
+  </div>
+</div>
+
+<div class="chapter">
+  <div class="ch-head"><span class="num">CH 13</span><h3>Deliver, Get Paid, Repeat</h3><span class="day">Ongoing</span></div>
+  <div class="goal"><b>Theory goal:</b> reader understands the full client-project lifecycle and the retainer model — a business, not a hobby.</div>
+  <div class="topics">
+    <ul>
+      <li data-t="T1"><b>The client workflow:</b> advance → build → feedback round → final payment → handover — and why the advance exists (commitment, not greed).</li>
+      <li data-t="T2"><b>Monthly retainers:</b> maintenance at ₹1k–3k/month — the compounding trick: 10 small clients = salary-level income.</li>
+      <li data-t="T3"><b>The portfolio page:</b> your deployed apps are your sales pitch — why a live link beats a resume.</li>
+      <li data-t="T4"><b>When to level up:</b> multi-agent builds, real Postgres design, auth at scale, team/agency workflows — what structured training adds (the honest bridge to the course).</li>
+    </ul>
+  </div>
+  <div class="design">
+    <div class="dlabel">The one design</div>
+    <div class="dname">"The Client Flywheel"</div>
+    <p><b>What it shows:</b> a circular flywheel — Advance → Build → Feedback → Final payment → Handover → Happy client → Referral/Retainer → next project — with a small side-gear showing retainers compounding (1 client ₹2k/mo → 10 clients ₹20k/mo).</p>
+    <p><b>Why it teaches:</b> freelancing looks like a series of one-off gigs; the flywheel shows it as a machine that speeds up with every delivery.</p>
+  </div>
+</div>
+
+<div class="part"><h2>Back matter · Bonuses &amp; the Bridge</h2><span class="days">Reference pages, not chapters</span><p>These print after the last chapter — the toolkit that makes the bundle feel worth ₹699.</p></div>
+
+<table class="bm">
+  <tr><th>Section</th><th>What it is</th><th>Its sketch/design</th></tr>
+  <tr><td>Builder's Dictionary</td><td>3-page glossary grouped by stack — React terms / FastAPI terms / Postgres terms / auth terms — each with a one-line "what it is + how it works".</td><td>Dictionary page design: two-column cards, each term in a small labelled card (stack-colored tabs).</td></tr>
+  <tr><td>Stack Command Card</td><td>1-page printable of the 15 commands from Ch 4 with plain-English meanings — "boss, not passenger".</td><td>A desk-card layout: 3 columns (React/npm · FastAPI/uvicorn · Postgres/SQL), command left, meaning right.</td></tr>
+  <tr><td>The Anatomy Map (reprint)</td><td>The Ch 3 diagram reprinted full-page as the permanent reference.</td><td>Same sketch — full-page version.</td></tr>
+  <tr><td>Book → Course map</td><td>"You learned to say X → in the course you'll build X" — stack-precise lines (auth.py → build a JWT auth system; CREATE INDEX → design full schemas).</td><td>A bridge diagram: left column book terms, right column course builds, arrows across.</td></tr>
+  <tr><td>30-day launch checklist</td><td>One-page printable: idea → build → live → first customer.</td><td>A 30-box trail/checklist grid.</td></tr>
+  <tr><td>Troubleshooting appendix</td><td>Top 10 problems + fixes ("agent ignores me", "deploy failed", "uvicorn won't start", "search is slow").</td><td>Two-column table: symptom → fix.</td></tr>
+  <tr><td>"Zero to Launch → Pro"</td><td>1–2 honest pages: what the book covered vs. what the AI Agentic Software Development course adds + reader coupon ZEROLAUNCH.</td><td>The only sales page in the book — kept deliberately non-salesy.</td></tr>
+</table>
+
+<footer class="page">
+  <b>Notes for the book builder:</b> Topic numbering (T1, T2…) inside each chapter is the recommended writing order — each topic is one self-contained teaching unit: a heading + 2–4 short paragraphs + one term card or example where needed. Every chapter's "one design" is specified with exactly what to draw and why — hand this document directly to the designer with the chapter text. Practical prompts, exercises, and the Prompt Vault are deliberately absent from chapters per CEO directive; they ship as the separate vault companion.
+</footer>
+
+</div>
+</body>
+</html>
