@@ -34,6 +34,7 @@ Razorpay key id/secret reuse the admin-managed `payment_settings` table
 (test/live toggle) — same source as invoice checkout.
 """
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
@@ -413,12 +414,16 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
         entity = event.get("payload", {}).get("payment", {}).get("entity", {})
         order_id = entity.get("order_id")
         payment_id = entity.get("id")
-        if order_id:
-            lead = db.query(models.WebinarLead).filter(
-                models.WebinarLead.razorpay_order_id == order_id
-            ).first()
-            if lead:
-                _finalize_paid_lead(lead, payment_id, db)
+
+        def _apply() -> None:  # sync DB + httpx work off the event loop
+            if order_id:
+                lead = db.query(models.WebinarLead).filter(
+                    models.WebinarLead.razorpay_order_id == order_id
+                ).first()
+                if lead:
+                    _finalize_paid_lead(lead, payment_id, db)
+
+        await run_in_threadpool(_apply)
     return {"ok": True}
 
 
@@ -436,50 +441,54 @@ async def ewebinar_hook(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     payload = await request.json()
-    email = (payload.get("email") or "").strip().lower()
-    registrant_id = payload.get("attendeeId") or payload.get("id")
-    lead = None
-    if registrant_id:
-        lead = db.query(models.WebinarLead).filter(
-            models.WebinarLead.ewebinar_registrant_id == registrant_id
-        ).first()
-    if not lead and email:
-        lead = db.query(models.WebinarLead).filter(
-            models.WebinarLead.email == email,
-            models.WebinarLead.status != "created",
-        ).order_by(models.WebinarLead.id.desc()).first()
-    if not lead:
-        return {"ok": True, "matched": False}
 
-    if registrant_id and not lead.ewebinar_registrant_id:
-        lead.ewebinar_registrant_id = registrant_id
-    if payload.get("joinLink") and not lead.ewebinar_join_url:
-        lead.ewebinar_join_url = payload["joinLink"]
-    if payload.get("replayLink"):
-        lead.ewebinar_replay_url = payload["replayLink"]
+    def _apply() -> dict:  # sync DB work off the event loop
+        email = (payload.get("email") or "").strip().lower()
+        registrant_id = payload.get("attendeeId") or payload.get("id")
+        lead = None
+        if registrant_id:
+            lead = db.query(models.WebinarLead).filter(
+                models.WebinarLead.ewebinar_registrant_id == registrant_id
+            ).first()
+        if not lead and email:
+            lead = db.query(models.WebinarLead).filter(
+                models.WebinarLead.email == email,
+                models.WebinarLead.status != "created",
+            ).order_by(models.WebinarLead.id.desc()).first()
+        if not lead:
+            return {"ok": True, "matched": False}
 
-    action = payload.get("action") or ""
-    state = payload.get("state") or None
-    now = datetime.utcnow()
-    lead.ewebinar_last_action = action[:48] or lead.ewebinar_last_action
-    lead.ewebinar_state = (state or "")[:32] or lead.ewebinar_state
-    if action in ("Joined",) or state == "Joined":
-        lead.joined_at = lead.joined_at or now
-    if action in ("WatchedWebinar", "WatchedReplay", "WebinarFinished") or state == "Watched":
-        lead.watched_at = lead.watched_at or now
-    if action == "Registered" and lead.status == "registration_pending":
-        lead.status = "registered"
-        lead.registered_at = lead.registered_at or now
+        if registrant_id and not lead.ewebinar_registrant_id:
+            lead.ewebinar_registrant_id = registrant_id
+        if payload.get("joinLink") and not lead.ewebinar_join_url:
+            lead.ewebinar_join_url = payload["joinLink"]
+        if payload.get("replayLink"):
+            lead.ewebinar_replay_url = payload["replayLink"]
 
-    session_time = payload.get("sessionTime")
-    if session_time:
-        try:
-            lead.ewebinar_session_time = datetime.fromisoformat(str(session_time).replace("Z", "+00:00"))
-        except ValueError:
-            pass
+        action = payload.get("action") or ""
+        state = payload.get("state") or None
+        now = datetime.utcnow()
+        lead.ewebinar_last_action = action[:48] or lead.ewebinar_last_action
+        lead.ewebinar_state = (state or "")[:32] or lead.ewebinar_state
+        if action in ("Joined",) or state == "Joined":
+            lead.joined_at = lead.joined_at or now
+        if action in ("WatchedWebinar", "WatchedReplay", "WebinarFinished") or state == "Watched":
+            lead.watched_at = lead.watched_at or now
+        if action == "Registered" and lead.status == "registration_pending":
+            lead.status = "registered"
+            lead.registered_at = lead.registered_at or now
 
-    db.commit()
-    return {"ok": True, "matched": True, "lead": lead.uuid}
+        session_time = payload.get("sessionTime")
+        if session_time:
+            try:
+                lead.ewebinar_session_time = datetime.fromisoformat(str(session_time).replace("Z", "+00:00"))
+            except ValueError:
+                pass
+
+        db.commit()
+        return {"ok": True, "matched": True, "lead": lead.uuid}
+
+    return await run_in_threadpool(_apply)
 
 
 # ── Caller sheet (telecall team) ────────────────────────────────────────────
