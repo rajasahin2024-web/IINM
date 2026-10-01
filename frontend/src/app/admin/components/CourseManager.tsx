@@ -8,6 +8,15 @@ import { API_BASE_URL, resolveAssetUrl } from "@/lib/config";
 import AICourseAgent from "./AICourseAgent";
 import UploadModal from "./UploadModal";
 import AdminPdfPreview from "./AdminPdfPreview";
+import ImportCurriculumResolveModal, {
+  normNameKey,
+  CurriculumChapterEntry,
+  CurriculumSubjectEntry,
+  ImportMatchModel,
+  MatchedSubject,
+  MissingSubject,
+  SubjectResolution,
+} from "./ImportCurriculumResolveModal";
 
 const API = `${API_BASE_URL}`;
 
@@ -506,6 +515,8 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
   // ── Curriculum JSON import/export state ──
   const [exportingJson, setExportingJson] = useState(false);
   const [importingJson, setImportingJson] = useState(false);
+  const [importResolveModel, setImportResolveModel] = useState<ImportMatchModel | null>(null);
+  const [applyingImport, setApplyingImport] = useState(false);
   const importInputRef = React.useRef<HTMLInputElement>(null);
 
   // ── Bulk select & delete state ──
@@ -574,57 +585,81 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
       .finally(() => setFetchingLiveClassesFor(p => ({ ...p, [chapterId]: false })));
   };
 
-  const handleAddSubject = async () => {
-    if (!newSubjectName.trim()) return;
-    setSavingSubject(true);
+  /** Creates (or resolves) category → subcategory → subject. Shared by the inline form and the import-resolve modal. */
+  const createSubjectCascade = async (input: {
+    name: string;
+    catId: number | "new" | "";
+    newCategoryName: string;
+    subcatId: number | "new" | "";
+    newSubcategoryName: string;
+  }): Promise<{ subject: Subject } | { error: string }> => {
     try {
-      let catId: number | null = newSubjectCatId === "new" || newSubjectCatId === "" ? null : newSubjectCatId;
-      if (newSubjectCatId === "new") {
+      let catId: number | null = input.catId === "new" || input.catId === "" ? null : input.catId;
+      if (input.catId === "new") {
         const res = await apiFetch(`${API}/categories`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: newCategoryName.trim() }),
+          body: JSON.stringify({ name: input.newCategoryName.trim() }),
         });
-        if (!res.ok) { showToast("Failed to create category", "error"); return; }
+        if (!res.ok) return { error: "Failed to create category" };
         const created = await res.json();
         setCategories(p => [...p, created]);
         catId = created.id;
       }
-      if (catId === null) { showToast("Select or create a category", "error"); return; }
+      if (catId === null) return { error: "Select or create a category" };
 
-      let subcatId: number | null = newSubjectSubcatId === "new" || newSubjectSubcatId === "" ? null : newSubjectSubcatId;
-      if (newSubjectSubcatId === "new") {
+      let subcatId: number | null = input.subcatId === "new" || input.subcatId === "" ? null : input.subcatId;
+      if (input.subcatId === "new") {
         const res = await apiFetch(`${API}/subcategories`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: newSubcategoryName.trim(), category_id: catId }),
+          body: JSON.stringify({ name: input.newSubcategoryName.trim(), category_id: catId }),
         });
-        if (!res.ok) { showToast("Failed to create subcategory", "error"); return; }
+        if (!res.ok) return { error: "Failed to create subcategory" };
         const created = await res.json();
         setSubcategories(p => [...p, created]);
         subcatId = created.id;
       }
-      if (subcatId === null) { showToast("Select or create a subcategory", "error"); return; }
+      if (subcatId === null) return { error: "Select or create a subcategory" };
 
       const res = await apiFetch(`${API}/subcategories/${subcatId}/subjects`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newSubjectName.trim(), subcategory_id: subcatId }),
+        body: JSON.stringify({ name: input.name.trim(), subcategory_id: subcatId }),
       });
-      if (res.ok) {
-        const created = await res.json();
-        setSubjects(p => [...p, created]);
-        setFormSubjectIds(p => p.includes(created.id) ? p : [...p, created.id]);
-        setNewSubjectName("");
-        setNewSubjectCatId("");
-        setNewSubjectSubcatId("");
-        setNewCategoryName("");
-        setNewSubcategoryName("");
-        setAddingSubject(false);
-        showToast(`Subject "${created.name}" added!`, "success");
-      } else { showToast("Failed to add subject", "error"); }
-    } catch { showToast("Network error", "error"); }
-    finally { setSavingSubject(false); }
+      if (!res.ok) return { error: "Failed to add subject" };
+      const created: Subject = await res.json();
+      setSubjects(p => [...p, created]);
+      return { subject: created };
+    } catch {
+      return { error: "Network error" };
+    }
+  };
+
+  const handleAddSubject = async () => {
+    if (!newSubjectName.trim()) return;
+    setSavingSubject(true);
+    const result = await createSubjectCascade({
+      name: newSubjectName,
+      catId: newSubjectCatId,
+      newCategoryName,
+      subcatId: newSubjectSubcatId,
+      newSubcategoryName,
+    });
+    if ("error" in result) {
+      showToast(result.error, "error");
+    } else {
+      const created = result.subject;
+      setFormSubjectIds(p => p.includes(created.id) ? p : [...p, created.id]);
+      setNewSubjectName("");
+      setNewSubjectCatId("");
+      setNewSubjectSubcatId("");
+      setNewCategoryName("");
+      setNewSubcategoryName("");
+      setAddingSubject(false);
+      showToast(`Subject "${created.name}" added!`, "success");
+    }
+    setSavingSubject(false);
   };
 
   const handleAddChapter = async () => {
@@ -1150,7 +1185,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
   const CURRICULUM_SAMPLE = {
     kind: "iinm-course-curriculum",
     version: 1,
-    note: "Import maps subjects/chapters that already exist in Masters (matched by id first, then by name — case/whitespace tolerant). It does not create new ones.",
+    note: "Import maps subjects/chapters that already exist in Masters (matched by id first, then by name — case/whitespace tolerant). Subjects that don't match can be created, mapped to an existing subject, or skipped in the resolve dialog.",
     course: { title: "Example Course Title" },
     subjects: [
       {
@@ -1221,73 +1256,196 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
     }
   };
 
-  const normNameKey = (v: unknown) =>
-    String(v ?? "")
-      .normalize("NFC")
-      .replace(/[\u200B-\u200D\uFEFF]/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .toLowerCase();
+  /** Phase 1 — parse the file and dry-match against Masters. Nothing is applied. */
+  const parseCurriculumFile = async (file: File): Promise<ImportMatchModel | null> => {
+    const text = await file.text();
+    let parsed: any;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      showToast("Invalid file: not valid JSON", "error");
+      return null;
+    }
+    const entries = Array.isArray(parsed) ? parsed : parsed?.subjects;
+    if (!Array.isArray(entries)) {
+      showToast("Malformed file: expected a \"subjects\" array", "error");
+      return null;
+    }
+
+    const matched: MatchedSubject[] = [];
+    const missingByKey = new Map<string, MissingSubject>();
+
+    for (const raw of entries) {
+      if (!raw || typeof raw !== "object") continue;
+      const entry = raw as CurriculumSubjectEntry;
+      const sub = subjects.find(s => s.id === entry.id)
+        || subjects.find(s => normNameKey(s.name) === normNameKey(entry.name));
+      const importable = (Array.isArray(entry.chapters) ? entry.chapters : [])
+        .filter(c => c && typeof c === "object" && (c as CurriculumChapterEntry).mapped !== false) as CurriculumChapterEntry[];
+
+      if (!sub) {
+        const key = normNameKey(entry.name) || `id:${entry.id ?? "?"}`;
+        const existing = missingByKey.get(key);
+        if (existing) {
+          for (const ch of importable) {
+            if (!existing.chapters.some(x => normNameKey(x.title) === normNameKey(ch.title))) existing.chapters.push(ch);
+          }
+        } else {
+          missingByKey.set(key, { entry: { id: entry.id, name: entry.name }, chapters: [...importable] });
+        }
+        continue;
+      }
+
+      let m = matched.find(x => x.subject.id === sub.id);
+      if (!m) { m = { entry, subject: sub, matchedChapters: [], unmatchedChapters: [] }; matched.push(m); }
+      if (importable.length === 0) continue;
+      const chapters = await fetchChaptersForSubject(sub.id);
+      for (const chEntry of importable) {
+        const chap = chapters.find(c => c.id === chEntry.id)
+          || chapters.find(c => normNameKey(c.title) === normNameKey(chEntry.title));
+        if (chap) { if (!m.matchedChapters.some(c => c.id === chap.id)) m.matchedChapters.push(chap); }
+        else if (!m.unmatchedChapters.some(c => normNameKey(c.title) === normNameKey(chEntry.title))) m.unmatchedChapters.push(chEntry);
+      }
+    }
+    return { matched, missing: [...missingByKey.values()] };
+  };
+
+  /**
+   * Phase 2 — apply matched subjects plus per-row resolutions for missing ones.
+   * Returns per-row error messages (empty object = full success).
+   */
+  const applyCurriculumImport = async (model: ImportMatchModel, resolutions: SubjectResolution[]): Promise<Record<number, string>> => {
+    const rowErrors: Record<number, string> = {};
+    const nextSubjectIds: number[] = [];
+    const nextChapterIds = new Set<number>();
+    const skipped: string[] = [];
+    const pushSubject = (id: number) => { if (!nextSubjectIds.includes(id)) nextSubjectIds.push(id); };
+
+    let createdSubjects = 0;
+    let createdChapters = 0;
+    const knownSubjects: Subject[] = [...subjects];
+
+    for (const m of model.matched) {
+      pushSubject(m.subject.id);
+      m.matchedChapters.forEach(c => nextChapterIds.add(c.id));
+      m.unmatchedChapters.forEach(c => skipped.push(`chapter "${c.title ?? c.id ?? "?"}"`));
+    }
+
+    /** Auto-match each entry chapter; create only the explicitly checked unmatched ones. */
+    const applyChaptersForSubject = async (subject: Subject, chEntries: CurriculumChapterEntry[], createIdxs: Set<number>) => {
+      const chapters = await fetchChaptersForSubject(subject.id);
+      for (let i = 0; i < chEntries.length; i++) {
+        const chEntry = chEntries[i];
+        const chap = chapters.find(c => c.id === chEntry.id)
+          || chapters.find(c => normNameKey(c.title) === normNameKey(chEntry.title));
+        if (chap) { nextChapterIds.add(chap.id); continue; }
+        if (!createIdxs.has(i)) { skipped.push(`chapter "${chEntry.title ?? chEntry.id ?? "?"}"`); continue; }
+        const title = String(chEntry.title ?? "").trim() || `Chapter ${i + 1}`;
+        const res = await apiFetch(`${API}/subjects/${subject.id}/chapters`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, subject_id: subject.id }),
+        });
+        if (!res.ok) throw new Error(`Failed to create chapter "${title}"`);
+        const created: Chapter = await res.json();
+        chapters.push(created);
+        setSubjectChapters(p => ({ ...p, [subject.id]: [...chapters] }));
+        nextChapterIds.add(created.id);
+        createdChapters++;
+      }
+    };
+
+    for (let i = 0; i < model.missing.length; i++) {
+      const row = model.missing[i];
+      const res = resolutions[i] ?? { kind: "skip" as const };
+      const label = String(row.entry.name ?? row.entry.id ?? "?");
+      try {
+        if (res.kind === "skip") { skipped.push(`subject "${label}"`); continue; }
+        if (res.kind === "map") {
+          const target = knownSubjects.find(s => s.id === res.subjectId);
+          if (!target) { rowErrors[i] = "Selected subject no longer exists"; continue; }
+          pushSubject(target.id);
+          await applyChaptersForSubject(target, row.chapters, new Set(res.createChapterIdxs));
+          continue;
+        }
+        // create — re-check name collision against the latest list first
+        const name = res.name.trim();
+        const createIdxs = new Set(res.createChapterIdxs);
+        const existing = knownSubjects.find(s => normNameKey(s.name) === normNameKey(name));
+        if (existing) {
+          pushSubject(existing.id);
+          await applyChaptersForSubject(existing, row.chapters, createIdxs);
+          continue;
+        }
+        const result = await createSubjectCascade({
+          name,
+          catId: res.catId,
+          newCategoryName: res.newCategoryName,
+          subcatId: res.subcatId,
+          newSubcategoryName: res.newSubcategoryName,
+        });
+        if ("error" in result) { rowErrors[i] = result.error; continue; }
+        knownSubjects.push(result.subject);
+        pushSubject(result.subject.id);
+        createdSubjects++;
+        await applyChaptersForSubject(result.subject, row.chapters, createIdxs);
+      } catch (e) {
+        rowErrors[i] = e instanceof Error ? e.message : "Import failed for this subject";
+      }
+    }
+
+    if (nextSubjectIds.length === 0) {
+      showToast("Nothing to import", "warning");
+      return rowErrors;
+    }
+
+    setFormSubjectIds(nextSubjectIds);
+    setFormChapterIds(Array.from(nextChapterIds));
+    setActiveChapterId(null);
+    const errCount = Object.keys(rowErrors).length;
+    showToast(
+      `Imported ${nextSubjectIds.length} subject${nextSubjectIds.length !== 1 ? "s" : ""}, ${nextChapterIds.size} chapter${nextChapterIds.size !== 1 ? "s" : ""}` +
+      (createdSubjects || createdChapters ? ` — created ${createdSubjects} subject${createdSubjects !== 1 ? "s" : ""}, ${createdChapters} chapter${createdChapters !== 1 ? "s" : ""}` : "") +
+      (skipped.length ? `; skipped: ${skipped.slice(0, 3).join(", ")}${skipped.length > 3 ? ` +${skipped.length - 3} more` : ""}` : "") +
+      (errCount ? `; ${errCount} subject${errCount !== 1 ? "s" : ""} failed` : ""),
+      errCount || skipped.length ? "warning" : "success"
+    );
+    return rowErrors;
+  };
 
   const handleImportCurriculum = async (file: File) => {
     setImportingJson(true);
     try {
-      const text = await file.text();
-      let parsed: any;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        showToast("Invalid file: not valid JSON", "error");
+      const model = await parseCurriculumFile(file);
+      if (!model) return;
+      if (model.matched.length === 0 && model.missing.length === 0) {
+        showToast("Nothing to import — the file contains no subjects", "error");
         return;
       }
-      const entries = Array.isArray(parsed) ? parsed : parsed?.subjects;
-      if (!Array.isArray(entries)) {
-        showToast("Malformed file: expected a \"subjects\" array", "error");
+      if (model.missing.length > 0) {
+        setImportResolveModel(model);
         return;
       }
-
-      const nextSubjectIds: number[] = [];
-      const nextChapterIds = new Set<number>();
-      const skipped: string[] = [];
-
-      for (const entry of entries) {
-        if (!entry || typeof entry !== "object") continue;
-        const sub = subjects.find(s => s.id === entry.id)
-          || subjects.find(s => normNameKey(s.name) === normNameKey(entry.name));
-        if (!sub) { skipped.push(`subject "${entry.name ?? entry.id ?? "?"}"`); continue; }
-        if (!nextSubjectIds.includes(sub.id)) nextSubjectIds.push(sub.id);
-        if (!Array.isArray(entry.chapters)) continue;
-        const chapters = await fetchChaptersForSubject(sub.id);
-        for (const chEntry of entry.chapters) {
-          if (!chEntry || typeof chEntry !== "object") continue;
-          if (chEntry.mapped === false) continue;
-          const chap = chapters.find(c => c.id === chEntry.id)
-            || chapters.find(c => normNameKey(c.title) === normNameKey(chEntry.title));
-          if (chap) nextChapterIds.add(chap.id);
-          else skipped.push(`chapter "${chEntry.title ?? chEntry.id ?? "?"}"`);
-        }
-      }
-
-      if (nextSubjectIds.length === 0) {
-        showToast(
-          `No matching subjects found${skipped.length ? ` — skipped: ${skipped.slice(0, 5).join(", ")}${skipped.length > 5 ? ` +${skipped.length - 5} more` : ""}` : ""}. Import maps existing subjects only; it does not create new ones.`,
-          "error"
-        );
-        return;
-      }
-
-      setFormSubjectIds(nextSubjectIds);
-      setFormChapterIds(Array.from(nextChapterIds));
-      setActiveChapterId(null);
-      showToast(
-        `Imported ${nextSubjectIds.length} subject${nextSubjectIds.length !== 1 ? "s" : ""}, ${nextChapterIds.size} chapter${nextChapterIds.size !== 1 ? "s" : ""}` +
-        (skipped.length ? ` — skipped: ${skipped.slice(0, 3).join(", ")}${skipped.length > 3 ? ` +${skipped.length - 3} more` : ""}` : ""),
-        skipped.length ? "warning" : "success"
-      );
+      await applyCurriculumImport(model, []);
     } catch {
       showToast("Import failed", "error");
     } finally {
       setImportingJson(false);
+    }
+  };
+
+  const handleApplyImportResolutions = async (resolutions: SubjectResolution[]): Promise<Record<number, string> | null> => {
+    if (!importResolveModel) return null;
+    setApplyingImport(true);
+    try {
+      const errors = await applyCurriculumImport(importResolveModel, resolutions);
+      if (Object.keys(errors).length === 0) {
+        setImportResolveModel(null);
+        return null;
+      }
+      return errors;
+    } finally {
+      setApplyingImport(false);
     }
   };
 
@@ -2152,7 +2310,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                           <button type="button" onClick={handleDownloadSample} title="Download a sample JSON template" style={{ fontSize: 12, fontWeight: 700, background: "#fff", color: "#64748b", border: "1px solid #e2e8f0", padding: "6px 14px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
                             <Icon name="file-text" size={13} /> Sample
                           </button>
-                          <button type="button" disabled={importingJson} onClick={() => importInputRef.current?.click()} title="Import curriculum mapping from a JSON file — maps existing subjects/chapters only; it does not create new ones" style={{ fontSize: 12, fontWeight: 700, background: "#fff", color: "#059669", border: "1px solid #bbf7d0", padding: "6px 14px", borderRadius: 6, cursor: importingJson ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                          <button type="button" disabled={importingJson} onClick={() => importInputRef.current?.click()} title="Import curriculum mapping from a JSON file — existing subjects map automatically; missing ones can be created, mapped, or skipped in the resolve dialog" style={{ fontSize: 12, fontWeight: 700, background: "#fff", color: "#059669", border: "1px solid #bbf7d0", padding: "6px 14px", borderRadius: 6, cursor: importingJson ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6 }}>
                             <Icon name="upload" size={13} /> {importingJson ? "Importing..." : "Import"}
                           </button>
                           <input
@@ -2873,6 +3031,19 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
             }}
           />
         </div>
+      )}
+
+      {importResolveModel && (
+        <ImportCurriculumResolveModal
+          model={importResolveModel}
+          subjects={subjects}
+          categories={categories}
+          subcategories={subcategories}
+          loadSubjectChapters={fetchChaptersForSubject}
+          applying={applyingImport}
+          onApply={handleApplyImportResolutions}
+          onCancel={() => setImportResolveModel(null)}
+        />
       )}
 
       {/* Basic Keyframes for modal animation */}
