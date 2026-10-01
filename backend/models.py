@@ -2154,6 +2154,16 @@ class WebinarLead(Base):
     # Caller-sheet fields (telecall team works this list daily)
     joined_at               = Column(DateTime(timezone=True), nullable=True)
     watched_at              = Column(DateTime(timezone=True), nullable=True)
+    watch_pct               = Column(Integer, nullable=True)          # % of session watched (eWebinar analytics)
+    chat_msgs               = Column(Integer, nullable=True)          # attendee chat message count
+    poll_answer             = Column(String(255), nullable=True)      # "What's your background?" poll answer
+    # CALL ME / escalation keywords in webinar chat → priority row for the caller
+    callme_flag             = Column(Boolean, nullable=False, default=False)
+    callme_at               = Column(DateTime(timezone=True), nullable=True)
+    callme_reason           = Column(String(64), nullable=True)       # matched keyword / chat_escalation
+    callme_excerpt          = Column(String(500), nullable=True)      # chat line that triggered the flag
+    # 48h attendee-offer deadline: watched_at+48h (fallback registered_at+48h for no-shows)
+    offer_deadline          = Column(DateTime(timezone=True), nullable=True)
     call_status             = Column(String(32), nullable=True)       # contacted/interested/not_interested/no_answer
     call_notes              = Column(Text, nullable=True)
     called_at               = Column(DateTime(timezone=True), nullable=True)

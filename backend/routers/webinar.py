@@ -21,6 +21,7 @@ Flow:
 
 Env:
     WEBINAR_TICKET_PRICE_INR   ticket price in ₹ (default 499 — board-approved price point)
+    WEBINAR_SEATS_PER_SESSION  per-slot seat cap shown on the LP (default 25, mirrors the eWebinar config)
     EWEBINAR_API_KEY           ew_api_… key with `Registrants` permission (Team settings → Integrations → API access)
     EWEBINAR_WEBINAR_ID        the published evergreen webinar's id
     EWEBINAR_API_BASE          default https://api.ewebinar.com/v2
@@ -38,7 +39,8 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import hashlib
 import hmac
 import json
@@ -76,9 +78,60 @@ CALLER_SHEET_TOKEN = os.getenv("CALLER_SHEET_TOKEN", "")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://iinmedu.com").rstrip("/")
 
 WEBINAR_TITLE = os.getenv("WEBINAR_TITLE", "Agentic AI Career Webinar")
+SEATS_PER_SESSION = int(os.getenv("WEBINAR_SEATS_PER_SESSION", "25"))
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _VALID_CALL_STATUSES = {"contacted", "interested", "not_interested", "no_answer", "callback"}
+
+# JIT session schedule — mirrors marketing/webinar-funnel/06-ewebinar-setup.md.
+# Sessions start every 30 min inside IST open hours; keep in sync if ops changes
+# the eWebinar schedule. Timezone is pinned to Asia/Kolkata (India-only audience).
+IST = ZoneInfo("Asia/Kolkata")
+_WEEKDAY_WINDOWS = ((12, 0, 14, 0), (18, 0, 22, 30))   # Mon–Fri lunch + evening
+_WEEKEND_WINDOWS = ((10, 0, 22, 30),)                  # Sat–Sun all day
+_SLOT_STEP_MIN = 30
+
+# Chat escalation keywords → CALL ME priority flag (tag list owned by CMO,
+# marketing/webinar-funnel/05-chatbase-moderator-config.md).
+_ESCALATION_KEYWORDS = (
+    "call me", "callme", "call karo", "baat karni hai",
+    "refund", "paise", "payment fail",
+)
+
+
+def _next_jit_slot(now: Optional[datetime] = None) -> datetime:
+    """Next session start on the JIT schedule: slots at :00/:30 with
+    window_start <= slot < window_end. Scans forward up to a week."""
+    now_ist = (now or datetime.now(IST)).astimezone(IST)
+    for offset in range(8):
+        d = now_ist.date() + timedelta(days=offset)
+        windows = _WEEKEND_WINDOWS if d.weekday() >= 5 else _WEEKDAY_WINDOWS
+        for h1, m1, h2, m2 in windows:
+            t = datetime(d.year, d.month, d.day, h1, m1, tzinfo=IST)
+            end = datetime(d.year, d.month, d.day, h2, m2, tzinfo=IST)
+            while t < end:
+                if t > now_ist:
+                    return t
+                t += timedelta(minutes=_SLOT_STEP_MIN)
+    return now_ist + timedelta(minutes=_SLOT_STEP_MIN)  # unreachable in practice
+
+
+def _chat_text(payload: dict) -> str:
+    """Best-effort extraction of an attendee chat line from an eWebinar hook
+    payload — the exact key varies by webhook version."""
+    for key in ("chatMessage", "message", "text", "comment", "chat"):
+        v = payload.get(key)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return ""
+
+
+def _escalation_reason(text: str) -> Optional[str]:
+    low = text.lower()
+    for kw in _ESCALATION_KEYWORDS:
+        if kw in low:
+            return kw
+    return None
 
 
 # ── Schemas ─────────────────────────────────────────────────────────────────
@@ -161,6 +214,13 @@ def _register_with_ewebinar(lead: "models.WebinarLead") -> None:
         "webinarId": EWEBINAR_WEBINAR_ID,
         "leadUuid": lead.uuid,
         "source": "razorpay-checkout",
+        # Sync fields per 06-ewebinar-setup.md: utm_* + payment ref
+        "razorpay_payment_id": lead.razorpay_payment_id,
+        "utm_source": lead.utm_source,
+        "utm_medium": lead.utm_medium,
+        "utm_campaign": lead.utm_campaign,
+        "utm_term": lead.utm_term,
+        "utm_content": lead.utm_content,
     }
     if EWEBINAR_SESSION_TIME:
         payload["sessionTime"] = EWEBINAR_SESSION_TIME
@@ -238,6 +298,9 @@ def _finalize_paid_lead(lead: "models.WebinarLead", payment_id: str, db: Session
             lead.status = "registered"
             lead.registered_at = datetime.utcnow()
             lead.registration_error = None
+            # No-show fallback for the 48h attendee offer (README offer
+            # mechanics); extended to watch-end+48h if they actually attend.
+            lead.offer_deadline = lead.registered_at + timedelta(hours=48)
         except Exception as e:
             logger.warning("eWebinar registration failed for lead %s: %s", lead.uuid, e)
             lead.status = "registration_pending"
@@ -274,8 +337,10 @@ def webinar_checkout_config(db: Session = Depends(get_db)):
         "amount_inr": TICKET_PRICE_INR,
         "currency": "INR",
         "title": WEBINAR_TITLE,
+        "next_slot": _next_jit_slot().isoformat(),
+        "seats_per_session": SEATS_PER_SESSION,
     }
-    cache.set("webinar:checkout_config", resp, ttl=60)
+    cache.set("webinar:checkout_config", resp, ttl=30)
     return resp
 
 
@@ -474,9 +539,45 @@ async def ewebinar_hook(request: Request, db: Session = Depends(get_db)):
             lead.joined_at = lead.joined_at or now
         if action in ("WatchedWebinar", "WatchedReplay", "WebinarFinished") or state == "Watched":
             lead.watched_at = lead.watched_at or now
+            # Attendee-offer deadline anchors 48h after their session/replay
+            # watch — overrides the registration+48h no-show fallback.
+            lead.offer_deadline = now + timedelta(hours=48)
         if action == "Registered" and lead.status == "registration_pending":
             lead.status = "registered"
             lead.registered_at = lead.registered_at or now
+            lead.offer_deadline = lead.offer_deadline or now + timedelta(hours=48)
+
+        # Attendee analytics for the caller sheet (tolerant key lookup —
+        # eWebinar payload keys vary by webhook version).
+        watch_pct = payload.get("watchPercent") or payload.get("watch_pct") or payload.get("watchDurationPercent")
+        if isinstance(watch_pct, (int, float)):
+            lead.watch_pct = max(0, min(100, int(watch_pct)))
+        poll_answer = payload.get("pollAnswer") or payload.get("poll_answer") or payload.get("pollResponse")
+        if isinstance(poll_answer, str) and poll_answer.strip():
+            lead.poll_answer = poll_answer.strip()[:255]
+
+        # Chat escalation: CALL ME / "call karo" / refund-type keywords →
+        # priority row in the caller sheet (tag list owned by CMO, spec 05).
+        msg = _chat_text(payload)
+        chat_count = payload.get("chatMessages") or payload.get("chat_msgs") or payload.get("chatMessageCount")
+        if isinstance(chat_count, (int, float)):
+            lead.chat_msgs = int(chat_count)
+        elif isinstance(chat_count, list):
+            lead.chat_msgs = len(chat_count)
+            if not msg:  # transcript list — check the latest entry for keywords
+                for item in reversed(chat_count):
+                    cand = (item.get("message") or item.get("text")) if isinstance(item, dict) else item
+                    if isinstance(cand, str) and cand.strip():
+                        msg = cand.strip()
+                        break
+        elif msg:
+            lead.chat_msgs = (lead.chat_msgs or 0) + 1
+        reason = _escalation_reason(msg) if msg else None
+        if reason:
+            lead.callme_flag = True
+            lead.callme_at = lead.callme_at or now
+            lead.callme_reason = f"chat_escalation:{reason}"[:64]
+            lead.callme_excerpt = msg[:500]
 
         session_time = payload.get("sessionTime")
         if session_time:
@@ -492,21 +593,29 @@ async def ewebinar_hook(request: Request, db: Session = Depends(get_db)):
 
 
 # ── Caller sheet (telecall team) ────────────────────────────────────────────
-def _caller_rows(db: Session, status_filter: Optional[str], uncalled_only: bool):
+def _caller_rows(db: Session, status_filter: Optional[str], uncalled_only: bool, callme_only: bool):
     q = db.query(models.WebinarLead).filter(models.WebinarLead.status != "created")
     if status_filter:
         q = q.filter(models.WebinarLead.status == status_filter)
     if uncalled_only:
         q = q.filter(models.WebinarLead.call_status.is_(None))
-    leads = q.order_by(models.WebinarLead.paid_at.desc().nullslast(), models.WebinarLead.id.desc()).all()
+    if callme_only:
+        q = q.filter(models.WebinarLead.callme_flag.is_(True))
+    # CALL ME chat escalations sort to the top — the telecaller's priority queue.
+    leads = q.order_by(
+        models.WebinarLead.callme_flag.desc(),
+        models.WebinarLead.paid_at.desc().nullslast(),
+        models.WebinarLead.id.desc(),
+    ).all()
     return [
         {
             "uuid": l.uuid,
             "name": l.name,
-            "email": l.email,
             "phone": l.phone,
+            "email": l.email,
             "status": l.status,
             "paid_at": l.paid_at.isoformat() if l.paid_at else None,
+            "registered_at": l.registered_at.isoformat() if l.registered_at else None,
             "amount_inr": l.amount_paise // 100,
             "payment_ref": l.razorpay_payment_id,
             "join_url": l.ewebinar_join_url,
@@ -514,9 +623,20 @@ def _caller_rows(db: Session, status_filter: Optional[str], uncalled_only: bool)
             "attended": bool(l.joined_at),
             "joined_at": l.joined_at.isoformat() if l.joined_at else None,
             "watched": bool(l.watched_at),
+            "watch_pct": l.watch_pct,
+            "chat_msgs": l.chat_msgs,
+            "poll_answer": l.poll_answer,
+            "callme_flag": bool(l.callme_flag),
+            "callme_at": l.callme_at.isoformat() if l.callme_at else None,
+            "callme_reason": l.callme_reason,
+            "callme_excerpt": l.callme_excerpt,
+            "offer_deadline": l.offer_deadline.isoformat() if l.offer_deadline else None,
             "ewebinar_state": l.ewebinar_state,
             "utm_source": l.utm_source,
+            "utm_medium": l.utm_medium,
             "utm_campaign": l.utm_campaign,
+            "utm_term": l.utm_term,
+            "utm_content": l.utm_content,
             "call_status": l.call_status,
             "call_notes": l.call_notes,
             "called_at": l.called_at.isoformat() if l.called_at else None,
@@ -532,16 +652,23 @@ def caller_sheet(
     format: str = "json",
     status: Optional[str] = None,
     uncalled: bool = False,
+    callme: bool = False,
 ):
-    """Daily caller list — JSON for tooling, ?format=csv for Google Sheets/Excel import."""
+    """Daily caller list — JSON for tooling, ?format=csv for Google Sheets/Excel
+    import, ?callme=1 for the CALL ME priority queue only."""
     _require_sheet_token(request)
-    rows = _caller_rows(db, status, uncalled)
+    rows = _caller_rows(db, status, uncalled, callme)
     if format == "csv":
         import csv
         import io
         buf = io.StringIO()
-        fields = ["name", "email", "phone", "paid_at", "attended", "joined_at", "watched",
-                  "ewebinar_state", "call_status", "call_notes", "utm_campaign", "join_url", "uuid"]
+        # Column order per the telecall spec (06-ewebinar-setup.md).
+        fields = ["name", "phone", "email", "registered_at", "attended", "watch_pct",
+                  "chat_msgs", "poll_answer", "callme_flag", "callme_reason",
+                  "callme_excerpt", "offer_deadline", "utm_source", "utm_medium",
+                  "utm_campaign", "utm_term", "utm_content", "paid_at",
+                  "session_time", "ewebinar_state", "call_status", "call_notes",
+                  "join_url", "uuid"]
         w = csv.DictWriter(buf, fieldnames=fields, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)

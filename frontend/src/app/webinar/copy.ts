@@ -1,13 +1,13 @@
 /**
- * Webinar LP copy — single handoff point for CMO (IIN-149 content package).
- * Replace these strings with the final Hinglish copy; no component changes needed.
+ * Webinar LP copy — CMO content package, marketing/webinar-funnel/02-landing-page-copy.md.
+ * Edit copy here only; no component changes needed for copy tweaks.
  */
 
 export const webinarCopy = {
   meta: {
-    title: "Agentic AI Career Blueprint — Live Webinar | IINM",
+    title: "AI Agent Se Real App Banao — Live Teardown Webinar | IINM",
     description:
-      "₹499 mein seekho kaise Agentic AI developers ki careers badal raha hai. Live webinar + Q&A. Limited seats — abhi book karo.",
+      "₹499 mein dekho Raja Sain ek real app AI agents ke saath kaise banate hain — prompt se deploy tak. UPI se book karo, next session auto-join.",
   },
 
   brand: {
@@ -15,37 +15,132 @@ export const webinarCopy = {
     tagline: "Institute of Innovation & New Media",
   },
 
+  topbar: {
+    countdownLabel: "Next session starts in",
+    countdownUnit: "min",
+  },
+
   hero: {
-    badge: "LIVE WEBINAR · LIMITED SEATS",
-    title: "Agentic AI se apni career fast-track karo",
+    badge: "PRE-RECORDED MASTERCLASS · JIT SESSIONS EVERY 30 MIN",
+    title: "AI Agent Se Real App Banao — Live Teardown Webinar",
+    // A/B variants for week 2 (CMO owns testing):
+    //   B: "50 Minute Mein Dekho: AI Agent Ek Poora App Kaise Banata Hai"
+    //   C: "Coding Ka Future Yahan Hai — AI Agents Se Software Banana Seekho"
     subtitle:
-      "90-minute live webinar: dekho kaise top developers AI agents se 10x output nikaal rahe hain — aur kaise tum bhi kar sakte ho.",
-    bullets: [
-      "Agentic AI workflows ka live demo — real projects, real code",
-      "India ke job market mein AI-skilled developers ki demand breakdown",
-      "Roadmap: beginner se job-ready — kaunsa course kab lena hai",
-      "Live Q&A — apne career questions directly poochho",
+      "Ek pre-recorded masterclass jahan Raja Sain ek real app AI agents ke saath banake dikhate hain — prompt se deploy tak. Koi fluff nahi. Sirf real kaam.",
+    trustPoints: [
+      "Sirf ₹499 — jo course enroll karne pe 100% credit ban jaata hai",
+      "UPI / Cards / Netbanking",
+      "Instant access — next session auto-join",
+    ],
+    cta: "Seat Book Karo",
+    ctaMicrocopy: "UPI se 30 second mein pay karo · Seat instantly reserve",
+    // {time} and {seats} are interpolated from the live JIT schedule
+    urgencyTemplate: "Next session: {time} · Sirf {seats} seats per session — chhota batch rakhte hain taaki chat mein har question ka answer mile.",
+  },
+
+  outcomes: {
+    heading: "50 minute mein aap dekhenge:",
+    items: [
+      "🎯 Agentic development kya hai — AI \"junior dev team\" banake kaam karwana (aur kyun yeh skill 2026 ka sabse bada shift hai)",
+      "🛠️ Real app live build — prompt → plan → code → errors → fix → deploy, poora process screen pe",
+      "🧠 5 lessons jo aap aaj se apply kar sakte ho — prompt-as-spec, interrupts, review discipline, testing, iteration",
+      "💰 Career angle — agentic dev skills se job, freelance rates, aur income paths kaise badhte hain",
+      "🎁 Attendee-only offer — ₹499 ticket course credit ban jaata hai + 48h bonus (session mein reveal)",
     ],
   },
 
-  offer: {
-    priceLabel: "Webinar ticket",
-    currencySymbol: "₹",
-    priceNote: "one-time · UPI / card / netbanking",
-    bonus: "Attendees-only: 48-hour bonus offer on Agentic Pro (₹8,999) & AISD (₹17,000)",
-    guarantee: "Full-session watch karo — webinar ke baad caller team se personal roadmap call milegi.",
+  host: {
+    heading: "Aapke host: Raja Sain",
+    bio: "Raja Sain — IINM co-founder. AI tools aur agentic development pe kaam karte hain, aur Indian creators/students ko AI skills sikhate hain. Is session mein woh wohi workflow dikhayenge jo roz use karte hain — no theory, sirf real screen.",
+    // Headshot upload slot — set a URL/path when CMO supplies the photo.
+    photoSrc: "",
+    photoAlt: "Raja Sain, IINM co-founder",
+    initials: "RS",
+  },
+
+  proof: {
+    heading: "Learners kya kehte hain",
+    // Launch-week honest placeholders — replace with real named testimonials
+    // in week 1–2. Never ship fabricated names.
+    items: [
+      { quote: "Pehli baar samjha AI se coding actually kaise hoti hai — sirf ChatGPT copy-paste nahi.", attribution: "IINM learner" },
+      { quote: "Demo mein errors khud fix hote dekha — mind blown.", attribution: "IINM learner" },
+    ],
+  },
+
+  forWhom: {
+    yesHeading: "Yeh aapke liye hai agar:",
+    yes: [
+      "Aap developer ho aur AI-era mein relevant rehna hai",
+      "Student ho — degree ke saath real income skill chahiye",
+      "Freelancer ho — higher rates, faster delivery chahiye",
+      "Non-tech ho — but AI se income ka serious path chahiye",
+    ],
+    noHeading: "Yeh aapke liye NAHI hai agar:",
+    no: [
+      "\"Bina mehnat paisa\" shortcut chahiye",
+      "Aap already senior agentic-dev workflows professionally use karte ho",
+    ],
+  },
+
+  steps: {
+    heading: "How it works",
+    items: [
+      "Pay karo — UPI/Card se ₹499, 30 second",
+      "Auto-join — payment ke turant baad next session ka link milta hai (WhatsApp + email)",
+      "Attend + offer — session dekho, 48-hour attendee offer unlock hota hai",
+    ],
+  },
+
+  faq: {
+    heading: "FAQ",
+    items: [
+      {
+        q: "Yeh live hai ya recorded?",
+        a: "Session pre-recorded hai — isliye aap abhi join kar sakte ho, koi wait nahi. Lekin chat mein hamara AI assistant live hai jo aapke questions answer karega, aur team baad mein personally follow up karti hai.",
+      },
+      {
+        q: "₹499 refundable hai?",
+        a: "Ticket refundable nahi hai — but yeh 100% course credit ban jaata hai. Matlab agar aap kisi bhi IINM course mein enroll karte ho, ₹499 adjust ho jaata hai. Webinar free jaisa ho gaya.",
+      },
+      {
+        q: "Mujhe coding aati nahi — kya yeh mere liye hai?",
+        a: "Haan — session beginner-friendly hai. Demo technical hai but har step explain hota hai. Agar aap seriously seekhna chahte ho, yeh aapko exact roadmap dega.",
+      },
+      {
+        q: "Kitne time ka session hai?",
+        a: "~50 minute. End mein attendee-only offer + Q&A answers.",
+      },
+      {
+        q: "Payment safe hai?",
+        a: "Razorpay — India ka leading payment gateway. UPI, cards, netbanking sab supported. Payment ke baad instant confirmation + join link.",
+      },
+      {
+        q: "Session miss ho gaya toh?",
+        a: "Koi baat nahi — registered users ko replay link milta hai (WhatsApp + email). 48-hour offer replay watchers pe bhi apply hota hai.",
+      },
+    ],
+  },
+
+  finalCta: {
+    heading: "₹499 — aur woh bhi course credit ban jaata hai.",
+    body: "Agle 50 minute mein aapko pata chal jaayega ki AI se software ka future kaisa dikhta hai — aur usmein aapki jagah kahan hai.",
+    cta: "Seat Book Karo",
+    microcopy: "Next session {time} · Seats limited per slot · UPI accepted",
   },
 
   form: {
     heading: "Apni seat book karo",
-    subheading: "Payment ke turant baad join link email pe milega.",
+    ticketLabel: "Webinar ticket",
+    subheading: "Payment ke turant baad join link email + WhatsApp pe milega.",
     nameLabel: "Full name",
     namePlaceholder: "Aapka naam",
     emailLabel: "Email",
     emailPlaceholder: "you@example.com",
     phoneLabel: "Mobile number",
     phonePlaceholder: "10-digit mobile (WhatsApp preferred)",
-    cta: "Pay ₹499 & Book My Seat",
+    ctaPrefix: "Seat Book Karo —",
     ctaProcessing: "Opening secure checkout…",
     disclaimer: "Secure payment via Razorpay · UPI, cards & netbanking supported",
   },
@@ -63,9 +158,13 @@ export const webinarCopy = {
     ],
   },
 
-  trust: {
-    line: "IINM — Institute of Innovation & New Media",
-    points: ["Razorpay secure payments", "Instant eWebinar registration", "Call-back support"],
+  footer: {
+    whatsappLabel: "Questions? WhatsApp us:",
+    // Terms/Privacy CMS page slugs go here once those pages exist.
+    links: [
+      { label: "Contact", href: "/contact-us" },
+    ],
+    smallPrint: "This is a recorded educational session. ₹499 ticket is fully credited toward any IINM course enrollment.",
   },
 } as const;
 
