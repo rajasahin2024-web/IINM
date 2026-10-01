@@ -36,6 +36,11 @@ Thumbs.db
 
 # Agent scratch (run-local temp files, tokens)
 .scratch/
+.devin/scratch/
+mint_*.cjs
+
+# Frontend verify build output
+frontend/.next-verify/
 
 # IDE
 .vscode/
