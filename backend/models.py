@@ -2106,4 +2106,60 @@ class Notice(Base):
     batch           = relationship("Batch")
 
 
+# ══════════════════════════════════════════════════════
+#  WEBINAR FUNNEL (paid ₹499 webinar ticket → eWebinar auto-registration)
+# ══════════════════════════════════════════════════════
+
+class WebinarLead(Base):
+    __tablename__ = "webinar_lead"
+    id                      = Column(Integer, primary_key=True, index=True)
+    uuid                    = Column(String(64), unique=True, index=True)
+
+    # Buyer details (collected on the checkout LP before Razorpay opens)
+    name                    = Column(String(255), nullable=False)
+    email                   = Column(String(255), nullable=False, index=True)
+    phone                   = Column(String(32), nullable=False)
+
+    # Funnel status: created → paid → registered
+    #   registration_pending / registration_failed = payment ok, eWebinar step pending/retryable
+    status                  = Column(String(32), nullable=False, default="created", index=True)
+    amount_paise            = Column(Integer, nullable=False)
+    currency                = Column(String(8), nullable=False, default="INR")
+
+    # Razorpay
+    razorpay_order_id       = Column(String(64), nullable=True, unique=True, index=True)
+    razorpay_payment_id     = Column(String(64), nullable=True)
+    paid_at                 = Column(DateTime(timezone=True), nullable=True)
+
+    # Ads attribution (captured on the LP, used for Meta ads reporting)
+    utm_source              = Column(String(128), nullable=True)
+    utm_medium              = Column(String(128), nullable=True)
+    utm_campaign            = Column(String(128), nullable=True)
+    utm_term                = Column(String(128), nullable=True)
+    utm_content             = Column(String(128), nullable=True)
+    fbc                     = Column(String(255), nullable=True)
+    fbp                     = Column(String(255), nullable=True)
+    referrer                = Column(String(512), nullable=True)
+
+    # eWebinar registration state
+    ewebinar_registrant_id  = Column(String(64), nullable=True, index=True)
+    ewebinar_join_url       = Column(String(512), nullable=True)
+    ewebinar_replay_url     = Column(String(512), nullable=True)
+    ewebinar_session_time   = Column(DateTime(timezone=True), nullable=True)
+    ewebinar_state          = Column(String(32), nullable=True)       # Registered/Joined/Watched/…
+    ewebinar_last_action    = Column(String(48), nullable=True)       # last webhook action seen
+    registration_error      = Column(Text, nullable=True)
+    registered_at           = Column(DateTime(timezone=True), nullable=True)
+
+    # Caller-sheet fields (telecall team works this list daily)
+    joined_at               = Column(DateTime(timezone=True), nullable=True)
+    watched_at              = Column(DateTime(timezone=True), nullable=True)
+    call_status             = Column(String(32), nullable=True)       # contacted/interested/not_interested/no_answer
+    call_notes              = Column(Text, nullable=True)
+    called_at               = Column(DateTime(timezone=True), nullable=True)
+
+    created_at              = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at              = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
 

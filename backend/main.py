@@ -17,7 +17,7 @@ from typing import Optional
 from database import engine, SessionLocal, Base, get_db
 from cache import cache as app_cache
 from models import AdminUser, DeviceSession, DeviceAdminUser, Student
-from routers import courses, materials, questions, question_types, settings, comprehensions, topics, difficulty, batches, student, academic, progress, exams, dashboard, blogs, testimonials, contact, about, faq, leadership, invoice, slot_booking, seo, career, pages, mission_vision, certification, our_team, sample_certificate, notices, verification, server_resource, student_auth, student_panel
+from routers import courses, materials, questions, question_types, settings, comprehensions, topics, difficulty, batches, student, academic, progress, exams, dashboard, blogs, testimonials, contact, about, faq, leadership, invoice, slot_booking, seo, career, pages, mission_vision, certification, our_team, sample_certificate, notices, verification, server_resource, student_auth, student_panel, webinar
 from security import (
     check_public_rate_limit, get_client_ip, verify_password,
     make_student_token, verify_student_token, get_student_auth_secret,
@@ -76,6 +76,7 @@ app.include_router(verification.router)
 app.include_router(server_resource.router)
 app.include_router(student_auth.router)
 app.include_router(student_panel.router)
+app.include_router(webinar.router)
 # Ensure upload directories exist
 os.makedirs("uploads", exist_ok=True)
 os.makedirs("uploads/sample_certificates", exist_ok=True)

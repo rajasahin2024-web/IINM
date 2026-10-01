@@ -567,6 +567,7 @@ async def update_payment_settings(req: PaymentSettingsSchema, device: str = Depe
     db.commit()
     db.refresh(settings)
     cache.invalidate("public_payment")
+    cache.invalidate("webinar:checkout_config")
     return settings
 
 class PublicPaymentSettingsResponse(BaseModel):

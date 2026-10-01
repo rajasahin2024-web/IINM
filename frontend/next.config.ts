@@ -40,7 +40,7 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://challenges.cloudflare.com https://www.youtube.com https://www.gstatic.com https://checkout.razorpay.com https://api.razorpay.com https://cdn.razorpay.com`,
+              `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://challenges.cloudflare.com https://www.youtube.com https://www.gstatic.com https://checkout.razorpay.com https://api.razorpay.com https://cdn.razorpay.com https://connect.facebook.net`,
               // fonts.googleapis.com: Material Symbols stylesheet (<link> in
               // layout.tsx) and Inter @imports inside admin <style> blocks.
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
