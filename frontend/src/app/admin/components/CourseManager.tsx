@@ -1150,15 +1150,16 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
   const CURRICULUM_SAMPLE = {
     kind: "iinm-course-curriculum",
     version: 1,
+    note: "Import maps subjects/chapters that already exist in Masters (matched by id first, then by name — case/whitespace tolerant). It does not create new ones.",
     course: { title: "Example Course Title" },
     subjects: [
       {
         id: 1,
-        name: "Subject Name (matched by id first, then by exact name)",
+        name: "Subject Name",
         chapters: [
           {
             id: 10,
-            title: "Chapter title (matched by id first, then by exact title within the subject)",
+            title: "Chapter title",
             mapped: true,
             materials: [
               { id: 5, title: "Intro video", file_type: "youtube", youtube_url: "https://youtube.com/watch?v=example", file_url: null, description: "Optional note" }
@@ -1220,6 +1221,14 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
     }
   };
 
+  const normNameKey = (v: unknown) =>
+    String(v ?? "")
+      .normalize("NFC")
+      .replace(/[\u200B-\u200D\uFEFF]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+
   const handleImportCurriculum = async (file: File) => {
     setImportingJson(true);
     try {
@@ -1244,7 +1253,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
       for (const entry of entries) {
         if (!entry || typeof entry !== "object") continue;
         const sub = subjects.find(s => s.id === entry.id)
-          || subjects.find(s => s.name.trim().toLowerCase() === String(entry.name ?? "").trim().toLowerCase());
+          || subjects.find(s => normNameKey(s.name) === normNameKey(entry.name));
         if (!sub) { skipped.push(`subject "${entry.name ?? entry.id ?? "?"}"`); continue; }
         if (!nextSubjectIds.includes(sub.id)) nextSubjectIds.push(sub.id);
         if (!Array.isArray(entry.chapters)) continue;
@@ -1253,14 +1262,17 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
           if (!chEntry || typeof chEntry !== "object") continue;
           if (chEntry.mapped === false) continue;
           const chap = chapters.find(c => c.id === chEntry.id)
-            || chapters.find(c => c.title.trim().toLowerCase() === String(chEntry.title ?? "").trim().toLowerCase());
+            || chapters.find(c => normNameKey(c.title) === normNameKey(chEntry.title));
           if (chap) nextChapterIds.add(chap.id);
           else skipped.push(`chapter "${chEntry.title ?? chEntry.id ?? "?"}"`);
         }
       }
 
       if (nextSubjectIds.length === 0) {
-        showToast(`No matching subjects found${skipped.length ? ` (skipped ${skipped.length} item${skipped.length !== 1 ? "s" : ""})` : ""}`, "error");
+        showToast(
+          `No matching subjects found${skipped.length ? ` — skipped: ${skipped.slice(0, 5).join(", ")}${skipped.length > 5 ? ` +${skipped.length - 5} more` : ""}` : ""}. Import maps existing subjects only; it does not create new ones.`,
+          "error"
+        );
         return;
       }
 
@@ -2140,7 +2152,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                           <button type="button" onClick={handleDownloadSample} title="Download a sample JSON template" style={{ fontSize: 12, fontWeight: 700, background: "#fff", color: "#64748b", border: "1px solid #e2e8f0", padding: "6px 14px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
                             <Icon name="file-text" size={13} /> Sample
                           </button>
-                          <button type="button" disabled={importingJson} onClick={() => importInputRef.current?.click()} title="Import curriculum mapping from a JSON file" style={{ fontSize: 12, fontWeight: 700, background: "#fff", color: "#059669", border: "1px solid #bbf7d0", padding: "6px 14px", borderRadius: 6, cursor: importingJson ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                          <button type="button" disabled={importingJson} onClick={() => importInputRef.current?.click()} title="Import curriculum mapping from a JSON file — maps existing subjects/chapters only; it does not create new ones" style={{ fontSize: 12, fontWeight: 700, background: "#fff", color: "#059669", border: "1px solid #bbf7d0", padding: "6px 14px", borderRadius: 6, cursor: importingJson ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6 }}>
                             <Icon name="upload" size={13} /> {importingJson ? "Importing..." : "Import"}
                           </button>
                           <input
