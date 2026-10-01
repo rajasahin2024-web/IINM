@@ -184,6 +184,7 @@ class InstructorSimpleResponse(BaseModel):
     id: int
     name: str
     phone: Optional[str] = None
+    avatar_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -201,7 +202,7 @@ class CourseResponse(CourseBase):
         dict_obj = obj.__dict__.copy()
         dict_obj["subjects"] = getattr(obj, "subjects", [])
         dict_obj["chapter_ids"] = [ch.id for ch in getattr(obj, "chapters", [])]
-        dict_obj["instructors"] = [{"id": i.id, "name": i.name, "phone": i.phone} for i in getattr(obj, "instructors", [])]
+        dict_obj["instructors"] = [{"id": i.id, "name": i.name, "phone": i.phone, "avatar_url": i.avatar_url} for i in getattr(obj, "instructors", [])]
         return cls(**dict_obj)
 
     class Config:
@@ -1228,6 +1229,66 @@ def delete_course(course_id: int, device: str = Depends(require_device), db: Ses
     db.delete(db_c)
     db.commit()
     return {"message": "Deleted"}
+
+
+@router.post("/courses/{course_id}/duplicate", response_model=CourseResponse)
+def duplicate_course(course_id: int, device: str = Depends(require_device), db: Session = Depends(get_db)):
+    """Clone a course: copies all scalar fields plus subject/chapter/instructor
+    mappings, extended content, and course FAQs. The copy is titled
+    "<title> (Copy)" and always starts as DRAFT so it never goes live by accident."""
+    src = db.query(models.Course).options(
+        joinedload(models.Course.subjects),
+        joinedload(models.Course.chapters),
+        joinedload(models.Course.instructors),
+        joinedload(models.Course.extended_content),
+    ).filter(models.Course.id == course_id).first()
+    if not src:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    skip_cols = {"id", "slug", "created_at", "updated_at"}
+    db_copy = models.Course()
+    for col in models.Course.__table__.columns.keys():
+        if col not in skip_cols:
+            setattr(db_copy, col, getattr(src, col))
+    db_copy.title = f"{src.title} (Copy)"
+    db_copy.status = "DRAFT"
+
+    base_slug = re.sub(r'[^a-z0-9]+', '-', db_copy.title.lower()).strip('-')
+    slug = base_slug
+    counter = 1
+    while db.query(models.Course).filter(models.Course.slug == slug).first():
+        slug = f"{base_slug}-{counter}"
+        counter += 1
+    db_copy.slug = slug
+
+    db_copy.subjects = list(src.subjects)
+    db_copy.chapters = list(src.chapters)
+    db_copy.instructors = list(src.instructors)
+
+    db.add(db_copy)
+    db.flush()
+
+    if src.extended_content:
+        ext_skip = {"id", "course_id", "created_at", "updated_at"}
+        ext_copy = models.CourseExtendedContent(course_id=db_copy.id)
+        for col in models.CourseExtendedContent.__table__.columns.keys():
+            if col not in ext_skip:
+                setattr(ext_copy, col, getattr(src.extended_content, col))
+        db.add(ext_copy)
+
+    faqs = db.query(models.CourseFaq).filter(models.CourseFaq.course_id == course_id).all()
+    for f in faqs:
+        db.add(models.CourseFaq(
+            course_id=db_copy.id,
+            question=f.question,
+            answer=f.answer,
+            order_index=f.order_index,
+            is_active=f.is_active,
+        ))
+
+    db.commit()
+    db.refresh(db_copy)
+    return CourseResponse.from_orm_model(db_copy)
 
 
 # 5. Chapters

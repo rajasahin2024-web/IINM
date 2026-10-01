@@ -157,7 +157,7 @@ interface Course {
   status?: string;
   is_featured?: boolean;
   instructor_name?: string;
-  instructors?: { id: number; name: string; phone?: string }[];
+  instructors?: { id: number; name: string; phone?: string; avatar_url?: string }[];
   skill_level?: string;
   prerequisites?: string;
   what_you_will_learn?: string;
@@ -454,6 +454,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
 
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
   const [viewTarget, setViewTarget] = useState<Course | null>(null);
+  const [duplicatingId, setDuplicatingId] = useState<number | null>(null);
 
   // ── Modal State ─────────────────────────────────────
   const [modalOpen, setModalOpen] = useState(false);
@@ -501,6 +502,11 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
   const [formFullPayDiscValidTill, setFormFullPayDiscValidTill] = useState<string>("");
   const [formShowInstructorPublicly, setFormShowInstructorPublicly] = useState(true);
   const [aiAgentOpen, setAiAgentOpen] = useState(false);
+
+  // ── Curriculum JSON import/export state ──
+  const [exportingJson, setExportingJson] = useState(false);
+  const [importingJson, setImportingJson] = useState(false);
+  const importInputRef = React.useRef<HTMLInputElement>(null);
 
   // ── Bulk select & delete state ──
   const [bulkSubjectIds, setBulkSubjectIds] = useState<Set<number>>(new Set());
@@ -1036,6 +1042,24 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
     }
   };
 
+  const handleDuplicate = async (c: Course) => {
+    setDuplicatingId(c.id);
+    try {
+      const res = await apiFetch(`${API}/courses/${c.id}/duplicate`, { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        showToast(`Duplicated as "${data?.title || `${c.title} (Copy)`}"`);
+        fetchAll();
+      } else {
+        showToast(data?.detail || "Failed to duplicate course", "error");
+      }
+    } catch {
+      showToast("Network error", "error");
+    } finally {
+      setDuplicatingId(null);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     try {
@@ -1084,6 +1108,175 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
 
   const toggleChapter = (chapId: number) => {
     setFormChapterIds(prev => prev.includes(chapId) ? prev.filter(id => id !== chapId) : [...prev, chapId]);
+  };
+
+  // ── Curriculum JSON export / import ──
+  const downloadJson = (data: any, filename: string) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const fetchChaptersForSubject = async (subId: number): Promise<Chapter[]> => {
+    if (subjectChapters[subId]) return subjectChapters[subId];
+    try {
+      const res = await apiFetch(`${API}/subjects/${subId}/chapters`);
+      const data: Chapter[] = res.ok ? await res.json() : [];
+      setSubjectChapters(p => ({ ...p, [subId]: data }));
+      return data;
+    } catch {
+      return [];
+    }
+  };
+
+  const fetchMaterialsForChapter = async (chapId: number): Promise<Material[]> => {
+    if (chapterMaterials[chapId]) return chapterMaterials[chapId];
+    try {
+      const res = await apiFetch(`${API}/chapters/${chapId}/materials`);
+      const data: Material[] = res.ok ? await res.json() : [];
+      setChapterMaterials(p => ({ ...p, [chapId]: data }));
+      return data;
+    } catch {
+      return [];
+    }
+  };
+
+  const CURRICULUM_SAMPLE = {
+    kind: "iinm-course-curriculum",
+    version: 1,
+    course: { title: "Example Course Title" },
+    subjects: [
+      {
+        id: 1,
+        name: "Subject Name (matched by id first, then by exact name)",
+        chapters: [
+          {
+            id: 10,
+            title: "Chapter title (matched by id first, then by exact title within the subject)",
+            mapped: true,
+            materials: [
+              { id: 5, title: "Intro video", file_type: "youtube", youtube_url: "https://youtube.com/watch?v=example", file_url: null, description: "Optional note" }
+            ]
+          },
+          { id: 11, title: "Another chapter", mapped: false, materials: [] }
+        ]
+      }
+    ]
+  };
+
+  const handleDownloadSample = () => {
+    downloadJson(CURRICULUM_SAMPLE, "curriculum-mapping-sample.json");
+    showToast("Sample JSON downloaded");
+  };
+
+  const handleExportCurriculum = async () => {
+    if (formSubjectIds.length === 0) { showToast("Select at least one subject to export", "error"); return; }
+    setExportingJson(true);
+    try {
+      const exportSubjects = [];
+      for (const subId of formSubjectIds) {
+        const sub = subjects.find(s => s.id === subId);
+        const chapters = await fetchChaptersForSubject(subId);
+        const chapterEntries = [];
+        for (const ch of chapters) {
+          const mapped = formChapterIds.includes(ch.id);
+          const materials = mapped ? await fetchMaterialsForChapter(ch.id) : [];
+          chapterEntries.push({
+            id: ch.id,
+            title: ch.title,
+            is_active: ch.is_active,
+            mapped,
+            materials: materials.map(m => ({
+              id: m.id,
+              title: m.title,
+              file_type: m.file_type,
+              youtube_url: m.youtube_url || null,
+              file_url: m.file_url || null,
+              description: m.description || null,
+            })),
+          });
+        }
+        exportSubjects.push({ id: subId, name: sub?.name || "", chapters: chapterEntries });
+      }
+      const slug = (formTitle || "course").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "course";
+      downloadJson({
+        kind: "iinm-course-curriculum",
+        version: 1,
+        exported_at: new Date().toISOString(),
+        course: { id: editingId, title: formTitle || null },
+        subjects: exportSubjects,
+      }, `curriculum-${slug}.json`);
+      showToast("Curriculum JSON exported!");
+    } catch {
+      showToast("Export failed", "error");
+    } finally {
+      setExportingJson(false);
+    }
+  };
+
+  const handleImportCurriculum = async (file: File) => {
+    setImportingJson(true);
+    try {
+      const text = await file.text();
+      let parsed: any;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        showToast("Invalid file: not valid JSON", "error");
+        return;
+      }
+      const entries = Array.isArray(parsed) ? parsed : parsed?.subjects;
+      if (!Array.isArray(entries)) {
+        showToast("Malformed file: expected a \"subjects\" array", "error");
+        return;
+      }
+
+      const nextSubjectIds: number[] = [];
+      const nextChapterIds = new Set<number>();
+      const skipped: string[] = [];
+
+      for (const entry of entries) {
+        if (!entry || typeof entry !== "object") continue;
+        const sub = subjects.find(s => s.id === entry.id)
+          || subjects.find(s => s.name.trim().toLowerCase() === String(entry.name ?? "").trim().toLowerCase());
+        if (!sub) { skipped.push(`subject "${entry.name ?? entry.id ?? "?"}"`); continue; }
+        if (!nextSubjectIds.includes(sub.id)) nextSubjectIds.push(sub.id);
+        if (!Array.isArray(entry.chapters)) continue;
+        const chapters = await fetchChaptersForSubject(sub.id);
+        for (const chEntry of entry.chapters) {
+          if (!chEntry || typeof chEntry !== "object") continue;
+          if (chEntry.mapped === false) continue;
+          const chap = chapters.find(c => c.id === chEntry.id)
+            || chapters.find(c => c.title.trim().toLowerCase() === String(chEntry.title ?? "").trim().toLowerCase());
+          if (chap) nextChapterIds.add(chap.id);
+          else skipped.push(`chapter "${chEntry.title ?? chEntry.id ?? "?"}"`);
+        }
+      }
+
+      if (nextSubjectIds.length === 0) {
+        showToast(`No matching subjects found${skipped.length ? ` (skipped ${skipped.length} item${skipped.length !== 1 ? "s" : ""})` : ""}`, "error");
+        return;
+      }
+
+      setFormSubjectIds(nextSubjectIds);
+      setFormChapterIds(Array.from(nextChapterIds));
+      setActiveChapterId(null);
+      showToast(
+        `Imported ${nextSubjectIds.length} subject${nextSubjectIds.length !== 1 ? "s" : ""}, ${nextChapterIds.size} chapter${nextChapterIds.size !== 1 ? "s" : ""}` +
+        (skipped.length ? ` — skipped: ${skipped.slice(0, 3).join(", ")}${skipped.length > 3 ? ` +${skipped.length - 3} more` : ""}` : ""),
+        skipped.length ? "warning" : "success"
+      );
+    } catch {
+      showToast("Import failed", "error");
+    } finally {
+      setImportingJson(false);
+    }
   };
 
   // ── Bulk subject handlers ──
@@ -1378,19 +1571,52 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                     </div>
                   </td>
                   <td style={{ padding: "16px 20px" }}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                      {c.instructors && c.instructors.length > 0 ? c.instructors.map(inst => (
-                         <div key={inst.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                           <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#e0f2fe", color: "#0284c7", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800 }}>
-                              {inst.name.charAt(0).toUpperCase()}
-                           </div>
-                           <div style={{ display: "flex", flexDirection: "column" }}>
-                             <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{inst.name}</span>
-                             {inst.phone && <span style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}>{inst.phone}</span>}
-                           </div>
-                         </div>
-                      )) : <span style={{ fontSize: 12, color: "#94a3b8", fontStyle: "italic", background: "#f8fafc", padding: "4px 8px", borderRadius: 6 }}>No Instructors Assigned</span>}
-                    </div>
+                    {c.instructors && c.instructors.length > 0 ? (
+                      <div style={{ display: "flex", alignItems: "center" }}>
+                        {c.instructors.slice(0, 4).map((inst, i) => (
+                          <div
+                            key={inst.id}
+                            title={inst.name}
+                            style={{
+                              width: 32, height: 32, borderRadius: "50%",
+                              border: "2px solid #fff",
+                              marginLeft: i === 0 ? 0 : -10,
+                              position: "relative", zIndex: 10 - i,
+                              overflow: "hidden", flexShrink: 0, cursor: "default",
+                              background: "#e0f2fe", color: "#0284c7",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: 13, fontWeight: 800,
+                              boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+                            }}
+                          >
+                            {inst.avatar_url ? (
+                              <img src={resolveAssetUrl(inst.avatar_url)} alt={inst.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            ) : (
+                              inst.name.charAt(0).toUpperCase()
+                            )}
+                          </div>
+                        ))}
+                        {c.instructors.length > 4 && (
+                          <div
+                            title={c.instructors.slice(4).map(inst => inst.name).join(", ")}
+                            style={{
+                              width: 32, height: 32, borderRadius: "50%",
+                              border: "2px solid #fff", marginLeft: -10,
+                              position: "relative", zIndex: 0,
+                              overflow: "hidden", flexShrink: 0, cursor: "default",
+                              background: "#f1f5f9", color: "#64748b",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: 10, fontWeight: 800,
+                              boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+                            }}
+                          >
+                            +{c.instructors.length - 4}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: 12, color: "#94a3b8", fontStyle: "italic", background: "#f8fafc", padding: "4px 8px", borderRadius: 6 }}>No Instructors</span>
+                    )}
                   </td>
                   <td style={{ padding: "16px 20px", maxWidth: 220 }}>
                     <div style={{ marginBottom: 8 }}>
@@ -1435,6 +1661,9 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                       </button>
                       <button onClick={() => openModal("edit", c)} title="Edit" style={actionBtnStyle("#f8fafc", "#475569", "#e2e8f0")}>
                         <Icon name="edit" size={14} />
+                      </button>
+                      <button onClick={() => handleDuplicate(c)} disabled={duplicatingId === c.id} title="Duplicate" style={{ ...actionBtnStyle("#eff6ff", "#3b82f6", "#bfdbfe"), opacity: duplicatingId === c.id ? 0.5 : 1, cursor: duplicatingId === c.id ? "wait" : "pointer" }}>
+                        <Icon name={duplicatingId === c.id ? "refresh-cw" : "copy"} size={14} />
                       </button>
                       <button onClick={() => setDeleteTarget({ id: c.id, title: c.title })} title="Delete" style={actionBtnStyle("#fef2f2", "#ef4444", "#fecaca")}>
                         <Icon name="trash" size={14} />
@@ -1899,6 +2128,32 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                               {deletingBulk ? "Deleting..." : `Delete ${bulkChapterIds.size} Chapter${bulkChapterIds.size !== 1 ? "s" : ""}`}
                             </button>
                           )}
+                        </>
+                      )}
+                      {!bulkDeleteMode && (
+                        <>
+                          <div style={{ flex: 1 }} />
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.5px" }}>Curriculum JSON</span>
+                          <button type="button" disabled={exportingJson} onClick={handleExportCurriculum} title="Download the current curriculum mapping as JSON" style={{ fontSize: 12, fontWeight: 700, background: "#fff", color: "#0284c7", border: "1px solid #bae6fd", padding: "6px 14px", borderRadius: 6, cursor: exportingJson ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                            <Icon name="download" size={13} /> {exportingJson ? "Exporting..." : "Export"}
+                          </button>
+                          <button type="button" onClick={handleDownloadSample} title="Download a sample JSON template" style={{ fontSize: 12, fontWeight: 700, background: "#fff", color: "#64748b", border: "1px solid #e2e8f0", padding: "6px 14px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                            <Icon name="file-text" size={13} /> Sample
+                          </button>
+                          <button type="button" disabled={importingJson} onClick={() => importInputRef.current?.click()} title="Import curriculum mapping from a JSON file" style={{ fontSize: 12, fontWeight: 700, background: "#fff", color: "#059669", border: "1px solid #bbf7d0", padding: "6px 14px", borderRadius: 6, cursor: importingJson ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                            <Icon name="upload" size={13} /> {importingJson ? "Importing..." : "Import"}
+                          </button>
+                          <input
+                            ref={importInputRef}
+                            type="file"
+                            accept="application/json,.json"
+                            style={{ display: "none" }}
+                            onChange={e => {
+                              const f = e.target.files?.[0];
+                              if (f) handleImportCurriculum(f);
+                              e.target.value = "";
+                            }}
+                          />
                         </>
                       )}
                     </div>
