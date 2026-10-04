@@ -22,6 +22,7 @@ function SeoCoursesInner() {
   const [loading, setLoading] = useState(true);
   const [courses, setCourses] = useState<any[]>([]);
   const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [editing, setEditing] = useState<any | null>(null);
   const [form, setForm] = useState({ seo_title: "", seo_description: "", seo_keywords: "" });
   const [saving, setSaving] = useState(false);
@@ -64,7 +65,14 @@ function SeoCoursesInner() {
     finally { setSaving(false); }
   };
 
+  const typeBadge = (t?: string) => {
+    if (t === "ebook") return <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", background: "#f5f3ff", color: "#7c3aed" }}>eBook</span>;
+    if (t === "ebook_video") return <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", background: "#ecfdf5", color: "#059669" }}>eBook+Video</span>;
+    return <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", background: "#f0f9ff", color: "#0284c7" }}>Live Batch</span>;
+  };
+
   const filtered = courses.filter((c: any) => {
+    if (typeFilter !== "all" && (c.course_type || "live_batch") !== typeFilter) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return (c.title || "").toLowerCase().includes(q) || (c.slug || "").toLowerCase().includes(q);
@@ -81,11 +89,20 @@ function SeoCoursesInner() {
         <p style={{ margin: "6px 0 0", fontSize: 13, color: "#64748b" }}>Manage SEO titles, descriptions, keywords, and FAQs for each course.</p>
       </header>
 
-      <input style={{ ...S.input, marginBottom: 16 }} placeholder="Search courses..." value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+        <input style={{ ...S.input, flex: 1 }} placeholder="Search courses..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select style={{ ...S.input, width: 180, cursor: "pointer" }} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+          <option value="all">All Types</option>
+          <option value="live_batch">Live Batch</option>
+          <option value="ebook">eBook Only</option>
+          <option value="ebook_video">eBook + Video</option>
+        </select>
+      </div>
 
       <SeoTable
         columns={[
           { key: "title", label: "Course", render: (r) => <span style={{ fontWeight: 600 }}>{r.title}</span> },
+          { key: "course_type", label: "Type", render: (r) => typeBadge(r.course_type) },
           { key: "slug", label: "Slug", render: (r) => <span style={{ color: "#64748b", fontSize: 12 }}>/{r.slug}</span> },
           { key: "seo_title", label: "SEO Title", render: (r) => r.seo_title ? <span style={{ color: "#0f172a" }}>{r.seo_title.slice(0, 40)}{r.seo_title.length > 40 ? "..." : ""}</span> : <span style={{ color: "#cbd5e1" }}>Default</span> },
           { key: "status", label: "Status", render: (r) => <span style={{ fontSize: 12, padding: "2px 8px", background: r.status === "PUBLISHED" ? "#ecfdf5" : "#fef2f2", color: r.status === "PUBLISHED" ? "#10b981" : "#ef4444" }}>{r.status}</span> },

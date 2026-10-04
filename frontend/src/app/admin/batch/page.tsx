@@ -151,6 +151,7 @@ function BatchManagerInner() {
   const [search,       setSearch]       = useState("");
   const [modeFilter,   setModeFilter]   = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter,   setTypeFilter]   = useState("all");
 
   /* ── Pagination ── */
   const [currentPage, setCurrentPage] = useState(1);
@@ -236,7 +237,7 @@ function BatchManagerInner() {
   }, [showToast]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
-  useEffect(() => { setCurrentPage(1); }, [search, modeFilter, statusFilter]);
+  useEffect(() => { setCurrentPage(1); }, [search, modeFilter, statusFilter, typeFilter]);
 
   /* ── Fetch chapters when course changes in modal ── */
   useEffect(() => {
@@ -349,7 +350,8 @@ function BatchManagerInner() {
       instructorNames.toLowerCase().includes(q);
     const matchMode   = modeFilter   === "all" || b.mode   === modeFilter;
     const matchStatus = statusFilter === "all" || b.status === statusFilter;
-    return matchSearch && matchMode && matchStatus;
+    const matchType   = typeFilter   === "all" || (b.batch_type || "standard") === typeFilter;
+    return matchSearch && matchMode && matchStatus && matchType;
   });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
@@ -529,6 +531,14 @@ function BatchManagerInner() {
           <option value="Cancelled">Cancelled</option>
         </select>
 
+        {/* Batch type filter */}
+        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+          style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, color: "#0f172a", background: "#f8fafc", outline: "none", cursor: "pointer", minWidth: 140 }}>
+          <option value="all">All Types</option>
+          <option value="standard">Standard</option>
+          <option value="ebook">eBook (auto)</option>
+        </select>
+
         <span style={{ fontSize: 13, color: "#64748b", marginLeft: "auto", whiteSpace: "nowrap" }}>
           {filtered.length} result{filtered.length !== 1 ? "s" : ""}
         </span>
@@ -553,15 +563,17 @@ function BatchManagerInner() {
               <Icon name="layers" size={24} />
             </div>
             <p style={{ margin: "0 0 4px", fontWeight: 700, color: "#0f172a", fontSize: 15 }}>
-              {search || modeFilter !== "all" || statusFilter !== "all" ? "No batches match your filters" : "No batches yet"}
+              {search || modeFilter !== "all" || statusFilter !== "all" || typeFilter !== "all" ? "No batches match your filters" : "No batches yet"}
             </p>
             <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
-              {search || modeFilter !== "all" || statusFilter !== "all" ? "Try clearing your filters." : "Create your first batch to get started."}
+              {search || modeFilter !== "all" || statusFilter !== "all" || typeFilter !== "all" ? "Try clearing your filters." : "Create your first batch to get started."}
             </p>
           </div>
         ) : (
           paged.map((batch, idx) => {
-            const courseName   = courses.find(c => c.id === batch.course_id)?.title || "Unknown Course";
+            const linkedCourse = courses.find(c => c.id === batch.course_id);
+            const courseName   = linkedCourse?.title || "Unknown Course";
+            const courseType   = linkedCourse?.course_type || "live_batch";
             const isEven       = idx % 2 === 0;
             const [sBg, sFg]   = STATUS_COLORS[batch.status]   ?? ["#f1f5f9", "#475569"];
             const [mBg, mFg]   = MODE_COLORS[batch.mode]       ?? ["#f1f5f9", "#475569"];
@@ -585,7 +597,12 @@ function BatchManagerInner() {
 
                 {/* Batch Name */}
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{batch.name}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: "#0f172a", display: "flex", alignItems: "center", gap: 6 }}>
+                    {batch.name}
+                    {batch.batch_type === "ebook" && (
+                      <span title="Auto-created eBook batch — buyers are enrolled automatically on purchase" style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 10, background: "#f5f3ff", color: "#7c3aed", border: "1px solid #ddd6fe", whiteSpace: "nowrap" }}>eBook</span>
+                    )}
+                  </div>
                   {batch.meeting_url && (
                     <a href={batch.meeting_url} target="_blank" rel="noreferrer"
                       style={{ fontSize: 11, color: "#0ea5e9", textDecoration: "none", display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
@@ -595,8 +612,13 @@ function BatchManagerInner() {
                 </div>
 
                 {/* Course */}
-                <div style={{ fontSize: 13, color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {courseName}
+                <div style={{ fontSize: 13, color: "#475569", overflow: "hidden" }}>
+                  <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{courseName}</div>
+                  {courseType !== "live_batch" && (
+                    <span style={{ display: "inline-block", marginTop: 3, fontSize: 9.5, fontWeight: 800, padding: "1px 7px", borderRadius: 9, background: courseType === "ebook" ? "#f5f3ff" : "#ecfdf5", color: courseType === "ebook" ? "#7c3aed" : "#059669", border: `1px solid ${courseType === "ebook" ? "#ddd6fe" : "#a7f3d0"}` }}>
+                      {courseType === "ebook" ? "eBook" : "eBook+Video"}
+                    </span>
+                  )}
                 </div>
 
                 {/* Mode */}

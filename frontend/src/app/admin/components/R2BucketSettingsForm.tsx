@@ -447,6 +447,28 @@ export default function R2BucketSettingsForm() {
                   </label>
                   <span style={{ fontSize: 12, color: "#64748b" }}>All new media uploads will be directed to this R2 bucket.</span>
                 </div>
+
+                {/* ── Private eBook storage ── */}
+                <div style={{ marginTop: 20, padding: "18px 20px", background: "#faf5ff", borderRadius: 10, border: "1px solid #ddd6fe" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                    <span style={{ color: "#7c3aed" }}><Icon name="lock" size={15} /></span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: "#4c1d95" }}>Private eBook Storage</span>
+                  </div>
+                  <p style={{ margin: "0 0 10px", fontSize: 12, color: "#64748b", lineHeight: 1.65 }}>
+                    eBook PDFs are stored in this bucket under the <code style={{ background: "#ede9fe", color: "#6d28d9", padding: "1px 6px", borderRadius: 4, fontSize: 11, fontWeight: 700 }}>ebooks/</code> prefix — no public URL is ever generated for them.
+                    Students stream files through the authenticated reader API (signed server-side, Range-capable), so buyers can read but cannot share a link.
+                    When R2 is inactive, eBooks fall back to the server&apos;s private <code style={{ background: "#ede9fe", color: "#6d28d9", padding: "1px 6px", borderRadius: 4, fontSize: 11, fontWeight: 700 }}>uploads/ebooks/</code> directory.
+                  </p>
+                  <div style={{ padding: "10px 12px", background: "#fff", borderRadius: 8, border: "1px solid #e9d5ff", display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    <span style={{ color: "#d97706", flexShrink: 0, marginTop: 1 }}><Icon name="alert-triangle" size={14} /></span>
+                    <p style={{ margin: 0, fontSize: 11.5, color: "#92400e", lineHeight: 1.6 }}>
+                      <strong>Important:</strong> if your Public Domain serves the whole bucket, <code style={{ fontWeight: 700 }}>ebooks/*</code> objects may still be reachable at
+                      <code style={{ background: "#fef3c7", padding: "0 4px", borderRadius: 3 }}>{"{public_url}"}/ebooks/…</code>.
+                      Protect the prefix — e.g. a Cloudflare rule that blocks <code style={{ fontWeight: 700 }}>/ebooks/*</code> on the public hostname —
+                      and verify it returns 404 after setup.
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <div style={{ padding: "18px 32px", background: "#f8fafc", display: "flex", justifyContent: "space-between", alignItems: "center" }}>

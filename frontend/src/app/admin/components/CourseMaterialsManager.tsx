@@ -1,11 +1,13 @@
 "use client";
 import { apiFetch } from "@/lib/apiFetch";
 import React, { useEffect, useState, useCallback, useRef, Fragment } from "react";
-import { API_BASE_URL } from "@/lib/config";
+import { API_BASE_URL, resolveAssetUrl } from "@/lib/config";
 import { uploadDirect } from "@/lib/uploadDirect";
 import HlsVideoPlayer from "../../courses/[slug]/HlsVideoPlayer";
 import R2FileManager from "./R2FileManager";
 import UploadModal from "./UploadModal";
+import EbookUploadModal from "./EbookUploadModal";
+import AdminPdfPreview from "./AdminPdfPreview";
 import { useToast } from "./ToastProvider";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -15,7 +17,7 @@ interface Material {
   title: string;
   description: string | null;
   tags: string | null;
-  file_type: "video" | "pdf" | "image" | "document" | "youtube";
+  file_type: "video" | "pdf" | "image" | "document" | "youtube" | "ebook";
   file_url: string | null;
   hls_url: string | null;
   hls_status: string | null;
@@ -24,10 +26,14 @@ interface Material {
   thumbnail_url: string | null;
   file_size: number | null;
   order_position: number;
+  ebook_cover_url?: string | null;
+  ebook_toc?: { title?: string; page?: number }[] | null;
+  ebook_page_count?: number | null;
+  has_ebook_file?: boolean;
   created_at: string;
 }
 
-type FilterType = "all" | "video" | "youtube" | "pdf" | "image" | "document";
+type FilterType = "all" | "video" | "youtube" | "pdf" | "image" | "document" | "ebook";
 type VideoMode = "upload" | "youtube";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -68,6 +74,7 @@ function TypeBadge({ type }: { type: string }) {
     pdf:      { bg: "#fef3c7", color: "#d97706", label: "PDF" },
     image:    { bg: "#d1fae5", color: "#059669", label: "IMAGE" },
     document: { bg: "#dbeafe", color: "#2563eb", label: "DOC" },
+    ebook:    { bg: "#f5f3ff", color: "#7c3aed", label: "EBOOK" },
   };
   const c = cfg[type] || { bg: "#f1f5f9", color: "#64748b", label: type.toUpperCase() };
   return (
@@ -165,9 +172,19 @@ function CardThumbnail({ material }: { material: Material }) {
     pdf:      "linear-gradient(135deg, #78350f 0%, #451a03 100%)",
     image:    "linear-gradient(135deg, #14532d 0%, #052e16 100%)",
     document: "linear-gradient(135deg, #1e3a5f 0%, #0c1a2e 100%)",
+    ebook:    "linear-gradient(135deg, #4c1d95 0%, #2e1065 100%)",
   };
 
   const bg = thumbBg[material.file_type] || thumbBg.document;
+
+  if (material.file_type === "ebook" && material.ebook_cover_url) {
+    return (
+      <div style={{ position: "relative", aspectRatio: "16/9", width: "100%", flexShrink: 0, overflow: "hidden", background: "#2e1065" }}>
+        <img src={resolveAssetUrl(material.ebook_cover_url)} alt={material.title} style={{ display: "block", width: "100%", height: "100%", objectFit: "cover" }} />
+        <div style={{ position: "absolute", bottom: 8, left: 8 }}><TypeBadge type={material.file_type} /></div>
+      </div>
+    );
+  }
 
   if (material.file_type === "image" && material.file_url) {
     return (
@@ -216,6 +233,7 @@ function CardThumbnail({ material }: { material: Material }) {
     pdf: <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fcd34d" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14,2 14,8 20,8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10,9 9,9 8,9" /></svg>,
     image: <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21,15 16,10 5,21" /></svg>,
     document: <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#93c5fd" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14,2 14,8 20,8" /></svg>,
+    ebook: <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#c4b5fd" strokeWidth="1.5"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>,
   };
 
   return (
@@ -266,6 +284,9 @@ function MaterialCard({
   const meta = [
     material.file_type.toUpperCase(),
     material.file_size ? formatBytes(material.file_size) : null,
+    material.file_type === "ebook" && material.ebook_page_count ? `${material.ebook_page_count} pages` : null,
+    material.file_type === "ebook" && Array.isArray(material.ebook_toc) && material.ebook_toc.length > 0 ? `${material.ebook_toc.length} chapters` : null,
+    material.file_type === "ebook" && !material.has_ebook_file ? "no file attached" : null,
   ].filter(Boolean).join(" • ");
   
   const tagsList = material.tags ? material.tags.split(",").map(t => t.trim()).filter(Boolean) : [];
@@ -782,6 +803,7 @@ const FILTERS: { key: FilterType; label: string }[] = [
   { key: "pdf",      label: "PDFs" },
   { key: "image",    label: "Images" },
   { key: "document", label: "Documents" },
+  { key: "ebook",    label: "eBooks" },
 ];
 
 export default function CourseMaterialsManager() {
@@ -800,6 +822,9 @@ export default function CourseMaterialsManager() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [editTarget, setEditTarget] = useState<Material | null>(null);
   const [activePreview, setActivePreview] = useState<Material | null>(null);
+  const [showEbookUpload, setShowEbookUpload] = useState(false);
+  const [ebookEditTarget, setEbookEditTarget] = useState<Material | null>(null);
+  const [ebookPreview, setEbookPreview] = useState<Material | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
@@ -997,6 +1022,18 @@ export default function CourseMaterialsManager() {
         />
       )}
 
+      {(showEbookUpload || ebookEditTarget) && (
+        <EbookUploadModal
+          material={ebookEditTarget}
+          onClose={() => { setShowEbookUpload(false); setEbookEditTarget(null); }}
+          onSuccess={() => { fetchMaterials(); fetchTags(); }}
+        />
+      )}
+
+      {ebookPreview && (
+        <EbookPreviewModal material={ebookPreview} onClose={() => setEbookPreview(null)} />
+      )}
+
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
         <div className="cm-header-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
@@ -1028,6 +1065,20 @@ export default function CourseMaterialsManager() {
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                   Add to Library
+                </button>
+                <button
+                  className="cm-upload-btn"
+                  onClick={() => setShowEbookUpload(true)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    padding: "11px 22px", borderRadius: 12, border: "none",
+                    background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
+                    color: "#fff", fontWeight: 700, fontSize: 13.5, cursor: "pointer",
+                    boxShadow: "0 4px 14px rgba(124,58,237,0.4)", transition: "all 0.18s",
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
+                  Add eBook
                 </button>
               </>
             )}
@@ -1249,9 +1300,9 @@ export default function CourseMaterialsManager() {
                   material={m}
                   index={index}
                   onDelete={setDeleteTarget}
-                  onEdit={setEditTarget}
+                  onEdit={(m) => m.file_type === "ebook" ? setEbookEditTarget(m) : setEditTarget(m)}
                   onTagClick={(t) => setTagFilter(tagFilter === t ? "" : t)}
-                  onPreview={setActivePreview}
+                  onPreview={(m) => m.file_type === "ebook" ? setEbookPreview(m) : setActivePreview(m)}
                   onRetranscode={handleRetranscode}
                   isSelected={selectedIds.includes(m.id)}
                   onToggleSelect={() => toggleSelect(m.id)}
@@ -1447,6 +1498,57 @@ function MediaPreviewModal({ material, onClose }: { material: Material; onClose:
       </div>
     </div>
   );
+}
+
+// ─── Private eBook Preview ──────────────────────────────────────────────────
+// eBook bytes are served only via the authenticated /materials/{id}/ebook/file
+// endpoint — fetch them with apiFetch (device-token header) and hand pdf.js a
+// blob URL. No public URL is ever minted or rendered.
+
+function EbookPreviewModal({ material, onClose }: { material: Material; onClose: () => void }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let url: string | null = null;
+    (async () => {
+      try {
+        const res = await apiFetch(`${API_BASE_URL}/materials/${material.id}/ebook/file`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        if (cancelled) return;
+        url = URL.createObjectURL(blob);
+        setBlobUrl(url);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load eBook");
+      }
+    })();
+    return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
+  }, [material.id]);
+
+  if (error) {
+    return (
+      <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+        style={{ position: "fixed", inset: 0, zIndex: 6000, background: "rgba(10,15,30,0.88)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+        <div style={{ background: "#fff", borderRadius: 16, padding: "32px 28px", maxWidth: 380, textAlign: "center" }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: "0 0 6px" }}>Could not load eBook</p>
+          <p style={{ fontSize: 12.5, color: "#64748b", margin: "0 0 18px" }}>{error}</p>
+          <button onClick={onClose} style={{ padding: "9px 22px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Close</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!blobUrl) {
+    return (
+      <div style={{ position: "fixed", inset: 0, zIndex: 6000, background: "rgba(10,15,30,0.88)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <p style={{ color: "#94a3b8", fontSize: 14, fontWeight: 600 }}>Loading private eBook…</p>
+      </div>
+    );
+  }
+
+  return <AdminPdfPreview url={blobUrl} title={material.title} onClose={onClose} />;
 }
 
 // ─── Orphaned Files Panel ───────────────────────────────────────────────────

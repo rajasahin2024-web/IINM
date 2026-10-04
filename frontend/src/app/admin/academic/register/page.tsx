@@ -145,6 +145,7 @@ function StudentManagerInner() {
   const { showToast } = useToast();
 
   const [students, setStudents] = useState<any[]>([]);
+  const [batches, setBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -185,10 +186,17 @@ function StudentManagerInner() {
   const fetchStudents = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiFetch(`${API_BASE_URL}/students`);
+      const [res, batchRes] = await Promise.all([
+        apiFetch(`${API_BASE_URL}/students`),
+        apiFetch(`${API_BASE_URL}/batches`),
+      ]);
       if (res.ok) {
         const data = await res.json();
         setStudents(Array.isArray(data) ? data : []);
+      }
+      if (batchRes.ok) {
+        const bdata = await batchRes.json();
+        setBatches(Array.isArray(bdata) ? bdata : []);
       }
     } catch {
       showToast("Error loading students", "error");
@@ -214,6 +222,21 @@ function StudentManagerInner() {
     if (statusFilter === "inactive" && s.is_active) return false;
     return true;
   });
+
+  /* Map student_id → batch enrollments (includes auto-created eBook batches) */
+  const studentBatches = React.useMemo(() => {
+    const map = new Map<number, { name: string; batch_type: string; status: string }[]>();
+    for (const b of batches) {
+      for (const e of b.enrollments || []) {
+        const sid = e.student?.id;
+        if (!sid) continue;
+        const list = map.get(sid) || [];
+        list.push({ name: b.name, batch_type: b.batch_type || "standard", status: e.status });
+        map.set(sid, list);
+      }
+    }
+    return map;
+  }, [batches]);
 
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE) || 1;
   const paged = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
@@ -342,7 +365,7 @@ function StudentManagerInner() {
         </div>
 
         {/* Status filter */}
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as "all" | "active" | "inactive")}
           style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, color: "#0f172a", background: "#f8fafc", outline: "none", cursor: "pointer", minWidth: 140 }}>
           <option value="all">All Status</option>
           <option value="active">Active Only</option>
@@ -358,9 +381,9 @@ function StudentManagerInner() {
       <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", overflowX: "auto" }}>
         
         {/* Head */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 200px 140px 100px 120px", alignItems: "center", padding: "12px 20px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", gap: 12, minWidth: 800 }}>
-          {["Student Details", "Email", "Phone", "Status", "Actions"].map((h, i) => (
-            <span key={i} style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.6px", textAlign: i === 4 ? "right" : "left" }}>{h}</span>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 200px 140px 170px 100px 120px", alignItems: "center", padding: "12px 20px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", gap: 12, minWidth: 980 }}>
+          {["Student Details", "Email", "Phone", "Batches", "Status", "Actions"].map((h, i) => (
+            <span key={i} style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.6px", textAlign: i === 5 ? "right" : "left" }}>{h}</span>
           ))}
         </div>
 
@@ -388,9 +411,9 @@ function StudentManagerInner() {
               <div
                 key={student.id}
                 style={{
-                  display: "grid", gridTemplateColumns: "1fr 200px 140px 100px 120px",
+                  display: "grid", gridTemplateColumns: "1fr 200px 140px 170px 100px 120px",
                   alignItems: "center", padding: "12px 20px", borderBottom: "1px solid #f1f5f9",
-                  gap: 12, background: isEven ? "#fff" : "#fafbfc", transition: "background 0.15s", minWidth: 800
+                  gap: 12, background: isEven ? "#fff" : "#fafbfc", transition: "background 0.15s", minWidth: 980
                 }}
                 onMouseEnter={e => (e.currentTarget.style.background = "#f0f9ff")}
                 onMouseLeave={e => (e.currentTarget.style.background = isEven ? "#fff" : "#fafbfc")}
@@ -423,6 +446,27 @@ function StudentManagerInner() {
                 {/* Phone */}
                 <div style={{ fontSize: 13, color: "#475569" }}>
                   {student.phone || <span style={{color: "#cbd5e1", fontStyle: "italic"}}>No Phone</span>}
+                </div>
+
+                {/* Batches (incl. auto-assigned eBook batches) */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, overflow: "hidden" }}>
+                  {(() => {
+                    const enr = studentBatches.get(student.id) || [];
+                    if (enr.length === 0) return <span style={{ color: "#cbd5e1", fontStyle: "italic", fontSize: 12 }}>—</span>;
+                    return (
+                      <>
+                        {enr.slice(0, 2).map((b, bi) => (
+                          <span key={bi} title={`${b.name} (${b.status})${b.batch_type === "ebook" ? " — auto-enrolled eBook batch" : ""}`}
+                            style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 140, display: "inline-block", background: b.batch_type === "ebook" ? "#f5f3ff" : "#f0f9ff", color: b.batch_type === "ebook" ? "#7c3aed" : "#0284c7", border: `1px solid ${b.batch_type === "ebook" ? "#ddd6fe" : "#bae6fd"}` }}>
+                            {b.batch_type === "ebook" ? "📖 " : ""}{b.name}
+                          </span>
+                        ))}
+                        {enr.length > 2 && (
+                          <span title={enr.map(b => b.name).join(", ")} style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, background: "#f1f5f9", color: "#64748b" }}>+{enr.length - 2}</span>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
 
                 {/* Status */}

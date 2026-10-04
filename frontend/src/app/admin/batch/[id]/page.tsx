@@ -1147,7 +1147,12 @@ function BatchDetailsDashboard() {
             <Icon name="layers" size={11} />
             {course?.title || "Unknown Course"} &nbsp;›&nbsp; Batch Dashboard
           </div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", margin: 0, letterSpacing: "-0.4px" }}>{batch?.name}</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", margin: 0, letterSpacing: "-0.4px", display: "flex", alignItems: "center", gap: 8 }}>
+            {batch?.name}
+            {batch?.batch_type === "ebook" && (
+              <span title="Auto-created eBook batch — buyers are enrolled automatically on purchase" style={{ fontSize: 10, fontWeight: 800, padding: "3px 9px", borderRadius: 10, background: "#f5f3ff", color: "#7c3aed", border: "1px solid #ddd6fe", textTransform: "uppercase", letterSpacing: "0.4px" }}>eBook · Auto</span>
+            )}
+          </h1>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <div style={{

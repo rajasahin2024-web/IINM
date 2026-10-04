@@ -7,6 +7,7 @@ import { Icon } from "../icons";
 import { API_BASE_URL, resolveAssetUrl } from "@/lib/config";
 import AICourseAgent from "./AICourseAgent";
 import UploadModal from "./UploadModal";
+import EbookUploadModal, { EbookMaterial } from "./EbookUploadModal";
 import AdminPdfPreview from "./AdminPdfPreview";
 import ImportCurriculumResolveModal, {
   normNameKey,
@@ -32,7 +33,43 @@ const TYPE_CONFIG: Record<string, { bg: string; color: string; label: string }> 
   pdf:      { bg: "#fef3c7", color: "#d97706", label: "PDF" },
   image:    { bg: "#d1fae5", color: "#059669", label: "IMG" },
   document: { bg: "#dbeafe", color: "#2563eb", label: "DOC" },
+  ebook:    { bg: "#f5f3ff", color: "#7c3aed", label: "EBOOK" },
 };
+
+const COURSE_TYPES = [
+  {
+    value: "live_batch",
+    label: "Live Batch",
+    icon: "🎥",
+    desc: "Scheduled live classes with batches, teachers and the existing purchase → enroll → class → exam flow.",
+    points: ["Live classes & batch enrollments", "Teachers assigned to the course", "Slot-booking / installment payments"],
+    accent: "#0ea5e9",
+  },
+  {
+    value: "ebook",
+    label: "eBook Only",
+    icon: "📖",
+    desc: "Self-paced digital book delivery. Buyers are auto-enrolled into an eBook batch right after payment.",
+    points: ["Private eBook PDFs with TOC chapters", "Auto-assigned eBook batches", "Optional mock test + certificate"],
+    accent: "#7c3aed",
+  },
+  {
+    value: "ebook_video",
+    label: "eBook + Video",
+    icon: "🎬",
+    desc: "eBook plus recorded videos that unlock sequentially once the eBook chapters are completed.",
+    points: ["Everything in eBook Only", "Recorded videos unlock after reading", "Optional mock test + certificate"],
+    accent: "#059669",
+  },
+] as const;
+
+function courseTypeBadge(courseType?: string | null): { bg: string; color: string; label: string } {
+  switch (courseType) {
+    case "ebook": return { bg: "#f5f3ff", color: "#7c3aed", label: "eBook" };
+    case "ebook_video": return { bg: "#ecfdf5", color: "#059669", label: "eBook+Video" };
+    default: return { bg: "#f0f9ff", color: "#0284c7", label: "Live Batch" };
+  }
+}
 
 function getTypeConfig(type: string) {
   return TYPE_CONFIG[type] || { bg: "#f1f5f9", color: "#64748b", label: type.toUpperCase() };
@@ -179,6 +216,10 @@ interface Course {
   full_payment_discount_type?: string | null;
   full_payment_discount_value?: number | null;
   full_payment_discount_valid_till?: string | null;
+  course_type?: string;
+  mock_test_exam_id?: number | null;
+  mock_test_price?: number | null;
+  ebook_batch_capacity?: number | null;
   created_at: string;
 }
 
@@ -510,6 +551,15 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
   const [formFullPayDiscValue, setFormFullPayDiscValue] = useState<number | "">("");
   const [formFullPayDiscValidTill, setFormFullPayDiscValidTill] = useState<string>("");
   const [formShowInstructorPublicly, setFormShowInstructorPublicly] = useState(true);
+  const [formCourseType, setFormCourseType] = useState<string>("live_batch");
+  const [formMockTestExamId, setFormMockTestExamId] = useState<number | "">("");
+  const [formMockTestPrice, setFormMockTestPrice] = useState<number | "">("");
+  const [formEbookBatchCapacity, setFormEbookBatchCapacity] = useState<number | "">("");
+  const [allExams, setAllExams] = useState<{ id: number; title: string; status?: string }[]>([]);
+  const [wizardEbooks, setWizardEbooks] = useState<EbookMaterial[]>([]);
+  const [ebookModalOpen, setEbookModalOpen] = useState(false);
+  const [ebookEditTarget, setEbookEditTarget] = useState<EbookMaterial | null>(null);
+  const [filterCourseType, setFilterCourseType] = useState<string>("all");
   const [aiAgentOpen, setAiAgentOpen] = useState(false);
 
   // ── Curriculum JSON import/export state ──
@@ -568,7 +618,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
   const [addingMaterial, setAddingMaterial] = useState(false);
   const [newMaterialForm, setNewMaterialForm] = useState({ title: "", description: "", youtube_url: "" });
   const [savingMaterial, setSavingMaterial] = useState(false);
-  const [materialMode, setMaterialMode] = useState<"youtube" | "upload" | "library">("youtube");
+  const [materialMode, setMaterialMode] = useState<"youtube" | "upload" | "ebook" | "library">("youtube");
   const [librarySearch, setLibrarySearch] = useState("");
   const [libraryResults, setLibraryResults] = useState<Material[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
@@ -769,7 +819,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
   const fetchAll = useCallback(async () => {
     try {
       setLoading(true);
-      const [catRes, scRes, subRes, courseRes, instRes] = await Promise.all([
+      const [catRes, scRes, subRes, courseRes, instRes, examRes] = await Promise.all([
         apiFetch(`${API}/categories`),
         apiFetch(`${API}/subcategories`),
         apiFetch(`${API}/subjects`),
@@ -779,12 +829,14 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
           }`
         ),
         apiFetch(`${API}/instructors`),
+        apiFetch(`${API}/exams`),
       ]);
       if (catRes.ok) setCategories(await catRes.json());
       if (scRes.ok) setSubcategories(await scRes.json());
       if (subRes.ok) setSubjects(await subRes.json());
       if (courseRes.ok) setCourses(await courseRes.json());
       if (instRes && instRes.ok) setAllInstructors(await instRes.json());
+      if (examRes && examRes.ok) setAllExams(await examRes.json());
     } catch (e) {
       console.error(e);
     } finally {
@@ -941,7 +993,30 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
         setFormFullPayDiscValidTill("");
       }
       setFormShowInstructorPublicly((course as any).show_instructor_publicly ?? true);
-      setWizardStep(1);
+      setFormCourseType(course.course_type || "live_batch");
+      setFormMockTestExamId(course.mock_test_exam_id ?? "");
+      setFormMockTestPrice(course.mock_test_price ?? "");
+      setFormEbookBatchCapacity(course.ebook_batch_capacity ?? "");
+      setWizardEbooks([]);
+      if ((course.course_type || "live_batch") !== "live_batch") {
+        (async () => {
+          const found: EbookMaterial[] = [];
+          for (const s of course.subjects || []) {
+            const chapters = await fetchChaptersForSubject(s.id);
+            for (const ch of chapters) {
+              try {
+                const mRes = await apiFetch(`${API}/chapters/${ch.id}/materials`);
+                if (mRes.ok) {
+                  const mats: (Material & Partial<EbookMaterial>)[] = await mRes.json();
+                  found.push(...mats.filter(m => m.file_type === "ebook"));
+                }
+              } catch { /* silent */ }
+            }
+          }
+          setWizardEbooks(found);
+        })();
+      }
+      setWizardStep(0);
     } else {
       setEditingId(null);
       setFormTitle("");
@@ -978,7 +1053,12 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
       setFormFullPayDiscValue("");
       setFormFullPayDiscValidTill("");
       setFormShowInstructorPublicly(true);
-      setWizardStep(1);
+      setFormCourseType("live_batch");
+      setFormMockTestExamId("");
+      setFormMockTestPrice("");
+      setFormEbookBatchCapacity("");
+      setWizardEbooks([]);
+      setWizardStep(0);
     }
     setModalOpen(true);
   };
@@ -991,6 +1071,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
   const handleSave = async () => {
     if (!formTitle.trim()) { setFormError("Course title is required"); return; }
     if (formSubjectIds.length === 0) { setFormError("Select at least one subject"); return; }
+    if (formMockTestExamId !== "" && formMockTestPrice !== "" && !(Number(formMockTestPrice) > 0)) { setFormError("Paid mock test needs a price greater than 0 (or switch to Free)"); return; }
     
     setFormError("");
     setSaving(true);
@@ -1037,6 +1118,10 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
         full_payment_discount_value: formFullPayDiscValue === "" ? null : Number(formFullPayDiscValue),
         full_payment_discount_valid_till: formFullPayDiscValidTill || null,
         show_instructor_publicly: formShowInstructorPublicly,
+        course_type: formCourseType,
+        mock_test_exam_id: formMockTestExamId === "" ? null : Number(formMockTestExamId),
+        mock_test_price: formMockTestExamId === "" || formMockTestPrice === "" ? null : Number(formMockTestPrice),
+        ebook_batch_capacity: formEbookBatchCapacity === "" ? null : Number(formEbookBatchCapacity),
       };
 
       const url = modalMode === "create" ? `${API}/courses` : `${API}/courses/${editingId}`;
@@ -1629,6 +1714,8 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
     groupedSubjects[key].push(s);
   });
 
+  const visibleCourses = courses.filter(c => filterCourseType === "all" || (c.course_type || "live_batch") === filterCourseType);
+
   return (
     <div className={!isInlineModal ? "manager-content" : undefined}>
       {/* ── Page Content (Hidden when inline modal) ── */}
@@ -1690,6 +1777,24 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
           </span>
         </div>
+        <div style={{ position: "relative", minWidth: 180 }}>
+          <select
+            value={filterCourseType}
+            onChange={(e) => setFilterCourseType(e.target.value)}
+            style={{
+              width: "100%", padding: "12px 30px 12px 16px", borderRadius: 10, border: "1px solid #e2e8f0",
+              fontSize: 14, outline: "none", background: "#f8fafc", appearance: "none", cursor: "pointer"
+            }}
+          >
+            <option value="all">All Types</option>
+            <option value="live_batch">Live Batch</option>
+            <option value="ebook">eBook Only</option>
+            <option value="ebook_video">eBook + Video</option>
+          </select>
+          <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#94a3b8" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
+        </div>
       </div>
 
       {/* ── Table ────────────────────────────────────── */}
@@ -1708,7 +1813,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
           <tbody>
             {loading ? (
               <tr><td colSpan={6} style={emptyCellStyle}>Loading courses…</td></tr>
-            ) : courses.length === 0 ? (
+            ) : visibleCourses.length === 0 ? (
               <tr>
                 <td colSpan={6} style={emptyCellStyle}>
                   <div style={{ fontSize: 32, marginBottom: 12 }}>📦</div>
@@ -1716,7 +1821,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                 </td>
               </tr>
             ) : (
-              courses.map((c, idx) => (
+              visibleCourses.map((c, idx) => (
                 <tr key={c.id} style={{ borderBottom: "1px solid #f1f5f9" }} onMouseEnter={(e) => (e.currentTarget.style.background = "#fafafa")} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
                   <td style={{ padding: "16px 20px", color: "#94a3b8", fontWeight: 600, width: 40 }}>{idx + 1}</td>
                   <td style={{ padding: "16px 20px" }}>
@@ -1735,6 +1840,9 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                           <span style={{ color: c.is_free ? "#16a34a" : "#0284c7", background: c.is_free ? "#dcfce7" : "#e0f2fe", padding: "2px 6px", borderRadius: 4 }}>
                             {c.is_free ? "FREE" : c.price ? `$${c.price}` : "No Price Setup"}
                           </span>
+                          {(() => { const tb = courseTypeBadge(c.course_type); return (
+                            <span style={{ color: tb.color, background: tb.bg, padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>{tb.label}</span>
+                          ); })()}
                           <span style={{ color: "#64748b", display: "flex", alignItems: "center" }}>{c.skill_level || "Any Level"}</span>
                         </div>
                       </div>
@@ -2026,25 +2134,89 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
               </div>
             </div>
 
-                        {/* Wizard Header Progress */}
+                        {/* Wizard Header Progress — steps adapt to the selected course type */}
             <div style={{ padding: "0 24px", borderBottom: "1px solid #e2e8f0", background: "#f8fafc", display: "flex", gap: 16, flexShrink: 0 }}>
-               <button type="button" onClick={() => setWizardStep(1)} style={wizardTabStyle(wizardStep === 1)}>
-                 <div style={wizardBadgeStyle(wizardStep === 1)}>1</div> Basic Info & SEO
-               </button>
-               <button type="button" onClick={() => setWizardStep(2)} style={wizardTabStyle(wizardStep === 2)}>
-                 <div style={wizardBadgeStyle(wizardStep === 2)}>2</div> Media & Pricing
-               </button>
-               <button type="button" onClick={() => setWizardStep(3)} style={wizardTabStyle(wizardStep === 3)}>
-                 <div style={wizardBadgeStyle(wizardStep === 3)}>3</div> Curriculum Mapping
-               </button>
-               <button type="button" onClick={() => setWizardStep(4)} style={wizardTabStyle(wizardStep === 4)}>
-                 <div style={wizardBadgeStyle(wizardStep === 4)}>4</div> Teachers
-               </button>
+               {[
+                 { id: 0, label: "Course Type" },
+                 { id: 1, label: "Basic Info & SEO" },
+                 { id: 2, label: "Media & Pricing" },
+                 { id: 3, label: "Curriculum Mapping" },
+                 ...(formCourseType !== "ebook" ? [{ id: 4, label: "Teachers" }] : []),
+               ].map((s, i) => (
+                 <button key={s.id} type="button" onClick={() => setWizardStep(s.id)} style={wizardTabStyle(wizardStep === s.id)}>
+                   <div style={wizardBadgeStyle(wizardStep === s.id)}>{i + 1}</div> {s.label}
+                 </button>
+               ))}
             </div>
 
             {/* Modal Body */}
             <div className="custom-scroll" style={{ flex: 1, minHeight: 0, padding: "24px 32px", overflow: "hidden", display: "flex", flexDirection: "column", background: "#fff", boxSizing: "border-box" }}>
-               
+
+               {/* ── STEP 0: Course Type ── */}
+               {wizardStep === 0 && (
+                  <div style={{ width: "100%", flex: 1, minHeight: 0, overflowY: "auto", animation: "slideUp 0.2s ease-out" }}>
+                    <div style={{ maxWidth: 980, margin: "0 auto" }}>
+                      <h3 style={{ margin: "8px 0 4px", fontSize: 18, fontWeight: 800, color: "#0f172a" }}>What kind of course is this?</h3>
+                      <p style={{ margin: "0 0 20px", fontSize: 13, color: "#64748b" }}>The wizard adapts to the type you pick — eBook courses skip teachers and live-class scheduling.</p>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+                        {COURSE_TYPES.map(t => {
+                          const active = formCourseType === t.value;
+                          return (
+                            <div
+                              key={t.value}
+                              onClick={() => setFormCourseType(t.value)}
+                              style={{
+                                border: `2px solid ${active ? t.accent : "#e2e8f0"}`,
+                                background: active ? `${t.accent}0d` : "#fff",
+                                borderRadius: 14, padding: "20px", cursor: "pointer",
+                                transition: "all 0.15s", position: "relative",
+                                boxShadow: active ? `0 6px 18px ${t.accent}22` : "none",
+                              }}
+                            >
+                              {active && (
+                                <div style={{ position: "absolute", top: 12, right: 12, width: 22, height: 22, borderRadius: 11, background: t.accent, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  <Icon name="check" size={12} />
+                                </div>
+                              )}
+                              <div style={{ fontSize: 30, marginBottom: 10 }}>{t.icon}</div>
+                              <div style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>{t.label}</div>
+                              <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.55, marginBottom: 12 }}>{t.desc}</div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                {t.points.map(p => (
+                                  <div key={p} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, fontWeight: 600, color: "#475569" }}>
+                                    <span style={{ width: 14, height: 14, borderRadius: 7, background: `${t.accent}1a`, color: t.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                      <Icon name="check" size={9} />
+                                    </span>
+                                    {p}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {formCourseType !== "live_batch" && (
+                        <div style={{ marginTop: 20, border: "1px solid #e2e8f0", borderRadius: 12, padding: "18px 20px", background: "#f8fafc", display: "flex", gap: 20, alignItems: "flex-end", flexWrap: "wrap" }}>
+                          <div style={{ minWidth: 220, flex: "0 0 260px" }}>
+                            <FloatingField label="eBook Batch Capacity" type="number" min="1" value={formEbookBatchCapacity} onChange={(v: string) => setFormEbookBatchCapacity(v === "" ? "" : Math.max(1, Number(v) || 1))} placeholder="Default 500" />
+                          </div>
+                          <p style={{ margin: "0 0 6px", fontSize: 12, color: "#64748b", flex: 1, minWidth: 260, lineHeight: 1.6 }}>
+                            Buyers are auto-enrolled into an eBook batch after payment. When a batch fills up, the next one is created automatically.
+                          </p>
+                        </div>
+                      )}
+
+                      <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end" }}>
+                        <button type="button" onClick={() => setWizardStep(1)}
+                          style={{ background: "#0ea5e9", color: "#fff", border: "none", padding: "10px 26px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+                          Continue <Icon name="arrow-right" size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+               )}
+
                {/* ── STEP 1: Basic Info & SEO ── */}
                {wizardStep === 1 && (
                   <div style={{ width: "100%", flex: 1, minHeight: 0, overflowY: "auto", animation: "slideUp 0.2s ease-out" }}>
@@ -2265,6 +2437,75 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                             </div>
                           )}
                         </SectionPanel>
+
+                        <SectionPanel title="Course Mock Test" icon="📝" accent="#7c3aed" marginBottom={0}>
+                          <FieldRow>
+                            <FloatingField
+                              label="Mock Test Exam"
+                              value={formMockTestExamId}
+                              onChange={(v: string) => setFormMockTestExamId(v === "" ? "" : Number(v))}
+                              isSelect
+                              options={[
+                                { value: "", label: "None — no course mock test" },
+                                ...allExams.map(e => ({ value: String(e.id), label: e.title })),
+                              ]}
+                            />
+                          </FieldRow>
+                          {formMockTestExamId !== "" && (
+                            <div style={{ animation: "slideUp 0.15s ease-out", marginBottom: 16 }}>
+                              <div style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8, paddingLeft: 2 }}>Access</div>
+                              <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                                <label style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 700, color: formMockTestPrice === "" ? "#059669" : "#475569", cursor: "pointer", background: formMockTestPrice === "" ? "#ecfdf5" : "#f8fafc", padding: "10px 14px", borderRadius: 8, border: `1.5px solid ${formMockTestPrice === "" ? "#a7f3d0" : "#e2e8f0"}` }}>
+                                  <input type="radio" name="mocktest-access" checked={formMockTestPrice === ""} onChange={() => setFormMockTestPrice("")} style={{ accentColor: "#059669" }} />
+                                  Free for enrolled students
+                                </label>
+                                <label style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 700, color: formMockTestPrice !== "" ? "#7c3aed" : "#475569", cursor: "pointer", background: formMockTestPrice !== "" ? "#f5f3ff" : "#f8fafc", padding: "10px 14px", borderRadius: 8, border: `1.5px solid ${formMockTestPrice !== "" ? "#c4b5fd" : "#e2e8f0"}` }}>
+                                  <input type="radio" name="mocktest-access" checked={formMockTestPrice !== ""} onChange={() => setFormMockTestPrice(p => p === "" || p === 0 ? 1 : p)} style={{ accentColor: "#7c3aed" }} />
+                                  Paid (separate purchase)
+                                </label>
+                              </div>
+                              {formMockTestPrice !== "" && (
+                                <FloatingField label="Mock Test Price (₹)" type="number" min="1" value={formMockTestPrice} onChange={(v: string) => setFormMockTestPrice(v === "" ? "" : Number(v))} placeholder="e.g. 199" />
+                              )}
+                              <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500, lineHeight: 1.5, paddingLeft: 2, marginTop: 8 }}>
+                                A paid mock test requires a second course-scoped purchase before the exam starts. Passing issues a certificate on eBook-type courses.
+                              </div>
+                            </div>
+                          )}
+                        </SectionPanel>
+
+                        {formCourseType !== "live_batch" && (
+                          <SectionPanel title="eBook Files" icon="📖" accent="#7c3aed" marginBottom={0}>
+                            <div style={{ marginBottom: 16 }}>
+                              <button
+                                type="button"
+                                onClick={() => setEbookModalOpen(true)}
+                                style={{ width: "100%", padding: "12px", borderRadius: 10, border: "1.5px dashed #c4b5fd", background: "#faf5ff", color: "#7c3aed", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+                              >
+                                <Icon name="upload" size={15} /> Upload eBook (PDF + Cover + TOC)
+                              </button>
+                              <p style={{ margin: "8px 0 0", fontSize: 11, color: "#94a3b8", lineHeight: 1.6 }}>
+                                eBook files are stored privately and streamed to enrolled students only — no public URL is ever created. After uploading, link each eBook to a chapter in the Curriculum step.
+                              </p>
+                            </div>
+                            {wizardEbooks.length > 0 && (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+                                {wizardEbooks.map(m => (
+                                  <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 8, padding: "8px 12px" }}>
+                                    <span style={{ width: 26, height: 26, borderRadius: 6, background: "#ede9fe", color: "#7c3aed", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                      <Icon name="book" size={14} />
+                                    </span>
+                                    <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.title}</span>
+                                    {Array.isArray(m.ebook_toc) && m.ebook_toc.length > 0 && (
+                                      <span style={{ fontSize: 10, fontWeight: 700, color: "#7c3aed", background: "#ede9fe", padding: "2px 8px", borderRadius: 10 }}>{m.ebook_toc.length} TOC</span>
+                                    )}
+                                    <button type="button" onClick={() => setEbookEditTarget(m)} style={{ border: "1px solid #ddd6fe", background: "#fff", color: "#7c3aed", fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 6, cursor: "pointer" }}>Edit TOC</button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </SectionPanel>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2544,7 +2785,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                        {addingMaterial && activeChapterId && (
                          <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10, flexShrink: 0 }}>
                            <div style={{ display: "flex", gap: 6 }}>
-                             {([["youtube", "YouTube Link"], ["upload", "File Upload (R2)"], ["library", "From Library"]] as const).map(([m, label]) => (
+                             {([["youtube", "YouTube Link"], ["upload", "File Upload (R2)"], ["ebook", "eBook (Private)"], ["library", "From Library"]] as const).map(([m, label]) => (
                                <button key={m} type="button" onClick={() => setMaterialMode(m)} style={{ flex: 1, padding: "6px 6px", borderRadius: 6, border: "1px solid", borderColor: materialMode === m ? "#059669" : "#bbf7d0", background: materialMode === m ? "#059669" : "#fff", color: materialMode === m ? "#fff" : "#059669", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                                  {label}
                                </button>
@@ -2566,6 +2807,17 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                              <button type="button" onClick={() => setUploadModalOpen(true)} style={{ padding: "10px 12px", borderRadius: 8, border: "1.5px dashed #059669", background: "#fff", color: "#059669", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                                <Icon name="play-circle" size={15} /> Upload Video / PDF / Image to R2
                              </button>
+                           )}
+
+                           {materialMode === "ebook" && (
+                             <>
+                               <button type="button" onClick={() => setEbookModalOpen(true)} style={{ padding: "10px 12px", borderRadius: 8, border: "1.5px dashed #7c3aed", background: "#faf5ff", color: "#7c3aed", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                                 <Icon name="book" size={15} /> Upload Private eBook PDF (+ cover & TOC)
+                               </button>
+                               <p style={{ margin: 0, fontSize: 10.5, color: "#94a3b8", lineHeight: 1.5 }}>
+                                 Stored privately — never a public URL. The eBook auto-links to this chapter after upload.
+                               </p>
+                             </>
                            )}
 
                            {materialMode === "library" && (
@@ -2662,7 +2914,8 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                           </div>
                        )}
 
-                             {/* Live Class Section */}
+                             {/* Live Class Section — only for live_batch courses */}
+                             {formCourseType === "live_batch" && (
                              <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 16, marginTop: 4, flexShrink: 0, maxHeight: 300, overflowY: "auto" }} className="custom-scroll">
                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -2769,14 +3022,15 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                                  })
                                )}
                              </div>
+                             )}
 
                     </div>
                     </div>
                   </div>
                )}
-            
-               {/* ── STEP 4: Teachers ── */}
-               {wizardStep === 4 && (
+
+               {/* ── STEP 4: Teachers (skipped for eBook-only courses) ── */}
+               {wizardStep === 4 && formCourseType !== "ebook" && (
                  <div style={{ width: "100%", flex: 1, minHeight: 0, overflowY: "auto", animation: "slideUp 0.2s ease-out" }}>
                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                      <div style={{
@@ -3028,6 +3282,34 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
             onSuccess={(material) => {
               if (material?.id) handleLinkMaterial(material.id);
               setUploadModalOpen(false);
+            }}
+          />
+        </div>
+      )}
+
+      {ebookModalOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 100000 }}>
+          <EbookUploadModal
+            onClose={() => setEbookModalOpen(false)}
+            onSuccess={(material) => {
+              setEbookModalOpen(false);
+              if (material?.id) {
+                setWizardEbooks(p => [...p, material]);
+                if (activeChapterId) handleLinkMaterial(material.id);
+              }
+            }}
+          />
+        </div>
+      )}
+
+      {ebookEditTarget && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 100000 }}>
+          <EbookUploadModal
+            material={ebookEditTarget}
+            onClose={() => setEbookEditTarget(null)}
+            onSuccess={(material) => {
+              setEbookEditTarget(null);
+              setWizardEbooks(p => p.map(m => (m.id === material?.id ? material : m)));
             }}
           />
         </div>

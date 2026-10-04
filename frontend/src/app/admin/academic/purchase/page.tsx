@@ -1086,11 +1086,12 @@ function CoursePurchaseInner(){
   const [filterStatus,setFilterStatus]=useState("all");
   const [filterPaymentType,setFilterPaymentType]=useState("all");
   const [filterSource,setFilterSource]=useState("all");
+  const [filterCourseType,setFilterCourseType]=useState("all");
   const [overdueList,setOverdueList]=useState<any[]>([]);
   const [currentPage,setCurrentPage]=useState(1);
   const itemsPerPage=10;
 
-  useEffect(()=>{setCurrentPage(1);},[search,filterCourse,filterStatus,filterPaymentType,filterSource]);
+  useEffect(()=>{setCurrentPage(1);},[search,filterCourse,filterStatus,filterPaymentType,filterSource,filterCourseType]);
 
   const fetchAll=useCallback(async()=>{
     try{
@@ -1167,14 +1168,16 @@ function CoursePurchaseInner(){
       (filterPaymentType==="has_installments"&&p.is_installment);
     // Source filter
     const matchSource=filterSource==="all"||p.source===filterSource;
-    return matchSearch&&matchCourse&&matchStatus&&matchPaymentType&&matchSource;
+    // Course type filter
+    const matchType=filterCourseType==="all"||(p.course_type||"live_batch")===filterCourseType;
+    return matchSearch&&matchCourse&&matchStatus&&matchPaymentType&&matchSource&&matchType;
   });
 
   const exportCSV=()=>{
     if(filteredPurchases.length===0){showToast("No data to export","warning");return;}
-    const headers=["ID","Student","Email","Course","Total Fee","Discount","Net Fee","Paid","Due","Installments","Source","Status"];
+    const headers=["ID","Student","Email","Course","Course Type","Total Fee","Discount","Net Fee","Paid","Due","Installments","Source","Status"];
     const rows=filteredPurchases.map(p=>[
-      p.id, `"${p.student_name}"`, p.student_email, `"${p.course_title}"`,
+      p.id, `"${p.student_name}"`, p.student_email, `"${p.course_title}"`, `"${p.course_type||"live_batch"}"`,
       p.total_fee, p.discount, p.net_fee, p.paid_amount, p.due_amount,
       p.is_installment?`${p.installments_paid}/${p.total_installments}`:"No",
       p.source||"unknown",
@@ -1197,7 +1200,14 @@ function CoursePurchaseInner(){
     setFilterStatus("all");
     setFilterPaymentType("all");
     setFilterSource("all");
+    setFilterCourseType("all");
     setCurrentPage(1);
+  };
+
+  const typeBadge=(t?:string|null)=>{
+    if(t==="ebook") return <span style={{background:"#f5f3ff",color:"#7c3aed",padding:"2px 6px",borderRadius:0,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.3px",whiteSpace:"nowrap"}}>eBook</span>;
+    if(t==="ebook_video") return <span style={{background:"#ecfdf5",color:"#059669",padding:"2px 6px",borderRadius:0,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.3px",whiteSpace:"nowrap"}}>eBook+Video</span>;
+    return <span style={{background:"#f0f9ff",color:"#0284c7",padding:"2px 6px",borderRadius:0,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.3px",whiteSpace:"nowrap"}}>Live</span>;
   };
 
   const sourceBadge=(src?:string|null)=>{
@@ -1303,7 +1313,13 @@ function CoursePurchaseInner(){
           <option value="admin_created">Admin Created</option>
           <option value="invoice_pending">Invoice Pending</option>
         </select>
-        {(search!==""||filterCourse!=="all"||filterStatus!=="all"||filterPaymentType!=="all"||filterSource!=="all")&&(
+        <select value={filterCourseType} onChange={e=>setFilterCourseType(e.target.value)} style={{padding:"10px 14px",borderRadius:0,border:"1px solid #e2e8f0",outline:"none",fontSize:13,color:"#0f172a",background:"#fff",cursor:"pointer",minWidth:150}}>
+          <option value="all">All Course Types</option>
+          <option value="live_batch">Live Batch</option>
+          <option value="ebook">eBook Only</option>
+          <option value="ebook_video">eBook + Video</option>
+        </select>
+        {(search!==""||filterCourse!=="all"||filterStatus!=="all"||filterPaymentType!=="all"||filterSource!=="all"||filterCourseType!=="all")&&(
           <button onClick={resetFilters} style={{background:"#fef2f2",color:"#ef4444",border:"1px solid #fecaca",padding:"10px 16px",borderRadius:0,fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
             <Icon name="x" size={14}/> Reset
           </button>
@@ -1343,7 +1359,10 @@ function CoursePurchaseInner(){
                   <div style={{fontWeight:700,fontSize:13,color:"#0f172a"}}>{p.student_name}</div>
                   <div style={{fontSize:11,color:"#64748b"}}>{p.student_email}</div>
                 </div>
-                <div style={{fontSize:13,color:"#475569",fontWeight:600}}>{p.course_title}</div>
+                <div style={{fontSize:13,color:"#475569",fontWeight:600}}>
+                  <div>{p.course_title}</div>
+                  <div style={{marginTop:4}}>{typeBadge(p.course_type)}{(p.course_type==="ebook"||p.course_type==="ebook_video")&&<span style={{marginLeft:6,fontSize:10,color:"#7c3aed",fontWeight:700}}>auto-enrolled</span>}</div>
+                </div>
                 <div style={{fontSize:13,fontWeight:600,color:"#0f172a"}}>{fmt(p.net_fee)}</div>
                 <div style={{fontSize:13,fontWeight:700,color:"#16a34a"}}>{fmt(p.paid_amount)}</div>
                 <div style={{fontSize:13,fontWeight:700,color:p.due_amount>0?"#dc2626":"#16a34a"}}>{fmt(p.due_amount)}</div>

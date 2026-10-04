@@ -403,10 +403,11 @@ def list_purchases(
     course_id: Optional[int] = None,
     source: Optional[str] = None,
     payment_type: Optional[str] = None,
+    course_type: Optional[str] = None,
     device: str = Depends(require_device),
     db: Session = Depends(get_db),
 ):
-    """List all purchases, optionally filtered by student, course, source, or payment type.
+    """List all purchases, optionally filtered by student, course, source, payment type or course type.
 
     payment_type options:
       - booking_only : slot_booking source with outstanding dues
@@ -423,6 +424,10 @@ def list_purchases(
         query = query.filter(models.CoursePurchase.source == source)
     if payment_type == "has_installments":
         query = query.filter(models.CoursePurchase.is_installment == True)
+    if course_type:
+        query = query.join(models.Course, models.CoursePurchase.course_id == models.Course.id).filter(
+            models.Course.course_type == course_type
+        )
     purchases = query.order_by(models.CoursePurchase.id.desc()).all()
 
     # payment_type filters that need Python-side computation
@@ -446,6 +451,7 @@ def list_purchases(
             "student_email": p.student.email,
             "course_id": p.course_id,
             "course_title": p.course.title,
+            "course_type": p.course.course_type or "live_batch",
             "total_fee": p.total_fee,
             "discount": p.discount,
             "net_fee": p.net_fee,
@@ -1068,6 +1074,7 @@ def get_collections_overview(device: str = Depends(require_device), db: Session 
             courses_map[c_id] = {
                 "course_id": c_id,
                 "course_title": p.course.title if p.course else f"Course {c_id}",
+                "course_type": (p.course.course_type if p.course else None) or "live_batch",
                 "total_revenue": 0.0,
                 "collected": 0.0,
                 "outstanding": 0.0,
@@ -1090,6 +1097,7 @@ def get_collections_overview(device: str = Depends(require_device), db: Session 
                 courses_map[c_id]["batches"][b_id] = {
                     "batch_id": b_id,
                     "batch_name": batch_obj.name,
+                    "batch_type": getattr(batch_obj, "batch_type", None) or "standard",
                     "total_revenue": 0.0,
                     "collected": 0.0,
                     "outstanding": 0.0,

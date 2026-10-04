@@ -1,7 +1,9 @@
 "use client";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { AdminProvider } from "../../../components/ProtectedAdmin";
 import { useRouter } from "next/navigation";
+import { apiFetch } from "@/lib/apiFetch";
+import { API_BASE_URL } from "@/lib/config";
 
 const GLOBAL_CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -204,6 +206,84 @@ function ExamCard({ icon, title, description, accent, iconBg, labelText, labelCo
   );
 }
 
+interface MockTestCourse {
+  id: number;
+  title: string;
+  course_type?: string;
+  mock_test_exam_id?: number | null;
+  mock_test_price?: number | null;
+}
+
+function CourseMockTestsPanel({ onNavigate }: { onNavigate: (href: string) => void }) {
+  const [courses, setCourses] = useState<MockTestCourse[] | null>(null);
+  const [exams, setExams] = useState<Record<number, string>>({});
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [cRes, eRes] = await Promise.all([
+          apiFetch(`${API_BASE_URL}/courses`),
+          apiFetch(`${API_BASE_URL}/exams`),
+        ]);
+        if (cRes.ok) setCourses(await cRes.json()); else setCourses([]);
+        if (eRes.ok) {
+          const list = await eRes.json();
+          const map: Record<number, string> = {};
+          (Array.isArray(list) ? list : []).forEach((e: { id: number; title: string }) => { map[e.id] = e.title; });
+          setExams(map);
+        }
+      } catch { setCourses([]); }
+    })();
+  }, []);
+
+  const configured = (courses || []).filter((c) => c.mock_test_exam_id);
+
+  return (
+    <>
+      <div className="exam-section-hd" style={{ marginTop: 8 }}>
+        <span>Course Mock Tests</span>
+        <div className="exam-section-divider" />
+      </div>
+      <p style={{ margin: "-6px 0 16px", fontSize: ".83rem", color: "#64748b", maxWidth: 640, lineHeight: 1.6 }}>
+        Per-course mock tests are configured in the course wizard (Media &amp; Pricing → Course Mock Test). A paid mock test
+        requires a second course-scoped purchase before the exam starts; passing issues a certificate on eBook-type courses.
+      </p>
+      {courses === null ? (
+        <div style={{ color: "#94a3b8", fontSize: ".85rem", padding: "10px 0" }}>Loading…</div>
+      ) : configured.length === 0 ? (
+        <div style={{ background: "#fff", border: "1.5px dashed #e2e8f0", borderRadius: 14, padding: "22px 26px", fontSize: ".85rem", color: "#64748b" }}>
+          No courses have a mock test configured yet. Open a course in Manage Course → Media &amp; Pricing to attach one.
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 14 }}>
+          {configured.map((c) => {
+            const price = c.mock_test_price;
+            const paid = price != null && price > 0;
+            const tb = c.course_type === "ebook" ? { bg: "#f5f3ff", color: "#7c3aed", label: "eBook" }
+              : c.course_type === "ebook_video" ? { bg: "#ecfdf5", color: "#059669", label: "eBook+Video" }
+              : { bg: "#f0f9ff", color: "#0284c7", label: "Live Batch" };
+            return (
+              <div key={c.id} className="exam-card" style={{ padding: "18px 20px", cursor: "pointer", "--card-accent": "#7c3aed" } as React.CSSProperties}
+                onClick={() => onNavigate("/admin/masters/catalog/courses")}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+                  <span style={{ fontSize: ".85rem", fontWeight: 700, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title}</span>
+                  <span style={{ fontSize: ".62rem", fontWeight: 800, padding: "2px 8px", borderRadius: 10, background: tb.bg, color: tb.color, textTransform: "uppercase", letterSpacing: ".4px", flexShrink: 0 }}>{tb.label}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: ".78rem", color: "#64748b" }}>
+                  <span style={{ fontWeight: 600 }}>{c.mock_test_exam_id ? (exams[c.mock_test_exam_id] || `Exam #${c.mock_test_exam_id}`) : "—"}</span>
+                  <span style={{ marginLeft: "auto", fontWeight: 800, fontSize: ".68rem", padding: "2px 8px", borderRadius: 10, background: paid ? "#f5f3ff" : "#ecfdf5", color: paid ? "#7c3aed" : "#059669" }}>
+                    {paid ? `PAID ₹${price}` : "FREE"}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
 function TestManagementLanding({ onNavigate }: { onNavigate: (href: string) => void }) {
   return (
     <>
@@ -285,6 +365,8 @@ function TestManagementLanding({ onNavigate }: { onNavigate: (href: string) => v
             onClick={() => onNavigate("/admin/masters/curriculum/exams/exam-types")}
           />
         </div>
+
+        <CourseMockTestsPanel onNavigate={onNavigate} />
       </div>
     </>
   );

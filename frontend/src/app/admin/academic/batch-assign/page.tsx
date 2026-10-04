@@ -432,7 +432,7 @@ function BatchAssignContent() {
             <option value="" disabled hidden></option>
             {batches.map(b => (
               <option key={b.id} value={String(b.id)}>
-                {b.name} ({b.enrollments?.filter((e:any) => e.status !== "waitlisted").length || 0}/{b.max_capacity} Enrolled)
+                {b.batch_type === "ebook" ? "📖 " : ""}{b.name}{b.batch_type === "ebook" ? " [eBook]" : ""} ({b.enrollments?.filter((e:any) => e.status !== "waitlisted").length || 0}/{b.max_capacity} Enrolled)
               </option>
             ))}
           </FloatingSelect>
@@ -471,6 +471,9 @@ function BatchAssignContent() {
                 <span style={{ fontSize: 12, fontWeight: 600, color: "#38bdf8", background: "#f0f9ff", padding: "2px 8px", borderRadius: 12 }}>
                   {filteredAvailableStudents.length} course buyers
                 </span>
+                {selectedBatch.batch_type === "ebook" && (
+                  <span style={{ fontSize: 10.5, color: "#94a3b8", fontWeight: 500 }}>eBook buyers skip this step</span>
+                )}
               </div>
               <FloatingInput 
                 label="Search by Name, Email or Phone" 
@@ -545,8 +548,16 @@ function BatchAssignContent() {
             <div style={{ padding: "16px 20px", borderBottom: "1px solid #f1f5f9", background: "#f8fafc" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0f172a" }}>Enrolled in {selectedBatch.name}</h2>
-                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>Active: {activeCount} / {selectedBatch.max_capacity}</div>
+                  <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
+                    Enrolled in {selectedBatch.name}
+                    {selectedBatch.batch_type === "ebook" && (
+                      <span style={{ fontSize: 10, fontWeight: 800, background: "#f5f3ff", color: "#7c3aed", padding: "2px 8px", borderRadius: 10, textTransform: "uppercase", letterSpacing: "0.4px" }}>eBook — auto-enrolled</span>
+                    )}
+                  </h2>
+                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
+                    Active: {activeCount} / {selectedBatch.max_capacity}
+                    {selectedBatch.batch_type === "ebook" && <span style={{ marginLeft: 8, color: "#7c3aed" }}>Buyers are placed here automatically on purchase.</span>}
+                  </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <button 
