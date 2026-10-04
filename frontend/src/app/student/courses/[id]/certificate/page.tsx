@@ -136,13 +136,27 @@ export default function CourseCertificatePage() {
               </div>
             </div>
           )}
-          <Link
-            href={`/student/courses/${courseId}/content`}
-            className="stu-btn-primary"
-            style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}
-          >
-            Continue learning — {course.title}
-          </Link>
+          {cert.reason?.toLowerCase().includes("mock test") ? (
+            <Link
+              href={`/student/courses/${courseId}/exams`}
+              className="stu-btn-primary"
+              style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}
+            >
+              Take the mock test
+            </Link>
+          ) : (
+            <Link
+              href={
+                course.courseType === "ebook"
+                  ? `/student/courses/${courseId}/ebook`
+                  : `/student/courses/${courseId}/content`
+              }
+              className="stu-btn-primary"
+              style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}
+            >
+              Continue learning — {course.title}
+            </Link>
+          )}
         </div>
       ) : (
         <div className="stu-empty">

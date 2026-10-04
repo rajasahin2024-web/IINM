@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  courseTypeLabel,
   enrollmentLabel,
   enrollmentTone,
   formatINR,
@@ -24,6 +25,7 @@ function formatDate(iso: string | null): string {
 function AdmissionCard({ card }: { card: StudentCourseCard }) {
   const router = useRouter();
   const tone = enrollmentTone(card.enrollmentStatus);
+  const isEbookType = card.courseType === "ebook" || card.courseType === "ebook_video";
   const hasDue = (card.dueAmount ?? 0) > 0.5;
   const hasPaid = (card.paidAmount ?? 0) > 0.5;
   const admissionDate = formatDate(card.joinDate);
@@ -51,8 +53,15 @@ function AdmissionCard({ card }: { card: StudentCourseCard }) {
           <span className={`stu-badge stu-badge-${tone} stu-card-status`}>
             {enrollmentLabel(card.enrollmentStatus)}
           </span>
+          <span
+            className={`stu-badge ${
+              isEbookType ? "stu-badge-ebook" : "stu-badge-navy"
+            } stu-card-mode`}
+          >
+            {courseTypeLabel(card.courseType)}
+          </span>
           {card.batchMode && (
-            <span className="stu-badge stu-badge-navy stu-card-mode">{card.batchMode}</span>
+            <span className="stu-badge stu-badge-navy stu-card-mode-sub">{card.batchMode}</span>
           )}
         </div>
 
@@ -130,10 +139,22 @@ function AdmissionCard({ card }: { card: StudentCourseCard }) {
       </button>
 
       <div className="stu-adm-cta-row">
-        <button type="button" className="stu-cta" onClick={open}>
-          Enter course
-          <SIcon name="arrow-right" size={16} />
-        </button>
+        {isEbookType ? (
+          <>
+            <Link href={`/student/courses/${card.courseId}/ebook`} className="stu-cta">
+              Read now
+              <SIcon name="book-open" size={16} />
+            </Link>
+            <button type="button" className="stu-btn-ghost" onClick={open}>
+              Course page
+            </button>
+          </>
+        ) : (
+          <button type="button" className="stu-cta" onClick={open}>
+            Enter course
+            <SIcon name="arrow-right" size={16} />
+          </button>
+        )}
       </div>
     </article>
   );

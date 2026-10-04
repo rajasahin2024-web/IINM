@@ -75,7 +75,7 @@ export default function CoursePaymentsPage() {
           <div className="stu-skel" style={{ height: 92, marginBottom: 14 }} />
           <div className="stu-skel" style={{ height: 160 }} />
         </div>
-      ) : !p ? (
+      ) : !p && !data.mockTest ? (
         <div className="stu-empty">
           <SIcon name="payments" size={40} />
           <p className="stu-empty-title">No purchase record</p>
@@ -86,7 +86,39 @@ export default function CoursePaymentsPage() {
         </div>
       ) : (
         <>
+          {/* Mock test unlock purchase */}
+          {data.mockTest && (
+            <section className="stu-section" aria-labelledby="pay-mt-h">
+              <div className="stu-section-head">
+                <h2 className="stu-section-title" id="pay-mt-h">
+                  <SIcon name="clipboard" size={19} />
+                  Mock test unlock
+                </h2>
+              </div>
+              <div className="stu-section-body">
+                <div className="stu-txn">
+                  <div className="stu-txn-main">
+                    <span className="stu-txn-amount">{formatINR(data.mockTest.amount)}</span>
+                    <span className="stu-txn-meta">
+                      {data.mockTest.examTitle ?? "Course mock test"} ·{" "}
+                      {formatDate(data.mockTest.createdAt)} · Razorpay
+                      {data.mockTest.razorpayPaymentId
+                        ? ` · Ref ${data.mockTest.razorpayPaymentId}`
+                        : ""}
+                    </span>
+                  </div>
+                  <div className="stu-txn-side">
+                    <span className={`stu-badge stu-badge-${installTone(data.mockTest.status)}`}>
+                      {data.mockTest.status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Fee summary */}
+          {p && (
           <section className="stu-section" aria-labelledby="pay-sum-h">
             <div className="stu-section-head">
               <h2 className="stu-section-title" id="pay-sum-h">
@@ -142,9 +174,10 @@ export default function CoursePaymentsPage() {
               </div>
             </div>
           </section>
+          )}
 
           {/* Installment schedule */}
-          {data.installments.length > 0 && (
+          {p && data.installments.length > 0 && (
             <section className="stu-section" aria-labelledby="pay-inst-h">
               <div className="stu-section-head">
                 <h2 className="stu-section-title" id="pay-inst-h">
@@ -184,6 +217,7 @@ export default function CoursePaymentsPage() {
           )}
 
           {/* Transactions */}
+          {p && (
           <section className="stu-section" aria-labelledby="pay-txn-h">
             <div className="stu-section-head">
               <h2 className="stu-section-title" id="pay-txn-h">
@@ -226,6 +260,7 @@ export default function CoursePaymentsPage() {
               )}
             </div>
           </section>
+          )}
         </>
       )}
     </>

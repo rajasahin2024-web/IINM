@@ -858,9 +858,11 @@ def get_mock_test(course_id: int, student: models.Student = Depends(require_stud
     assignment = _ensure_mock_test_assignment(db, student.id, course, batch_ids)
     db.commit()
 
+    exam = db.query(models.Exam).filter(models.Exam.id == course.mock_test_exam_id).first()
     return {
         "configured": True,
         "exam_id": course.mock_test_exam_id,
+        "exam_title": exam.title if exam else None,
         "assignment_id": assignment.id if assignment else None,
         "is_paid": is_paid,
         "price": course.mock_test_price,
@@ -975,8 +977,27 @@ def course_payments(course_id: int, student: models.Student = Depends(require_st
     """Fee summary for the student's CoursePurchase: totals, installment
     schedule, transaction history and invoice/receipt refs."""
     purchase, _enrollment, _batch_ids = _course_context(db, student.id, course_id)
+
+    # Mock-test entitlement (course-scoped second purchase) — shown on the
+    # payments page alongside the course purchase invoices.
+    entitlement = _paid_entitlement(db, student.id, course_id)
+    mock_exam = (
+        db.query(models.Exam).filter(models.Exam.id == entitlement.exam_id).first()
+        if entitlement else None
+    )
+    mock_test = {
+        "entitlement_id": entitlement.id,
+        "exam_title": mock_exam.title if mock_exam else None,
+        "amount": entitlement.amount,
+        "currency": entitlement.currency,
+        "razorpay_payment_id": entitlement.razorpay_payment_id,
+        "status": entitlement.status,
+        "created_at": entitlement.created_at.isoformat() if entitlement.created_at else None,
+    } if entitlement else None
+
     if not purchase:
-        return {"purchase": None, "installments": [], "transactions": []}
+        return {"purchase": None, "installments": [], "transactions": [],
+                "mock_test": mock_test}
 
     installments = [
         {
@@ -1033,6 +1054,7 @@ def course_payments(course_id: int, student: models.Student = Depends(require_st
         },
         "installments": installments,
         "transactions": transactions,
+        "mock_test": mock_test,
     }
 
 

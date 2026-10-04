@@ -47,6 +47,7 @@ export interface StudentCourseCard {
   courseId: number;
   title: string;
   slug: string | null;
+  courseType: CourseType;
   thumbnailUrl: string | null;
   instructorName: string | null;
   batchId: number | null;
@@ -68,6 +69,24 @@ export interface StudentCourseCard {
   totalMaterials: number;
 }
 
+/** Course delivery format — live_batch is the classic flow. */
+export type CourseType = "live_batch" | "ebook" | "ebook_video";
+
+export function normalizeCourseType(v: unknown): CourseType {
+  return v === "ebook" || v === "ebook_video" ? v : "live_batch";
+}
+
+export function courseTypeLabel(t: CourseType): string {
+  switch (t) {
+    case "ebook":
+      return "eBook";
+    case "ebook_video":
+      return "eBook + Video";
+    default:
+      return "Live Batch";
+  }
+}
+
 export interface StudentMaterial {
   id: number;
   title: string;
@@ -77,6 +96,10 @@ export interface StudentMaterial {
   youtubeUrl: string | null;
   thumbnailUrl: string | null;
   isCompleted: boolean;
+  /** ebook_video gate: recorded videos stay locked until the eBook is done. */
+  locked: boolean;
+  ebookCoverUrl: string | null;
+  ebookPageCount: number | null;
 }
 
 export interface StudentChapter {
@@ -109,6 +132,7 @@ export interface StudentCourseDashboard {
   courseId: number;
   title: string;
   slug: string | null;
+  courseType: CourseType;
   thumbnailUrl: string | null;
   description: string | null;
   batchId: number | null;
@@ -153,7 +177,8 @@ export type ExamItemState =
   | "in_progress"
   | "locked"
   | "completed"
-  | "expired";
+  | "expired"
+  | "payment_required";
 
 export interface ExamAttemptSummary {
   attemptId: number;
@@ -185,6 +210,11 @@ export interface StudentExamItem {
   attemptsAllowed: number | null;
   attemptsRemaining: number | null;
   canRetake: boolean;
+  /** Course-level mock test (certificate gate). */
+  isMockTest: boolean;
+  requiresPayment: boolean;
+  mockTestPrice: number | null;
+  entitled: boolean;
   activeAttempt: ExamAttemptSummary | null;
   result: {
     bestScore: number | null;
@@ -291,6 +321,16 @@ export interface CoursePayments {
     screenshotUrl: string | null;
     createdAt: string | null;
   }[];
+  /** Course-scoped mock-test unlock purchase (second purchase flow). */
+  mockTest: {
+    entitlementId: number;
+    examTitle: string | null;
+    amount: number;
+    currency: string;
+    razorpayPaymentId: string | null;
+    status: string;
+    createdAt: string | null;
+  } | null;
 }
 
 export interface StudentNotice {
@@ -327,6 +367,59 @@ export interface CourseCertificate {
     completedMaterials: number;
     progressPct: number;
   };
+}
+
+// ─── eBook reader ──────────────────────────────────────────
+
+export interface EbookTocItem {
+  title: string;
+  page: number;
+}
+
+export interface EbookProgress {
+  lastPage: number;
+  lastChapterIndex: number | null;
+  lastAccessed: string | null;
+  /** Sorted TOC indexes the student has marked complete. */
+  completedChapters: number[];
+  totalChapters: number;
+  isComplete: boolean;
+}
+
+export interface EbookMeta {
+  id: number;
+  title: string;
+  description: string | null;
+  coverUrl: string | null;
+  toc: EbookTocItem[];
+  pageCount: number | null;
+  fileSize: number | null;
+  hasFile: boolean;
+  progress: EbookProgress;
+}
+
+// ─── Mock test (course-scoped second purchase) ─────────────
+
+export interface CourseMockTest {
+  configured: boolean;
+  examId: number | null;
+  assignmentId: number | null;
+  examTitle: string | null;
+  isPaid: boolean;
+  price: number | null;
+  entitled: boolean;
+  entitlement: {
+    id: number;
+    amount: number;
+    currency: string;
+    createdAt: string | null;
+  } | null;
+}
+
+export interface PublicPaymentSettings {
+  razorpayKeyId: string | null;
+  currency: string;
+  isTestMode: boolean;
 }
 
 export interface StudentFullProfile {
@@ -370,7 +463,13 @@ async function studentFetch(path: string, init?: RequestInit): Promise<Response>
 async function readDetail(res: Response, fallback: string): Promise<string> {
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   const detail = data.detail ?? data.message;
-  return typeof detail === "string" && detail ? detail : fallback;
+  if (typeof detail === "string" && detail) return detail;
+  // Structured errors (e.g. mock_test_payment_required) carry a message field.
+  if (detail && typeof detail === "object") {
+    const msg = (detail as Record<string, unknown>).message;
+    if (typeof msg === "string" && msg) return msg;
+  }
+  return fallback;
 }
 
 // ─── Auth ────────────────────────────────────────────────────
@@ -535,6 +634,7 @@ function normalizeCourseCard(raw: Rec): StudentCourseCard {
     courseId: firstNum(raw.course_id, course.id, raw.id) ?? 0,
     title: firstStr(raw.title, course.title) ?? "Untitled course",
     slug: firstStr(raw.slug, course.slug),
+    courseType: normalizeCourseType(firstStr(raw.course_type, course.course_type)),
     thumbnailUrl: firstStr(raw.thumbnail_url, raw.thumbnail, course.thumbnail_url),
     instructorName:
       firstStr(raw.instructor_name, raw.instructor, course.instructor_name) ??
@@ -569,6 +669,9 @@ function normalizeMaterial(raw: Rec): StudentMaterial {
     youtubeUrl: str(raw.youtube_url),
     thumbnailUrl: str(raw.thumbnail_url),
     isCompleted: bool(raw.is_completed ?? raw.completed),
+    locked: bool(raw.locked),
+    ebookCoverUrl: str(raw.ebook_cover_url),
+    ebookPageCount: num(raw.ebook_page_count),
   };
 }
 
@@ -650,6 +753,7 @@ function normalizeDashboard(raw: Rec): StudentCourseDashboard {
     courseId: firstNum(raw.course_id, course.id, raw.id) ?? 0,
     title: firstStr(raw.title, course.title) ?? "Untitled course",
     slug: firstStr(raw.slug, course.slug),
+    courseType: normalizeCourseType(firstStr(raw.course_type, course.course_type)),
     thumbnailUrl: firstStr(raw.thumbnail_url, raw.thumbnail, course.thumbnail_url),
     description: firstStr(raw.description, course.description),
     batchId: firstNum(raw.batch_id, batch.id),
@@ -875,6 +979,20 @@ export async function getCoursePayments(courseId: number): Promise<CoursePayment
       screenshotUrl: str(r.screenshot_url),
       createdAt: str(r.created_at),
     })),
+    mockTest: (() => {
+      const mt = asRec(data.mock_test);
+      return Object.keys(mt).length === 0
+        ? null
+        : {
+            entitlementId: num(mt.entitlement_id) ?? 0,
+            examTitle: str(mt.exam_title),
+            amount: num(mt.amount) ?? 0,
+            currency: str(mt.currency) ?? "INR",
+            razorpayPaymentId: str(mt.razorpay_payment_id),
+            status: str(mt.status) ?? "paid",
+            createdAt: str(mt.created_at),
+          };
+    })(),
   };
 }
 
@@ -919,6 +1037,151 @@ export async function getCourseCertificate(courseId: number): Promise<CourseCert
             completedMaterials: num(prog.completed_materials) ?? 0,
             progressPct: num(prog.progress_pct) ?? 0,
           },
+  };
+}
+
+// ─── eBook reader endpoints ────────────────────────────────
+//
+// eBook bytes are private: the reader loads them through pdf.js with the
+// session cookie (withCredentials) — the file URL is never rendered as a
+// link anywhere, so there is no download path in the UI.
+
+export function ebookFileUrl(materialId: number): string {
+  return studentUrl(`/student/ebooks/${materialId}/file`);
+}
+
+export async function getEbookMeta(materialId: number): Promise<EbookMeta> {
+  const data = await studentGet<Rec>(`/student/ebooks/${materialId}`, 15_000);
+  const p = asRec(data.progress);
+  return {
+    id: num(data.id) ?? materialId,
+    title: str(data.title) ?? "eBook",
+    description: str(data.description),
+    coverUrl: str(data.cover_url),
+    toc: pickList(data.toc ?? [], []).map((t) => ({
+      title: str(t.title) ?? "Chapter",
+      page: num(t.page) ?? 1,
+    })),
+    pageCount: num(data.page_count),
+    fileSize: num(data.file_size),
+    hasFile: bool(data.has_file),
+    progress: normalizeEbookProgress(p),
+  };
+}
+
+function normalizeEbookProgress(p: Rec): EbookProgress {
+  const done = Array.isArray(p.completed_chapters)
+    ? (p.completed_chapters as unknown[]).map((v) => num(v) ?? -1).filter((v) => v >= 0)
+    : [];
+  return {
+    lastPage: num(p.last_page) ?? 0,
+    lastChapterIndex: num(p.last_chapter_index),
+    lastAccessed: str(p.last_accessed),
+    completedChapters: done.sort((a, b) => a - b),
+    totalChapters: num(p.total_chapters) ?? 0,
+    isComplete: bool(p.is_complete),
+  };
+}
+
+export async function updateEbookProgress(
+  materialId: number,
+  patch: { lastPage?: number; lastChapterIndex?: number }
+): Promise<EbookProgress> {
+  const res = await studentFetch(`/student/ebooks/${materialId}/progress`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      last_page: patch.lastPage,
+      last_chapter_index: patch.lastChapterIndex,
+    }),
+  });
+  if (!res.ok) throw new StudentApiError(res.status, await readDetail(res, "Could not save reading progress"));
+  const data = (await res.json()) as Rec;
+  return normalizeEbookProgress(asRec(data.progress));
+}
+
+export async function setEbookChapterCompletion(
+  materialId: number,
+  chapterIndex: number,
+  isCompleted: boolean
+): Promise<EbookProgress> {
+  const res = await studentFetch(`/student/ebooks/${materialId}/chapters/${chapterIndex}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ is_completed: isCompleted }),
+  });
+  if (!res.ok) throw new StudentApiError(res.status, await readDetail(res, "Could not update chapter"));
+  const data = (await res.json()) as Rec;
+  invalidateCache(studentUrl(`/student/ebooks/${materialId}`));
+  return normalizeEbookProgress(asRec(data.progress));
+}
+
+// ─── Mock test (paid unlock) ───────────────────────────────
+
+export async function getCourseMockTest(courseId: number): Promise<CourseMockTest> {
+  const data = await studentGet<Rec>(`/student/courses/${courseId}/mock-test`, 15_000);
+  const ent = asRec(data.entitlement);
+  return {
+    configured: bool(data.configured),
+    examId: num(data.exam_id),
+    assignmentId: num(data.assignment_id),
+    examTitle: str(data.exam_title),
+    isPaid: bool(data.is_paid),
+    price: num(data.price),
+    entitled: bool(data.entitled),
+    entitlement:
+      Object.keys(ent).length === 0
+        ? null
+        : {
+            id: num(ent.id) ?? 0,
+            amount: num(ent.amount) ?? 0,
+            currency: str(ent.currency) ?? "INR",
+            createdAt: str(ent.created_at),
+          },
+  };
+}
+
+export async function createMockTestOrder(
+  courseId: number
+): Promise<{ orderId: string; amount: number; currency: string }> {
+  const res = await studentFetch(`/student/courses/${courseId}/mock-test/create-order`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new StudentApiError(res.status, await readDetail(res, "Could not create the payment order"));
+  const data = (await res.json()) as Rec;
+  return {
+    orderId: str(data.order_id) ?? "",
+    amount: num(data.amount) ?? 0,
+    currency: str(data.currency) ?? "INR",
+  };
+}
+
+export async function verifyMockTestPayment(
+  courseId: number,
+  payload: { razorpayPaymentId: string; razorpayOrderId: string; razorpaySignature: string }
+): Promise<{ alreadyUnlocked: boolean }> {
+  const res = await studentFetch(`/student/courses/${courseId}/mock-test/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      razorpay_payment_id: payload.razorpayPaymentId,
+      razorpay_order_id: payload.razorpayOrderId,
+      razorpay_signature: payload.razorpaySignature,
+    }),
+  });
+  if (!res.ok) throw new StudentApiError(res.status, await readDetail(res, "Payment verification failed"));
+  const data = (await res.json()) as Rec;
+  invalidateCache();
+  return { alreadyUnlocked: bool(data.already_unlocked) };
+}
+
+/** Publishable payment settings for in-panel checkout (public endpoint). */
+export async function getPublicPaymentSettings(): Promise<PublicPaymentSettings> {
+  const data = await studentGet<Rec>(`/settings/public/payment`, 60_000);
+  return {
+    razorpayKeyId: str(data.razorpay_key_id),
+    currency: str(data.currency) ?? "INR",
+    isTestMode: bool(data.is_test_mode ?? true),
   };
 }
 
@@ -988,6 +1251,10 @@ function normalizeExamItem(r: Rec): StudentExamItem {
     attemptsAllowed: num(r.attempts_allowed),
     attemptsRemaining: num(r.attempts_remaining),
     canRetake: bool(r.can_retake),
+    isMockTest: bool(r.is_mock_test),
+    requiresPayment: bool(r.requires_payment),
+    mockTestPrice: num(r.mock_test_price),
+    entitled: bool(r.entitled ?? true),
     activeAttempt: Object.keys(active).length === 0 ? null : normalizeAttemptSummary(active),
     result:
       Object.keys(result).length === 0

@@ -1,14 +1,19 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  createMockTestOrder,
+  formatINR,
   getCourseExams,
+  getPublicPaymentSettings,
   startExamAttempt,
   StudentApiError,
+  verifyMockTestPayment,
   type StudentExamItem,
 } from "@/lib/studentApi";
 import { useCourse } from "../context";
+import { useStudent } from "../../../context";
 import SIcon from "../../../icons";
 
 function formatWhen(iso: string | null): string {
@@ -37,9 +42,152 @@ function stateChip(state: StudentExamItem["state"]): { label: string; tone: stri
       return { label: "Completed", tone: "blue" };
     case "expired":
       return { label: "Closed", tone: "red" };
+    case "payment_required":
+      return { label: "Unlock required", tone: "amber" };
     default:
       return { label: state, tone: "gray" };
   }
+}
+
+// `Window.Razorpay` is declared globally in app/invoice/[uuid]/page.tsx.
+interface RazorpaySuccessResponse {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+}
+
+let razorpayScriptPromise: Promise<boolean> | null = null;
+function loadRazorpayScript(): Promise<boolean> {
+  if (razorpayScriptPromise) return razorpayScriptPromise;
+  razorpayScriptPromise = new Promise((resolve) => {
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+  return razorpayScriptPromise;
+}
+
+/* Mini checkout for the course-scoped paid mock test. */
+function MockTestCheckout({
+  exam,
+  courseId,
+  onClose,
+  onUnlocked,
+}: {
+  exam: StudentExamItem;
+  courseId: number;
+  onClose: () => void;
+  onUnlocked: () => void;
+}) {
+  const { profile } = useStudent();
+  const [paying, setPaying] = useState(false);
+  const [error, setError] = useState("");
+
+  const pay = async () => {
+    setPaying(true);
+    setError("");
+    try {
+      const settings = await getPublicPaymentSettings();
+      if (!settings.razorpayKeyId) {
+        throw new Error("Payment gateway is not configured. Please contact support.");
+      }
+      const order = await createMockTestOrder(courseId);
+      const loaded = await loadRazorpayScript();
+      if (!loaded) {
+        throw new Error("Could not load the payment gateway. Check your connection and retry.");
+      }
+      const rzp = new window.Razorpay!({
+        key: settings.razorpayKeyId,
+        amount: order.amount,
+        currency: order.currency,
+        order_id: order.orderId,
+        name: "IINM",
+        description: `Mock Test — ${exam.examTitle}`,
+        prefill: {
+          name: `${profile.first_name} ${profile.last_name ?? ""}`.trim(),
+          email: profile.email,
+          contact: profile.phone ?? undefined,
+        },
+        theme: { color: "#0a1628" },
+        handler: async (response: RazorpaySuccessResponse) => {
+          try {
+            await verifyMockTestPayment(courseId, {
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpaySignature: response.razorpay_signature,
+            });
+            onUnlocked();
+          } catch (e) {
+            setPaying(false);
+            setError(
+              e instanceof StudentApiError
+                ? e.message
+                : "Payment received but verification failed. Contact support with your receipt."
+            );
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setPaying(false);
+          },
+        },
+      });
+      rzp.open();
+    } catch (e) {
+      setPaying(false);
+      setError(e instanceof Error ? e.message : "Could not start the payment. Please retry.");
+    }
+  };
+
+  return (
+    <div className="stu-mtpay-wrap" role="dialog" aria-modal="true" aria-label="Unlock mock test">
+      <button type="button" className="stu-mtpay-scrim" onClick={onClose} aria-label="Close" />
+      <div className="stu-mtpay-card">
+        <div className="stu-mtpay-head">
+          <span className="stu-mtpay-icon" aria-hidden="true">
+            <SIcon name="clipboard" size={20} />
+          </span>
+          <div className="stu-mtpay-headmeta">
+            <span className="stu-mtpay-kicker">Course mock test</span>
+            <span className="stu-mtpay-title">{exam.examTitle}</span>
+          </div>
+          <button type="button" className="stu-topbar-icon" onClick={onClose} aria-label="Close">
+            <SIcon name="close" size={20} />
+          </button>
+        </div>
+        <div className="stu-mtpay-body">
+          <div className="stu-mtpay-pricerow">
+            <span>Mock test unlock</span>
+            <strong>{formatINR(exam.mockTestPrice)}</strong>
+          </div>
+          <p className="stu-mtpay-note">
+            One-time purchase for this course. Passing the mock test issues your certificate.
+          </p>
+          {error && (
+            <div className="stu-alert" role="alert">
+              <SIcon name="alert" size={16} />
+              {error}
+            </div>
+          )}
+        </div>
+        <div className="stu-mtpay-foot">
+          <button type="button" className="stu-cta" onClick={pay} disabled={paying}>
+            {paying ? "Opening secure checkout…" : `Pay ${formatINR(exam.mockTestPrice)}`}
+            <SIcon name="arrow-right" size={16} />
+          </button>
+          <span className="stu-mtpay-secure">
+            <SIcon name="lock" size={13} /> Secured by Razorpay
+          </span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function CourseExamsPage() {
@@ -50,20 +198,33 @@ export default function CourseExamsPage() {
   const [error, setError] = useState("");
   const [starting, setStarting] = useState<number | null>(null);
   const [startError, setStartError] = useState("");
+  const [checkout, setCheckout] = useState<StudentExamItem | null>(null);
+  const [unlockedMsg, setUnlockedMsg] = useState("");
+  const mountedRef = useRef(true);
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(() => {
     getCourseExams(courseId)
-      .then((list) => !cancelled && setExams(list))
+      .then((list) => mountedRef.current && setExams(list))
       .catch((err) => {
-        if (cancelled) return;
+        if (!mountedRef.current) return;
         if (err instanceof StudentApiError && err.status === 401) router.replace("/signin");
         else setError("Could not load exams. Please retry.");
       });
-    return () => {
-      cancelled = true;
-    };
   }, [courseId, router]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    load();
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [load]);
+
+  useEffect(() => {
+    if (!unlockedMsg) return;
+    const t = setTimeout(() => setUnlockedMsg(""), 4000);
+    return () => clearTimeout(t);
+  }, [unlockedMsg]);
 
   const begin = async (exam: StudentExamItem) => {
     setStartError("");
@@ -87,6 +248,13 @@ export default function CourseExamsPage() {
         <h1 className="stu-page-title">Exams</h1>
         <p className="stu-page-sub">Scheduled exams for your batch — start, resume or review.</p>
       </div>
+
+      {unlockedMsg && (
+        <div className="stu-alert stu-alert-ok" role="status">
+          <SIcon name="check-circle" size={18} />
+          {unlockedMsg}
+        </div>
+      )}
 
       {startError && (
         <div className="stu-alert" role="alert">
@@ -126,6 +294,7 @@ export default function CourseExamsPage() {
                 <div className="stu-exam-main">
                   <div className="stu-exam-titlerow">
                     <span className="stu-exam-title">{e.examTitle}</span>
+                    {e.isMockTest && <span className="stu-badge stu-badge-ebook">Mock test</span>}
                     <span className={`stu-badge stu-badge-${chip.tone}`}>{chip.label}</span>
                   </div>
                   <div className="stu-exam-meta">
@@ -142,6 +311,12 @@ export default function CourseExamsPage() {
                     <div className="stu-exam-lock">
                       <SIcon name="lock" size={15} />
                       {e.unlockReason}
+                    </div>
+                  )}
+                  {e.state === "payment_required" && (
+                    <div className="stu-exam-lock">
+                      <SIcon name="lock" size={15} />
+                      {e.unlockReason ?? "This mock test requires a separate purchase."}
                     </div>
                   )}
                   {e.state === "completed" && e.result && (
@@ -166,6 +341,12 @@ export default function CourseExamsPage() {
                   )}
                 </div>
                 <div className="stu-exam-actions">
+                  {e.state === "payment_required" && (
+                    <button type="button" className="stu-cta" onClick={() => setCheckout(e)}>
+                      Unlock — {formatINR(e.mockTestPrice)}
+                      <SIcon name="lock" size={15} />
+                    </button>
+                  )}
                   {e.state === "available" && (
                     <button
                       type="button"
@@ -222,6 +403,20 @@ export default function CourseExamsPage() {
             );
           })}
         </div>
+      )}
+
+      {checkout && (
+        <MockTestCheckout
+          exam={checkout}
+          courseId={courseId}
+          onClose={() => setCheckout(null)}
+          onUnlocked={() => {
+            setCheckout(null);
+            setExams(null);
+            load();
+            setUnlockedMsg("Mock test unlocked — you can start it now.");
+          }}
+        />
       )}
     </>
   );

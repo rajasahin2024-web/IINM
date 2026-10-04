@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import {
+  courseTypeLabel,
   getCourseExams,
   getCourseNotices,
   getStudentCourse,
@@ -35,15 +36,18 @@ interface NavGroup {
   items: NavItem[];
 }
 
-function navGroups(base: string): NavGroup[] {
+function navGroups(base: string, courseType: string): NavGroup[] {
+  // Type-aware course shell: eBook-type courses never run live classes —
+  // eBook-only gets an eBook tab, eBook+video orders eBook before content.
+  const isEbookType = courseType === "ebook" || courseType === "ebook_video";
+  const learn: NavItem[] = [{ href: `${base}/overview`, label: "Overview", icon: "home" }];
+  if (isEbookType) learn.push({ href: `${base}/ebook`, label: "eBook", icon: "book-open" });
+  learn.push({ href: `${base}/content`, label: "Course Content", icon: "book" });
+  if (!isEbookType) learn.push({ href: `${base}/classes`, label: "Live Classes", icon: "video-call" });
   return [
     {
       title: "Learn",
-      items: [
-        { href: `${base}/overview`, label: "Overview", icon: "home" },
-        { href: `${base}/content`, label: "Course Content", icon: "book" },
-        { href: `${base}/classes`, label: "Live Classes", icon: "video-call" },
-      ],
+      items: learn,
     },
     {
       title: "Assess",
@@ -172,7 +176,9 @@ export default function CourseLayout({ children }: { children: React.ReactNode }
   }, [drawerOpen]);
 
   const base = `/student/courses/${courseId}`;
-  const groups = useMemo(() => navGroups(base), [base]);
+  const courseType = course?.courseType ?? "live_batch";
+  const isEbookType = courseType === "ebook" || courseType === "ebook_video";
+  const groups = useMemo(() => navGroups(base, courseType), [base, courseType]);
 
   const isActive = (href: string) => pathname === href;
 
@@ -269,6 +275,11 @@ export default function CourseLayout({ children }: { children: React.ReactNode }
                 {course.batchMode ? ` · ${course.batchMode}` : ""}
               </span>
             )}
+            {isEbookType && (
+              <span className="stu-badge stu-badge-navy stu-course-type-badge">
+                {courseTypeLabel(courseType)}
+              </span>
+            )}
           </div>
 
           <nav className="stu-sidebar-nav" aria-label="Course navigation">
@@ -352,6 +363,11 @@ export default function CourseLayout({ children }: { children: React.ReactNode }
                     <span className="stu-course-block-sub">
                       {course.batchName}
                       {course.batchMode ? ` · ${course.batchMode}` : ""}
+                    </span>
+                  )}
+                  {isEbookType && (
+                    <span className="stu-badge stu-badge-navy stu-course-type-badge">
+                      {courseTypeLabel(courseType)}
                     </span>
                   )}
                 </div>
@@ -449,13 +465,23 @@ export default function CourseLayout({ children }: { children: React.ReactNode }
             <SIcon name="book" size={19} />
             Content
           </Link>
-          <Link
-            href={`${base}/classes`}
-            className={`stu-bottom-item ${isActive(`${base}/classes`) ? "active" : ""}`}
-          >
-            <SIcon name="video-call" size={19} />
-            Classes
-          </Link>
+          {isEbookType ? (
+            <Link
+              href={`${base}/ebook`}
+              className={`stu-bottom-item ${isActive(`${base}/ebook`) ? "active" : ""}`}
+            >
+              <SIcon name="book-open" size={19} />
+              eBook
+            </Link>
+          ) : (
+            <Link
+              href={`${base}/classes`}
+              className={`stu-bottom-item ${isActive(`${base}/classes`) ? "active" : ""}`}
+            >
+              <SIcon name="video-call" size={19} />
+              Classes
+            </Link>
+          )}
           <Link
             href={`${base}/exams`}
             className={`stu-bottom-item ${isActive(`${base}/exams`) ? "active" : ""}`}
