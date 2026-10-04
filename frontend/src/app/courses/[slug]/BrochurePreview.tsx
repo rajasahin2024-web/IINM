@@ -17,8 +17,10 @@ import { API_BASE_URL } from "@/lib/config";
 ───────────────────────────────────────── */
 
 interface BrochurePreviewProps {
-  courseId: number;
-  phone: string;           // for watermark
+  courseId?: number;
+  phone?: string;          // for watermark
+  url?: string;            // direct PDF URL (e.g. public eBook sample) — skips the brochure proxy
+  title?: string;          // toolbar label (default "Brochure")
   onClose: () => void;
 }
 
@@ -26,7 +28,7 @@ const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 4;
 const BASE_SCALE = 1.5;
 
-export default function BrochurePreview({ courseId, phone, onClose }: BrochurePreviewProps) {
+export default function BrochurePreview({ courseId, phone, url, title, onClose }: BrochurePreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pdfDocRef = useRef<any>(null);
@@ -43,8 +45,9 @@ export default function BrochurePreview({ courseId, phone, onClose }: BrochurePr
 
   // Always fetch through the backend proxy — cdn.iinmedu.com sends no CORS
   // headers, so fetching the absolute syllabus_url directly gets blocked.
-  // API_BASE_URL already ends in /api.
-  const resolvedUrl = `${API_BASE_URL}/public/courses/${courseId}/brochure-pdf`;
+  // API_BASE_URL already ends in /api. A direct `url` prop (e.g. the public
+  // eBook sample endpoint) bypasses the brochure proxy.
+  const resolvedUrl = url || `${API_BASE_URL}/public/courses/${courseId}/brochure-pdf`;
 
   // ── Detect mobile ──
   useEffect(() => {
@@ -322,7 +325,7 @@ export default function BrochurePreview({ courseId, phone, onClose }: BrochurePr
           }}>IINM</span>
           {!isMobile && (
             <span style={{ color: "#a0a0a0", fontSize: 12, fontWeight: 500, whiteSpace: "nowrap" }}>
-              Brochure
+              {title || "Brochure"}
             </span>
           )}
           {pageCount > 0 && !loading && (
@@ -461,7 +464,8 @@ export default function BrochurePreview({ courseId, phone, onClose }: BrochurePr
           .cd-pdf-scroll::-webkit-scrollbar-thumb:hover { background: #777; }
           .cd-pdf-scroll { scrollbar-width: thin; scrollbar-color: #555 transparent; }
         `}</style>
-        {/* Watermark overlay */}
+        {/* Watermark overlay — only when a lead phone is known */}
+        {phone && (
         <div
           style={{
             position: "absolute",
@@ -490,6 +494,7 @@ export default function BrochurePreview({ courseId, phone, onClose }: BrochurePr
             </div>
           ))}
         </div>
+        )}
 
         {loading && (
           <div style={{ textAlign: "center", paddingTop: isMobile ? 60 : 80, color: "#a0a0a0" }}>

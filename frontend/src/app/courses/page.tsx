@@ -31,6 +31,7 @@ interface Course {
   has_certificate?: boolean;
   is_featured_course?: boolean;
   promo_video_url?: string;
+  course_type?: string;
 }
 
 // ─── Inline icons (a11y: aria-label via title) ────────────
@@ -149,6 +150,7 @@ function CoursesPageInner() {
   const [playingVideo, setPlayingVideo] = useState<string | null>(null);
 
   // Filters
+  const [typeFilter, setTypeFilter] = useState<"all" | "live" | "ebooks">("all");
   const [priceFilter, setPriceFilter] = useState("All");
   const [skillFilter, setSkillFilter] = useState("All");
   const [instructorFilter, setInstructorFilter] = useState("All");
@@ -246,6 +248,9 @@ function CoursesPageInner() {
 
   const filtered = useMemo(() => {
     const result = courses.filter(c => {
+      const ct = c.course_type || "live_batch";
+      const matchType = typeFilter === "all" ||
+        (typeFilter === "live" ? ct === "live_batch" : ct !== "live_batch");
       const matchSearch = c.title.toLowerCase().includes(search.toLowerCase()) || (c.description ?? "").toLowerCase().includes(search.toLowerCase());
       let matchPrice = true;
       if (priceFilter === "Free") matchPrice = c.is_free;
@@ -260,7 +265,7 @@ function CoursesPageInner() {
       if (featureFilters.has("Certificate")) matchFeat = matchFeat && !!c.has_certificate;
       if (featureFilters.has("New")) matchFeat = matchFeat && !!c.is_new;
       if (featureFilters.has("Bestseller")) matchFeat = matchFeat && !!c.is_featured;
-      return matchSearch && matchPrice && matchSkill && matchInst && matchFeat;
+      return matchType && matchSearch && matchPrice && matchSkill && matchInst && matchFeat;
     });
 
     const isUsd = (c: Course) => c.currency === "USD";
@@ -279,10 +284,10 @@ function CoursesPageInner() {
       default: result.sort((a, b) => Number(b.is_featured) - Number(a.is_featured) || b.id - a.id);
     }
     return result;
-  }, [courses, search, priceFilter, skillFilter, instructorFilter, featureFilters, sortBy]);
+  }, [courses, typeFilter, search, priceFilter, skillFilter, instructorFilter, featureFilters, sortBy]);
 
   // Reset visible count whenever filters/search/sort change
-  useEffect(() => { setVisibleCount(itemsPerPage); }, [search, priceFilter, skillFilter, instructorFilter, featureFilters, sortBy]);
+  useEffect(() => { setVisibleCount(itemsPerPage); }, [typeFilter, search, priceFilter, skillFilter, instructorFilter, featureFilters, sortBy]);
 
   useScrollReveal([filtered, listView, visibleCount]);
 
@@ -396,6 +401,19 @@ function CoursesPageInner() {
 
       {/* MAIN LAYOUT */}
       <div className="cc-layout">
+
+          {/* TYPE FILTER TABS */}
+          <div className="cc-type-tabs" role="tablist" aria-label="Filter by course type">
+            <button role="tab" aria-selected={typeFilter === "all"} className={`cc-type-tab ${typeFilter === "all" ? "is-active" : ""}`} onClick={() => setTypeFilter("all")}>
+              All Courses
+            </button>
+            <button role="tab" aria-selected={typeFilter === "live"} className={`cc-type-tab ${typeFilter === "live" ? "is-active" : ""}`} onClick={() => setTypeFilter("live")}>
+              <span className="cc-live-dot" aria-hidden="true" /> Live
+            </button>
+            <button role="tab" aria-selected={typeFilter === "ebooks"} className={`cc-type-tab ${typeFilter === "ebooks" ? "is-active" : ""}`} onClick={() => setTypeFilter("ebooks")}>
+              eBooks
+            </button>
+          </div>
 
           {/* TOP FILTER BAR */}
           <div className="cc-filter-bar">

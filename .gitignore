@@ -26,6 +26,9 @@ frontend/public/tinymce/
 # Uploads (user-generated content)
 backend/uploads/
 
+# Generated public eBook sample PDFs (runtime cache)
+backend/ebooks_samples/
+
 # Logs
 *.log
 backend/*.log

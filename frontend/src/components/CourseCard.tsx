@@ -25,6 +25,7 @@ export interface CourseCardType {
   has_certificate?: boolean;
   promo_video_url?: string;
   show_on_homepage?: boolean;
+  course_type?: string;
 }
 
 // Inline SVG icons (replacing emoji for a11y)
@@ -52,6 +53,9 @@ const Icon = {
   ),
   Book: () => (
     <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+  ),
+  BookMini: () => (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
   ),
   Cert: () => (
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
@@ -106,6 +110,14 @@ export default function CourseCard({
   const initials = displayInstructorName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
   const thumb = resolveAssetUrl(course.thumbnail_url);
 
+  // course-type chip (live_batch | ebook | ebook_video)
+  const ct = course.course_type || "live_batch";
+  const typeChip = ct === "live_batch"
+    ? <span className="cc-type-chip cc-type-live"><span className="cc-live-dot" aria-hidden="true" />Live</span>
+    : ct === "ebook"
+    ? <span className="cc-type-chip cc-type-ebook"><Icon.BookMini />eBook</span>
+    : <span className="cc-type-chip cc-type-ebook"><Icon.BookMini />eBook + Video</span>;
+
   if (listView) {
     return (
       <div className="cc-card cc-card-list reveal-item" onClick={() => router.push(`/courses/${course.slug}`)} style={{ cursor: "pointer" }}>
@@ -120,6 +132,7 @@ export default function CourseCard({
         </Link>
         <div className="cc-body cc-body-list">
           <div className="cc-meta">
+            {typeChip}
             <span className="cc-level-chip">{course.skill_level || "Any Level"}</span>
             {course.has_certificate && <span className="cc-cert-chip"><Icon.Cert /> Certificate</span>}
             <span className="cc-meta-est" title="Estimated — pending final data">~{fakeDuration}h (est.)</span>
@@ -175,6 +188,7 @@ export default function CourseCard({
 
       <div className="cc-body">
         <div className="cc-meta">
+          {typeChip}
           <span className="cc-level-chip">{course.skill_level || "Any Level"}</span>
           {course.has_certificate && <span className="cc-cert-chip"><Icon.Cert /> Certificate</span>}
           <span className="cc-meta-est" style={{ marginLeft: "auto" }} title="Estimated — pending final data">~{fakeDuration}h (est.)</span>

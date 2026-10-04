@@ -7,15 +7,19 @@ from datetime import datetime
 import re
 import json
 import os
+import logging
 from pydantic import BaseModel
 
 from database import get_db
 import models
+import ebook_storage
 from routers.auth import require_device
 from helpers import rewrite_url, BASE_URL
 from security import check_public_rate_limit, get_client_ip
 
 router = APIRouter(prefix="/api", tags=["courses"])
+
+logger = logging.getLogger(__name__)
 
 # ─── PYDANTIC SCHEMAS ──────────────────────────────────────────
 
@@ -536,6 +540,158 @@ def get_public_courses(search: Optional[str] = None, db: Session = Depends(get_d
         })
     return result
 
+# ─── Public eBook metadata + sample preview ─────────────────────
+# Sample policy: TOC entries explicitly flagged {"sample": true} are public;
+# when none are flagged the FIRST chapter is the sample. The sample is
+# hard-capped at EBOOK_SAMPLE_MAX_PAGES so a malformed TOC can never expose
+# the whole book. The full file is never reachable publicly — samples are
+# generated server-side and cached outside the public /uploads tree.
+EBOOK_SAMPLE_MAX_PAGES = 40
+EBOOK_SAMPLE_CACHE_DIR = "ebooks_samples"
+os.makedirs(EBOOK_SAMPLE_CACHE_DIR, exist_ok=True)
+
+
+def _ebook_sample_chapters(toc: list) -> set:
+    """Indexes of TOC chapters that are publicly readable as samples."""
+    if not toc:
+        return set()
+    flagged = {i for i, t in enumerate(toc) if isinstance(t, dict) and t.get("sample")}
+    return flagged if flagged else {0}
+
+
+def _ebook_sample_end_page(mat: models.CourseMaterial) -> int:
+    """Last 1-based page included in the public sample."""
+    toc = mat.ebook_toc if isinstance(mat.ebook_toc, list) else []
+    total = mat.ebook_page_count or 0
+    sample_idx = _ebook_sample_chapters(toc)
+    if not sample_idx:
+        return min(10, total) if total else 0
+    non_sample_starts = [
+        int(t.get("page") or 0)
+        for i, t in enumerate(toc)
+        if i not in sample_idx and isinstance(t, dict)
+    ]
+    non_sample_starts = [p for p in non_sample_starts if p > 0]
+    end = (min(non_sample_starts) - 1) if non_sample_starts else (total or EBOOK_SAMPLE_MAX_PAGES)
+    if total:
+        end = min(end, total)
+    return max(0, min(end, EBOOK_SAMPLE_MAX_PAGES))
+
+
+def _public_ebook_blocks(c: models.Course) -> list:
+    """Public eBook metadata for the landing page — cover, chapter list and
+    per-chapter sample flags. Never exposes file keys or file URLs."""
+    if (c.course_type or "live_batch") not in ("ebook", "ebook_video"):
+        return []
+    ebooks = []
+    for ch in sorted(c.chapters, key=lambda x: x.order_position):
+        if not ch.is_active:
+            continue
+        for mat in ch.materials:
+            if mat.file_type != "ebook" or not mat.ebook_file_key:
+                continue
+            toc = mat.ebook_toc if isinstance(mat.ebook_toc, list) else []
+            sample_idx = _ebook_sample_chapters(toc)
+            ebooks.append({
+                "material_id": mat.id,
+                "title": mat.title,
+                "description": mat.description,
+                "cover_url": rewrite_url(mat.ebook_cover_url),
+                "page_count": mat.ebook_page_count,
+                "chapters": [
+                    {
+                        "index": i,
+                        "title": (t.get("title") if isinstance(t, dict) else None) or f"Chapter {i + 1}",
+                        "page": t.get("page") if isinstance(t, dict) else None,
+                        "is_sample": i in sample_idx,
+                    }
+                    for i, t in enumerate(toc)
+                ],
+                "sample_url": f"/api/public/ebooks/{mat.id}/sample",
+            })
+    return ebooks
+
+
+@router.get("/public/ebooks/{material_id}/sample")
+def get_public_ebook_sample(material_id: int, request: Request, db: Session = Depends(get_db)):
+    """Public: a sliced PDF containing only the free sample chapter(s) of an
+    eBook. The full file is never exposed — the sample is generated
+    server-side via PyPDF2 and cached on disk outside the public tree."""
+    check_public_rate_limit(get_client_ip(request), limit=30, window=60)
+
+    mat = db.query(models.CourseMaterial).filter(models.CourseMaterial.id == material_id).first()
+    if not mat or mat.file_type != "ebook" or not mat.ebook_file_key:
+        raise HTTPException(status_code=404, detail="eBook sample not found")
+
+    # Gate: the material must hang off a PUBLISHED ebook-type course —
+    # otherwise anyone could mint sample URLs for unpublished assets.
+    course_ids = [
+        r[0] for r in db.query(models.course_chapters.c.course_id)
+        .join(models.topic_materials,
+              models.topic_materials.c.topic_id == models.course_chapters.c.chapter_id)
+        .filter(models.topic_materials.c.material_id == material_id)
+        .all()
+    ]
+    published = db.query(models.Course.id).filter(
+        models.Course.id.in_(course_ids or [-1]),
+        models.Course.status == "PUBLISHED",
+        models.Course.course_type.in_(["ebook", "ebook_video"]),
+    ).first()
+    if not published:
+        raise HTTPException(status_code=404, detail="eBook sample not found")
+
+    end_page = _ebook_sample_end_page(mat)
+    if end_page < 1:
+        raise HTTPException(status_code=404, detail="No sample pages configured for this eBook")
+
+    stamp = int(mat.updated_at.timestamp()) if mat.updated_at else 0
+    cache_path = os.path.join(EBOOK_SAMPLE_CACHE_DIR, f"{material_id}_{end_page}_{stamp}.pdf")
+    if not os.path.exists(cache_path):
+        from io import BytesIO
+        from PyPDF2 import PdfReader, PdfWriter
+        try:
+            obj = ebook_storage.read_ebook_object(db, mat.ebook_file_key)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="eBook file not found in storage")
+        try:
+            reader = PdfReader(BytesIO(obj["content"]))
+            if reader.is_encrypted:
+                reader.decrypt("")
+            writer = PdfWriter()
+            for i in range(min(end_page, len(reader.pages))):
+                writer.add_page(reader.pages[i])
+            buf = BytesIO()
+            writer.write(buf)
+            data = buf.getvalue()
+        except Exception as e:
+            logger.error(f"eBook sample generation failed for material {material_id}: {e}")
+            raise HTTPException(status_code=422, detail="Could not generate eBook sample")
+        tmp = f"{cache_path}.{os.getpid()}.tmp"
+        with open(tmp, "wb") as f:
+            f.write(data)
+        os.replace(tmp, cache_path)
+        # drop stale samples for the same material
+        for fname in os.listdir(EBOOK_SAMPLE_CACHE_DIR):
+            if fname.startswith(f"{material_id}_") and fname != os.path.basename(cache_path):
+                try:
+                    os.remove(os.path.join(EBOOK_SAMPLE_CACHE_DIR, fname))
+                except OSError:
+                    pass
+    else:
+        with open(cache_path, "rb") as f:
+            data = f.read()
+
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="ebook-sample-{material_id}.pdf"',
+            "Cache-Control": "public, max-age=3600",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 @router.get("/public/courses/{slug}")
 def get_public_course_details(slug: str, db: Session = Depends(get_db)):
     c = db.query(models.Course).filter(models.Course.slug == slug, models.Course.status == "PUBLISHED").first()
@@ -629,6 +785,7 @@ def get_public_course_details(slug: str, db: Session = Depends(get_db)):
             "is_paid": bool(c.mock_test_price and c.mock_test_price > 0),
             "price": c.mock_test_price,
         },
+        "ebooks": _public_ebook_blocks(c),
         "chapters": chapters_data,
         "instructors": instructors_data,
         # ── SEO fields (additive — already in DB, now exposed for SSR metadata) ──
@@ -869,6 +1026,16 @@ def get_public_course_extended_details(slug: str, db: Session = Depends(get_db))
 
     ext = c.extended_content
 
+    # eBook landings get neutral defaults instead of live-cohort copy so an
+    # unconfigured eBook page never advertises "Live Cohorts & 1:1 Mentorship".
+    if (c.course_type or "live_batch") in ("ebook", "ebook_video"):
+        defaults["hero_badges"] = [
+            "Instant Access After Purchase",
+            "Read In Your Browser — No Downloads",
+            "Free Sample Chapter",
+            "Certificate on Completion",
+        ]
+
     def safe_parse(json_str, fallback):
         if not json_str:
             return fallback
@@ -876,6 +1043,19 @@ def get_public_course_extended_details(slug: str, db: Session = Depends(get_db))
             return json.loads(json_str)
         except Exception:
             return fallback
+
+    # Which sections did the admin actually write? Defaults are merged into
+    # `extended` for live courses, but eBook landings suppress marketing
+    # sections that were never configured for this course.
+    configured = {
+        f: bool(getattr(ext, f"{f}_json", None)) if ext else False
+        for f in [
+            "hero_badges", "hiring_companies", "market_impact", "who_is_for",
+            "career_outcomes", "projects", "comparison_matrix", "certificates",
+            "video_testimonials", "faqs", "video_playlist", "tools_covered",
+        ]
+    }
+    base_data["extended_configured"] = configured
 
     extended_data = {
         "hero_badges": safe_parse(ext.hero_badges_json if ext else None, defaults["hero_badges"]),

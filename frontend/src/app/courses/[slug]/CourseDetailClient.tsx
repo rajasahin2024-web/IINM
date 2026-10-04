@@ -229,6 +229,13 @@ interface Material { id: number; title: string; file_type: string; }
 interface LiveClassItem { id: number; title: string; }
 interface SubjectRef { id: number; name: string; }
 interface Chapter { id: number; title: string; subject?: SubjectRef | null; materials: Material[]; live_classes?: LiveClassItem[]; }
+interface EbookChapter { index: number; title: string; page: number | null; is_sample: boolean; }
+interface EbookBlock {
+  material_id: number; title: string; description: string | null;
+  cover_url: string | null; page_count: number | null;
+  chapters: EbookChapter[]; sample_url: string;
+}
+interface MockTestInfo { configured: boolean; is_paid: boolean; price: number | null; }
 interface Instructor {
   id: number; name: string; bio?: string | null; email?: string | null; avatar_url?: string | null;
   qualification?: string | null; experience_years?: string | null; designation?: string | null;
@@ -246,7 +253,11 @@ interface CourseDetails {
   upload_syllabus: string | null; chapters: Chapter[]; instructors: Instructor[];
   min_payment_value: number | null;
   min_payment_type: string | null;
+  course_type?: string;
+  mock_test?: MockTestInfo;
+  ebooks?: EbookBlock[];
   extended?: any;
+  extended_configured?: Record<string, boolean>;
 }
 interface ProjectCard {
   title: string;
@@ -613,6 +624,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
   const [brochurePdfUrl, setBrochurePdfUrl] = useState<string | null>(null);
   const [slotBookingOpen, setSlotBookingOpen] = useState(false);
   const [videoModalUrl, setVideoModalUrl] = useState<string | null>(null);
+  const [ebookSampleUrl, setEbookSampleUrl] = useState<string | null>(null);
   const [submittingLead, setSubmittingLead] = useState(false);
 
   // Admin Inline Drawer Editor State
@@ -1046,6 +1058,11 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
 
   const ext = course.extended || {};
 
+  // ── Course type (live_batch | ebook | ebook_video) ──
+  const courseType = course.course_type || "live_batch";
+  const isEbookType = courseType === "ebook" || courseType === "ebook_video";
+  const primaryEbook: EbookBlock | null = (course.ebooks && course.ebooks.length > 0) ? course.ebooks[0] : null;
+
   // Parse hero content — backward compatible: array = old format, object = new format
   const heroRaw = ext.hero_badges || {};
   const heroContent: HeroContent = Array.isArray(heroRaw)
@@ -1062,6 +1079,24 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
       };
   const heroBadges = heroContent.badges || DEFAULT_BADGES;
   const heroStats = heroContent.stats || DEFAULT_HERO_STATS;
+  // eBook landings default the primary CTA to an instant-access purchase;
+  // an admin-set cta_primary always wins.
+  const adminCtaPrimary = (!Array.isArray(heroRaw) && heroRaw.cta_primary) ? heroRaw.cta_primary : "";
+  const primaryCtaLabel = adminCtaPrimary || (isEbookType ? "Buy eBook — Instant Access" : "Apply Now & Enroll");
+  const typeBadgeLabel = courseType === "ebook" ? "eBook — Instant Access" : courseType === "ebook_video" ? "eBook + Recorded Videos" : null;
+
+  // eBook landings suppress live-cohort marketing sections unless the admin
+  // explicitly configured that section for this course.
+  const extCfg = course.extended_configured || {};
+  const showMarquee = !isEbookType;
+  const showVideoPlaylist = !isEbookType || !!extCfg.video_playlist;
+  const showMarket = !isEbookType || !!extCfg.market_impact;
+  const showWho = !isEbookType || !!extCfg.who_is_for;
+  const showOutcomes = !isEbookType || !!extCfg.career_outcomes;
+  const showCurriculum = courseType !== "ebook";
+  const showProjects = !isEbookType || !!extCfg.projects;
+  const showCompare = !isEbookType || !!extCfg.comparison_matrix;
+  const showTools = !isEbookType || !!extCfg.tools_covered;
 
   const hiringCompanies = ext.hiring_companies || [];
   const marketImpact = ext.market_impact || {};
@@ -1196,8 +1231,13 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
               </div>
 
               <div className="cd-badge-pills">
+                {typeBadgeLabel && (
+                  <span className="cd-badge-pill ebook-type">
+                    <Icons.FileText /> {typeBadgeLabel}
+                  </span>
+                )}
                 {heroBadges.map((b: string, i: number) => (
-                  <span key={i} className={`cd-badge-pill ${i === 0 ? "hot" : ""}`}>
+                  <span key={i} className={`cd-badge-pill ${i === 0 && !typeBadgeLabel ? "hot" : ""}`}>
                     <Icons.Sparkles /> {b}
                   </span>
                 ))}
@@ -1213,7 +1253,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
 
               <div className="cd-hero-cta-group">
                 <button onClick={() => setSlotBookingOpen(true)} className="cd-btn-primary">
-                  {heroContent.cta_primary || "Apply Now & Enroll"}
+                  {primaryCtaLabel}
                 </button>
                 <button onClick={() => handleBrochureClick()} className="cd-btn-secondary">
                   <Icons.Download /> {heroContent.cta_secondary || "Download Brochure / Syllabus"}
@@ -1232,12 +1272,17 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
 
             {/* Hero Right Preview Card */}
             <div className="cd-hero-card">
-              <div className="cd-hero-card-video">
-                {course.thumbnail_url ? (
-                  <img src={course.thumbnail_url.startsWith("http") ? course.thumbnail_url : `${baseUrl}${course.thumbnail_url}`} alt={course.title} />
-                ) : (
-                  <div style={{ width: "100%", height: "100%", background: "#0f1f38" }} />
-                )}
+              <div className={`cd-hero-card-video${isEbookType && primaryEbook?.cover_url ? " cd-hero-card-ebook-cover" : ""}`}>
+                {(() => {
+                  const imgSrc = isEbookType && primaryEbook?.cover_url
+                    ? primaryEbook.cover_url
+                    : course.thumbnail_url;
+                  return imgSrc ? (
+                    <img src={imgSrc.startsWith("http") ? imgSrc : `${baseUrl}${imgSrc}`} alt={course.title} />
+                  ) : (
+                    <div style={{ width: "100%", height: "100%", background: "#0f1f38" }} />
+                  );
+                })()}
               </div>
 
               <div className="cd-hero-card-body">
@@ -1255,18 +1300,37 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                   )}
                 </div>
 
-                <ul className="cd-card-benefits">
-                  <li><Icons.CheckCircle /> Live Interactive Classes & Recordings</li>
-                  <li><Icons.CheckCircle /> Capstone Projects for `#projects_sec`</li>
-                  <li><Icons.CheckCircle /> {course.validity_days ? `${course.validity_days} Days Access` : "Lifetime Dashboard Access"}</li>
-                  {course.has_certificate && <li><Icons.Award /> Industry Recognized AI Certificate</li>}
-                </ul>
+                {isEbookType ? (
+                  <ul className="cd-card-benefits">
+                    <li><Icons.CheckCircle /> Instant access — read in your browser</li>
+                    {primaryEbook?.page_count ? <li><Icons.CheckCircle /> {primaryEbook.page_count} pages{primaryEbook.chapters.length > 0 ? ` · ${primaryEbook.chapters.length} chapters` : ""}</li> : null}
+                    {courseType === "ebook_video" && <li><Icons.CheckCircle /> Recorded videos unlock as you finish reading</li>}
+                    {primaryEbook && <li><Icons.CheckCircle /> Free sample chapter — no login needed</li>}
+                    <li><Icons.CheckCircle /> {course.validity_days ? `${course.validity_days} Days Access` : "Lifetime Dashboard Access"}</li>
+                    {course.has_certificate && <li><Icons.Award /> Certificate on completion</li>}
+                  </ul>
+                ) : (
+                  <ul className="cd-card-benefits">
+                    <li><Icons.CheckCircle /> Live Interactive Classes & Recordings</li>
+                    <li><Icons.CheckCircle /> Capstone Projects for `#projects_sec`</li>
+                    <li><Icons.CheckCircle /> {course.validity_days ? `${course.validity_days} Days Access` : "Lifetime Dashboard Access"}</li>
+                    {course.has_certificate && <li><Icons.Award /> Industry Recognized AI Certificate</li>}
+                  </ul>
+                )}
 
-                <button onClick={() => setSlotBookingOpen(true)} className="cd-btn-primary" style={{ width: "100%", justifyContent: "center" }}>
-                  {course.min_payment_value && course.min_payment_value > 0
-                    ? `Book Your Slot — ${currencySymbol}${Number(course.min_payment_value).toLocaleString()}`
-                    : "Book Your Slot"}
-                </button>
+                {isEbookType ? (
+                  <button onClick={() => setSlotBookingOpen(true)} className="cd-btn-primary" style={{ width: "100%", justifyContent: "center" }}>
+                    {displayPrice != null
+                      ? `Buy eBook — ${currencySymbol}${Number(displayPrice).toLocaleString()}`
+                      : "Buy eBook — Instant Access"}
+                  </button>
+                ) : (
+                  <button onClick={() => setSlotBookingOpen(true)} className="cd-btn-primary" style={{ width: "100%", justifyContent: "center" }}>
+                    {course.min_payment_value && course.min_payment_value > 0
+                      ? `Book Your Slot — ${currencySymbol}${Number(course.min_payment_value).toLocaleString()}`
+                      : "Book Your Slot"}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -1274,6 +1338,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
       </div>
 
       {/* ── HIRING PARTNERS LOGO MARQUEE ── */}
+      {showMarquee && (
       <section className="cd-partners-sec">
         <div className="cd-partners-title">Top Companies Hiring Our AI Graduates</div>
         <div className="cd-partners-marquee">
@@ -1303,8 +1368,10 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
           </div>
         </div>
       </section>
+      )}
 
       {/* ── VIDEO PLAYER WITH PLAYLIST ── */}
+      {showVideoPlaylist && (
       <div className="cd-section-wrapper">
         {isAdmin && (
           <button onClick={() => {
@@ -1442,8 +1509,10 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
           </div>
         </section>
       </div>
+      )}
 
       {/* ── TOOLS COVERED MARQUEE (left-to-right) ── */}
+      {showTools && (
       <section className="cd-tools-sec">
         {isAdmin && (
           <button onClick={() => {
@@ -1493,8 +1562,10 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
           </div>
         </div>
       </section>
+      )}
 
       {/* ── MARKET IMPACT & INDUSTRY DEMAND ── */}
+      {showMarket && (
       <div className="cd-section-wrapper">
         {isAdmin && (
           <button onClick={() => {
@@ -1584,8 +1655,10 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
           </div>
         </section>
       </div>
+      )}
 
       {/* ── WHO IS THIS PROGRAM FOR (REDESIGNED) ── */}
+      {showWho && (
       <div className="cd-section-wrapper">
         {isAdmin && (
           <button onClick={() => {
@@ -1623,7 +1696,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
 
               <div className="cd-who-cta-row">
                 <button className="cd-who-cta-btn" onClick={() => setSlotBookingOpen(true)}>
-                  <Icons.Sparkles /> Enroll & Apply Now
+                  <Icons.Sparkles /> {primaryCtaLabel}
                 </button>
                 <button className="cd-who-video-btn" onClick={() => setVideoModalUrl(course?.promo_video_url || "https://www.youtube.com/embed/dQw4w9WgXcQ")}>
                   <Icons.Video /> Watch Course Overview
@@ -1656,8 +1729,10 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
           </div>
         </section>
       </div>
+      )}
 
       {/* ── CAREER OUTCOMES & ALUMNI STATS ── */}
+      {showOutcomes && (
       <div className="cd-section-wrapper">
         {isAdmin && (
           <button onClick={() => {
@@ -1758,8 +1833,94 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
           </div>
         </section>
       </div>
+      )}
+
+      {/* ── WHAT'S INSIDE THE EBOOK ── */}
+      {isEbookType && primaryEbook && (
+        <section className="cd-ebook-sec">
+          <div className="cd-container">
+            <div className="cd-sec-header">
+              <span className="cd-sec-eyebrow">Inside the eBook</span>
+              <h2 className="cd-sec-title">What is <span style={{ color: "#2563eb" }}>Inside</span> This eBook</h2>
+              <p className="cd-sec-desc">
+                {primaryEbook.description
+                  ? primaryEbook.description.replace(/<[^>]+>/g, "")
+                  : "A chapter-by-chapter look at everything covered in this eBook."}
+              </p>
+            </div>
+
+            <div className="cd-ebook-layout">
+              {/* Cover + sample CTA */}
+              <div className="cd-ebook-cover-col">
+                <div className="cd-ebook-cover">
+                  {primaryEbook.cover_url ? (
+                    <img src={primaryEbook.cover_url.startsWith("http") ? primaryEbook.cover_url : `${baseUrl}${primaryEbook.cover_url}`} alt={`${primaryEbook.title} cover`} />
+                  ) : (
+                    <div className="cd-ebook-cover-placeholder"><Icons.FileText /></div>
+                  )}
+                </div>
+                <div className="cd-ebook-cover-meta">
+                  {primaryEbook.page_count ? <span>{primaryEbook.page_count} pages</span> : null}
+                  {primaryEbook.chapters.length > 0 ? <span>{primaryEbook.chapters.length} chapters</span> : null}
+                  <span>Browser reader</span>
+                </div>
+                <button
+                  className="cd-ebook-sample-btn"
+                  onClick={() => setEbookSampleUrl(primaryEbook.sample_url)}
+                >
+                  <Icons.FileText /> Read Free Sample
+                </button>
+                <p className="cd-ebook-sample-note">No login required — first chapter free</p>
+              </div>
+
+              {/* Chapter list */}
+              <div className="cd-ebook-toc-col">
+                {primaryEbook.chapters.length === 0 ? (
+                  <div className="cd-ebook-toc-empty">Table of contents is being updated.</div>
+                ) : (
+                  <ul className="cd-ebook-toc">
+                    {primaryEbook.chapters.map((ch) => (
+                      <li key={ch.index} className={`cd-ebook-toc-item${ch.is_sample ? " is-sample" : ""}`}>
+                        <span className="cd-ebook-toc-num">{String(ch.index + 1).padStart(2, "0")}</span>
+                        <span className="cd-ebook-toc-title">{ch.title}</span>
+                        {ch.is_sample ? (
+                          <button
+                            className="cd-ebook-toc-sample"
+                            onClick={() => setEbookSampleUrl(primaryEbook.sample_url)}
+                          >
+                            Free preview
+                          </button>
+                        ) : (
+                          <span className="cd-ebook-toc-lock" title="Unlock after purchase">
+                            <Icons.Lock />
+                          </span>
+                        )}
+                        {ch.page ? <span className="cd-ebook-toc-page">p. {ch.page}</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <div className="cd-ebook-buy-bar">
+                  <button onClick={() => setSlotBookingOpen(true)} className="cd-btn-primary">
+                    {primaryCtaLabel}
+                  </button>
+                  {course.mock_test?.configured && (
+                    <span className="cd-ebook-mock-note">
+                      {course.mock_test.is_paid
+                        ? `Mock test available — ${currencySymbol}${Number(course.mock_test.price || 0).toLocaleString()} extra`
+                        : "Free mock test included"}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ── STRUCTURED CURRICULUM ROADMAP ── */}
+      {showCurriculum && (
       <section className="cd-curriculum-sec">
         <div className="cd-container">
           <div className="cd-sec-header">
@@ -1862,8 +2023,10 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
           </div>
         </div>
       </section>
+      )}
 
       {/* ── REAL-WORLD CAPSTONE PROJECTS (#projects_sec) ── */}
+      {showProjects && (
       <div className="cd-section-wrapper" id="projects_sec">
         {isAdmin && (
           <button onClick={() => {
@@ -1910,14 +2073,15 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
           </div>
         </section>
       </div>
+      )}
 
       {/* ── MENTORS & INSTRUCTORS ── */}
       {course.show_instructor_publicly && course.instructors?.length > 0 && (
         <section className="cd-mentors-sec">
           <div className="cd-container">
             <div className="cd-sec-header">
-              <span className="cd-sec-eyebrow">INSTRUCTOR & MENTORS</span>
-              <h2 className="cd-sec-title">Learn from <span style={{ color: "#3b82f6" }}>Senior GenAI</span> Experts</h2>
+              <span className="cd-sec-eyebrow">{isEbookType ? "AUTHOR" : "INSTRUCTOR & MENTORS"}</span>
+              <h2 className="cd-sec-title">{isEbookType ? <>About the <span style={{ color: "#3b82f6" }}>Author</span></> : <>Learn from <span style={{ color: "#3b82f6" }}>Senior GenAI</span> Experts</>}</h2>
             </div>
 
             <div className="cd-mentors-carousel">
@@ -1997,6 +2161,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
       )}
 
       {/* ── WHY CHOOSE US (COMPARISON MATRIX) ── */}
+      {showCompare && (
       <div className="cd-section-wrapper">
         {isAdmin && (
           <button onClick={() => {
@@ -2121,6 +2286,7 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
           </div>
         </section>
       </div>
+      )}
 
       {/* ── CERTIFICATES SECTION ── */}
       <div className="cd-section-wrapper">
@@ -2161,22 +2327,32 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
                 Don&apos;t wait to start <br /> your <em>growth journey</em>.
               </h2>
               <p className="cd-cta-subtitle">
-                Thousands of professionals have switched to their dream data roles with IINM. <strong>Your transformation could be next.</strong>
+                {isEbookType
+                  ? <>Get the complete eBook instantly — <strong>start reading in your browser in under a minute.</strong></>
+                  : <>Thousands of professionals have switched to their dream data roles with IINM. <strong>Your transformation could be next.</strong></>}
               </p>
               <button onClick={() => setSlotBookingOpen(true)} className="cd-cta-btn">
-                <span>Book Your Admission Slot</span>
+                <span>{isEbookType ? "Buy eBook — Instant Access" : "Book Your Admission Slot"}</span>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
               </button>
-              <span className="cd-cta-note">Join the next batch before seats fill up!</span>
+              <span className="cd-cta-note">{isEbookType ? "Pay once — read anywhere, anytime." : "Join the next batch before seats fill up!"}</span>
             </div>
             <div className="cd-cta-right">
               <div className="cd-cta-list">
-                {[
-                  "1:1 Mentorship with Experts",
-                  "Live Interactive Sessions",
-                  "Build industry-grade projects",
-                  "End-to-End placement support"
-                ].map((item, i) => (
+                {(isEbookType
+                  ? [
+                      "Instant access after payment",
+                      "Read in your browser — no downloads",
+                      "Free sample chapter included",
+                      course.has_certificate ? "Certificate on completion" : "Lifetime access",
+                    ]
+                  : [
+                      "1:1 Mentorship with Experts",
+                      "Live Interactive Sessions",
+                      "Build industry-grade projects",
+                      "End-to-End placement support"
+                    ]
+                ).map((item, i) => (
                   <div key={i} className="cd-cta-list-item">
                     <span className="cd-cta-check">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -2247,8 +2423,17 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
       <SlotBookingDrawer
         open={slotBookingOpen}
         onClose={() => setSlotBookingOpen(false)}
-        course={course ? { id: course.id, title: course.title, slug: course.slug, price: course.price, discount_price: course.discount_price, is_free: course.is_free, currency: course.currency, min_payment_type: course.min_payment_type, min_payment_value: course.min_payment_value, full_payment_discount_type: (course as any).full_payment_discount_type, full_payment_discount_value: (course as any).full_payment_discount_value, full_payment_discount_valid_till: (course as any).full_payment_discount_valid_till } : null}
+        course={course ? { id: course.id, title: course.title, slug: course.slug, price: course.price, discount_price: course.discount_price, is_free: course.is_free, currency: course.currency, course_type: course.course_type, min_payment_type: course.min_payment_type, min_payment_value: course.min_payment_value, full_payment_discount_type: (course as any).full_payment_discount_type, full_payment_discount_value: (course as any).full_payment_discount_value, full_payment_discount_valid_till: (course as any).full_payment_discount_valid_till } : null}
       />
+
+      {/* ── EBOOK FREE SAMPLE PREVIEW (pdf.js, no download) ── */}
+      {ebookSampleUrl && (
+        <BrochurePreview
+          url={ebookSampleUrl}
+          title="Free Sample"
+          onClose={() => setEbookSampleUrl(null)}
+        />
+      )}
 
       {/* ── BROCHURE LEAD CAPTURE MODAL ── */}
       <BrochureModal

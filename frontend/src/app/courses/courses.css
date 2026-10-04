@@ -417,6 +417,75 @@
   box-shadow: 0 0 0 3px var(--cc-red-soft);
 }
 
+/* ── Course-type tabs (All | Live | eBooks) ── */
+.cc-type-tabs {
+  display: inline-flex;
+  gap: 4px;
+  background: var(--cc-card);
+  border: 1px solid var(--cc-border);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 14px;
+  box-shadow: 0 2px 8px rgba(10, 22, 40, 0.04);
+}
+.cc-type-tab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--cc-sub);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 9px 18px;
+  border-radius: 9px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+.cc-type-tab:hover { color: var(--cc-text); }
+.cc-type-tab.is-active {
+  background: var(--cc-navy);
+  color: #fff;
+}
+.cc-type-tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--cc-red-soft);
+}
+.cc-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cc-red);
+  display: inline-block;
+}
+.cc-type-tab.is-active .cc-live-dot {
+  box-shadow: 0 0 6px rgba(230, 57, 70, 0.9);
+}
+
+/* ── Course-type chip (card meta row) ── */
+.cc-type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.cc-type-live {
+  background: #fef2f2;
+  color: var(--cc-red);
+  border: 1px solid var(--cc-red-border);
+}
+.cc-type-ebook {
+  background: #eef4ff;
+  color: #1d4ed8;
+  border: 1px solid #c7d9fe;
+}
+
 .cc-filter-spacer { flex: 1; }
 
 /* Mobile filter toggle (hidden on desktop) */

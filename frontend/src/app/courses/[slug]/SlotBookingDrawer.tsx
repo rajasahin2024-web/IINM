@@ -15,6 +15,7 @@ interface Course {
   id: number;
   title: string;
   slug?: string;
+  course_type?: string;
   price?: number | null;
   discount_price?: number | null;
   is_free?: boolean;
@@ -63,6 +64,12 @@ const STUDENT_CATEGORIES = [
 ];
 
 const STEPS = ["Details", "Batch", "Pay", "Done"];
+// eBook purchases skip the Batch step (auto-assigned server-side).
+const EBOOK_STEP_INDICES = [0, 2, 3];
+const ALL_STEP_INDICES = [0, 1, 2, 3];
+
+const isEbookCourse = (c?: Course | null) =>
+  (c?.course_type || "live_batch") !== "live_batch";
 
 /* ─────────────────────────────────────────
    Icons
@@ -166,6 +173,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
   const [payMode, setPayMode] = useState<"booking" | "full">("booking");
   const [error, setError] = useState("");
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
+  const [autoLoginDone, setAutoLoginDone] = useState(false);
 
   // Form state
   const [selectedCourseId, setSelectedCourseId] = useState<number | "">("");
@@ -196,6 +204,10 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
   const razorpayScriptLoaded = useRef(false);
   const locationAutoTriggeredRef = useRef(false);
 
+  // Course-type derivation — must come before effects/dep arrays that read it.
+  const selectedCourse = courses.find(c => c.id === selectedCourseId) || course;
+  const isEbook = isEbookCourse(selectedCourse);
+
   // Reset & init when opened
   useEffect(() => {
     if (open && course) {
@@ -222,13 +234,26 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
     }
   }, [open, step, selectedCourseId]);
 
-  // Auto-detect location once when the drawer opens and config is loaded
+  // eBook purchase success — the backend already set the student session
+  // cookie, so hand off to the in-platform reader after a short beat.
   useEffect(() => {
-    if (open && !locating && config && !locationAutoTriggeredRef.current) {
+    if (step === 3 && autoLoginDone && selectedCourseId) {
+      const t = setTimeout(() => {
+        window.location.href = `/student/courses/${selectedCourseId}/ebook`;
+      }, 1600);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [step, autoLoginDone, selectedCourseId]);
+
+  // Auto-detect location once when the drawer opens and config is loaded
+  // (skipped for eBook purchases — no address needed for a digital download).
+  useEffect(() => {
+    if (open && !isEbook && !locating && config && !locationAutoTriggeredRef.current) {
       locationAutoTriggeredRef.current = true;
       handleDetectLocation();
     }
-  }, [open, locating, config]);
+  }, [open, isEbook, locating, config]);
 
   // Lock body scroll when open
   useEffect(() => {
@@ -486,14 +511,16 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
     if (!email.trim()) { setError("Please enter your email address."); return false; }
     if (!phone.trim()) { setError("Please enter your phone number."); return false; }
     if (!selectedCourseId) { setError("Please select a course."); return false; }
-    if (!category) { setError("Please select a student category."); return false; }
-    if (category === "Others" && !otherCategory.trim()) { setError("Please specify your category."); return false; }
     if (!agreeTerms) { setError("You must agree to the Terms & Conditions."); return false; }
-    // Location validation (merged from former step 1)
-    if (!address.trim()) { setError("Please enter your address."); return false; }
-    if (!stateName) { setError("Please select your state."); return false; }
-    if (!city.trim()) { setError("Please select your city."); return false; }
-    if (!pinCode.trim()) { setError("Please enter your pincode."); return false; }
+    if (!isEbook) {
+      if (!category) { setError("Please select a student category."); return false; }
+      if (category === "Others" && !otherCategory.trim()) { setError("Please specify your category."); return false; }
+      // Location validation (merged from former step 1)
+      if (!address.trim()) { setError("Please enter your address."); return false; }
+      if (!stateName) { setError("Please select your state."); return false; }
+      if (!city.trim()) { setError("Please select your city."); return false; }
+      if (!pinCode.trim()) { setError("Please enter your pincode."); return false; }
+    }
     setError("");
     return true;
   };
@@ -524,18 +551,18 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
     } else if (step === 1) {
       if (!validateStep1()) return;
     }
-    setStep(step + 1);
+    // eBook purchases skip the Batch step entirely.
+    setStep(isEbook && step === 0 ? 2 : step + 1);
   };
 
   const handleBack = () => {
     if (step > 0) {
-      setStep(step - 1);
+      setStep(isEbook && step === 2 ? 0 : step - 1);
       setError("");
     }
   };
 
   // ── Compute booking amount ──
-  const selectedCourse = courses.find(c => c.id === selectedCourseId) || course;
 
   // ── Full Payment Discount logic ──
   const basePrice = selectedCourse?.discount_price ?? selectedCourse?.price ?? 0;
@@ -575,8 +602,11 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
     return basePrice;
   })();
 
-  // Final booking amount based on pay mode
-  const bookingAmount = (payMode === "full" && discountActive) ? fullPayDiscountedPrice : normalBookingAmount;
+  // Final booking amount based on pay mode — eBook purchases are always the
+  // full course price (no slot-booking splits, no full-pay discount).
+  const bookingAmount = isEbook
+    ? (selectedCourse?.discount_price ?? selectedCourse?.price ?? 0)
+    : ((payMode === "full" && discountActive) ? fullPayDiscountedPrice : normalBookingAmount);
 
   const currency = config?.currency || selectedCourse?.currency || "INR";
 
@@ -710,6 +740,9 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
       }
       setReceipt(data);
       setStep(3);
+      // eBook buyers are auto-logged in by the backend (session cookie) —
+      // flag it so the success screen can hand off to the reader.
+      if (data?.auto_login) setAutoLoginDone(true);
     } catch (err: any) {
       setError(err.message || "Registration failed. Please contact support.");
     } finally {
@@ -738,17 +771,35 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
             <div className="sb-success-check">
               <Icon.Check />
             </div>
-            <h2 className="sb-success-title">Successfully Slot Booked!</h2>
-            <p className="sb-success-subtitle">A confirmation email has been sent to {receipt.student_email}</p>
+            <h2 className="sb-success-title">{autoLoginDone ? "eBook Purchased!" : "Successfully Slot Booked!"}</h2>
+            <p className="sb-success-subtitle">
+              {autoLoginDone
+                ? "You're signed in — opening your eBook reader…"
+                : `A confirmation email has been sent to ${receipt.student_email}`}
+            </p>
 
-            <div className="sb-success-date">
-              <div className="sb-success-date-label">Class Start Date</div>
-              <div className="sb-success-date-value">{formatDate(receipt.class_start_date)}</div>
-            </div>
+            {!autoLoginDone && (
+              <>
+                <div className="sb-success-date">
+                  <div className="sb-success-date-label">Class Start Date</div>
+                  <div className="sb-success-date-value">{formatDate(receipt.class_start_date)}</div>
+                </div>
 
-            <div className="sb-success-notice">
-              <strong>Important:</strong> Admission fees must be paid before the class start date to get confirmed admission and your platform login credentials.
-            </div>
+                <div className="sb-success-notice">
+                  <strong>Important:</strong> Admission fees must be paid before the class start date to get confirmed admission and your platform login credentials.
+                </div>
+              </>
+            )}
+
+            {autoLoginDone && (
+              <a
+                className="sb-btn sb-btn-pay"
+                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", textDecoration: "none", marginBottom: 16 }}
+                href={`/student/courses/${selectedCourseId}/ebook`}
+              >
+                Open Your eBook Now
+              </a>
+            )}
 
             {(() => {
               const receiptUrl = getReceiptPublicUrl(receipt.invoice_uuid);
@@ -800,7 +851,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
         {/* ── Header ── */}
         <div className="sb-header">
           <div>
-            <h2 className="sb-header-title">Book Your Slot</h2>
+            <h2 className="sb-header-title">{isEbook ? "Buy eBook" : "Book Your Slot"}</h2>
             <p className="sb-header-subtitle">{selectedCourse?.title || "Course"}</p>
           </div>
           <button className="sb-close-btn" onClick={onClose} aria-label="Close">
@@ -810,13 +861,13 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
 
         {/* ── Progress ── */}
         <div className="sb-progress">
-          {STEPS.map((label, i) => (
-            <div key={i} className={`sb-step ${i === step ? "active" : i < step ? "done" : ""}`}>
-              {i < STEPS.length - 1 && <div className="sb-step-line" />}
+          {(isEbook ? EBOOK_STEP_INDICES : ALL_STEP_INDICES).map((si, pos, arr) => (
+            <div key={si} className={`sb-step ${si === step ? "active" : si < step ? "done" : ""}`}>
+              {pos < arr.length - 1 && <div className="sb-step-line" />}
               <div className="sb-step-circle">
-                {i < step ? "✓" : i + 1}
+                {si < step ? "✓" : pos + 1}
               </div>
-              <span className="sb-step-label">{label}</span>
+              <span className="sb-step-label">{STEPS[si]}</span>
             </div>
           ))}
         </div>
@@ -835,7 +886,8 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
                 </button>
               )}
 
-              {/* Photo Upload */}
+              {/* Photo Upload — not needed for a digital eBook purchase */}
+              {!isEbook && (
               <div className="sb-field">
                 <label className="sb-label">Profile Photo</label>
                 <div className="sb-photo-upload">
@@ -859,6 +911,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
                   </div>
                 </div>
               </div>
+              )}
 
               {/* Name */}
               <div className="sb-row">
@@ -874,10 +927,12 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
 
               {/* DOB & Phone */}
               <div className="sb-row">
+                {!isEbook && (
                 <div className="sb-field">
                   <label className="sb-label">Date of Birth<span className="sb-req">*</span></label>
                   <input className="sb-input" type="date" value={dob} onChange={e => setDob(e.target.value)} />
                 </div>
+                )}
                 <div className="sb-field">
                   <label className="sb-label">Phone Number<span className="sb-req">*</span></label>
                   <input className="sb-input" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+91 9876543210" />
@@ -901,13 +956,14 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
                 </select>
               </div>
 
-              {/* Qualification */}
+              {/* Qualification & category — admissions metadata, not needed for eBooks */}
+              {!isEbook && (
+                <>
               <div className="sb-field">
                 <label className="sb-label">Last Qualification</label>
                 <input className="sb-input" type="text" value={qualification} onChange={e => setQualification(e.target.value)} placeholder="e.g. B.Tech, MCA, 12th Pass" />
               </div>
 
-              {/* Student Category */}
               <div className="sb-field">
                 <label className="sb-label">Student Category<span className="sb-req">*</span></label>
                 <div className="sb-category-grid">
@@ -922,6 +978,8 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
                   <input className="sb-input" style={{ marginTop: 8 }} type="text" value={otherCategory} onChange={e => setOtherCategory(e.target.value)} placeholder="Please specify your category" />
                 )}
               </div>
+                </>
+              )}
 
               {/* Notification Toggles */}
               <div className="sb-toggle-row">
@@ -942,6 +1000,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
               </label>
 
               {/* ── Collapsible Location Section (merged from former Location step) ── */}
+              {!isEbook && (
               <div className="sb-location-collapse-wrap">
                 <button
                   type="button"
@@ -1079,6 +1138,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
                   </div>
                 )}
               </div>
+              )}
             </div>
           )}
 
@@ -1228,8 +1288,8 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
             <div className="sb-step-content">
               <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: "0 0 16px" }}>Review & Pay</h3>
 
-              {/* ── Payment Mode Selection (top) ── */}
-              {discountActive && savingsAmount > 0 && (
+              {/* ── Payment Mode Selection (top) — slot-booking splits only, not eBooks ── */}
+              {!isEbook && discountActive && savingsAmount > 0 && (
                 <div className="sb-pay-mode-wrap">
                   <div
                     className={`sb-pay-mode-option ${payMode === "booking" ? "selected" : ""}`}
@@ -1285,7 +1345,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
               )}
 
               {/* ── Full Payment Discount Offer Card (compact, with countdown) ── */}
-              {discountActive && savingsAmount > 0 && (
+              {!isEbook && discountActive && savingsAmount > 0 && (
                 <div className={`sb-discount-card ${payMode === "full" ? "sb-discount-card-active" : ""}`}>
                   <div className="sb-discount-card-glow" />
                   {/* Gift icon */}
@@ -1358,7 +1418,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
                   </div>
                 )}
                 <div className="sb-summary-row sb-summary-total">
-                  <span className="sb-summary-label">Booking Amount</span>
+                  <span className="sb-summary-label">{isEbook ? "Total" : "Booking Amount"}</span>
                   <span className="sb-summary-value">{formatCurrency(bookingAmount, currency)}</span>
                 </div>
               </div>
@@ -1386,7 +1446,11 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
             )}
             {step === 2 && (
               <button className="sb-btn sb-btn-pay" onClick={handlePay} disabled={submitting}>
-                {submitting ? "Processing…" : `Pay ${formatCurrency(bookingAmount, currency)}`}
+                {submitting
+                  ? "Processing…"
+                  : isEbook
+                    ? `Buy eBook — ${formatCurrency(bookingAmount, currency)}`
+                    : `Pay ${formatCurrency(bookingAmount, currency)}`}
               </button>
             )}
           </div>
