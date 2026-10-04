@@ -24,6 +24,7 @@ duration_mins (falling back to the assignment window). A small grace period
 (SUBMIT_GRACE_SECONDS) absorbs client clock/network drift on save/submit.
 """
 import hashlib
+import hmac
 import logging
 import random
 import re
@@ -139,6 +140,76 @@ def _course_context(db: Session, student_id: int, course_id: int):
     enrollment = next((e for e in enrollments if e.status == "active"), enrollments[0] if enrollments else None)
     batch_ids = [e.batch_id for e in enrollments]
     return purchase, enrollment, batch_ids
+
+
+def _assignment_course(assignment: models.BatchExamAssignment) -> Optional[models.Course]:
+    return assignment.batch.course if assignment.batch else None
+
+
+def _mock_test_state(assignment: models.BatchExamAssignment, course: Optional[models.Course],
+                     entitled_course_ids: set[int]) -> dict:
+    """Paywall state for an assignment: it is the course's mock test when the
+    course config points at this exam; payment is required when the course
+    price is > 0 and the student holds no entitlement."""
+    is_mock = bool(course and course.mock_test_exam_id and course.mock_test_exam_id == assignment.exam_id)
+    price = float(course.mock_test_price or 0) if course else 0.0
+    requires_payment = is_mock and price > 0
+    return {
+        "is_mock_test": is_mock,
+        "requires_payment": requires_payment,
+        "mock_test_price": price if is_mock else None,
+        "entitled": (not requires_payment) or (course.id in entitled_course_ids if course else False),
+    }
+
+
+def _paid_entitlement(db: Session, student_id: int, course_id: int) -> Optional[models.MockTestEntitlement]:
+    return db.query(models.MockTestEntitlement).filter(
+        models.MockTestEntitlement.student_id == student_id,
+        models.MockTestEntitlement.course_id == course_id,
+        models.MockTestEntitlement.status == "paid",
+    ).first()
+
+
+def _razorpay_key_secret(db: Session) -> Optional[str]:
+    s = db.query(models.PaymentSettings).first()
+    if not s:
+        return None
+    if s.is_test_mode:
+        return s.razorpay_test_key_secret or s.razorpay_key_secret
+    return s.razorpay_live_key_secret or s.razorpay_key_secret
+
+
+def _ensure_mock_test_assignment(db: Session, student_id: int, course: models.Course,
+                                 batch_ids: list[int]) -> Optional[models.BatchExamAssignment]:
+    """Return the mock-test assignment for one of the student's batches,
+    lazily creating it for their primary batch when the course's mock test
+    was configured after the batch was created."""
+    if not course.mock_test_exam_id or not batch_ids:
+        return None
+    assignment = db.query(models.BatchExamAssignment).filter(
+        models.BatchExamAssignment.batch_id.in_(batch_ids),
+        models.BatchExamAssignment.exam_id == course.mock_test_exam_id,
+        models.BatchExamAssignment.status != "cancelled",
+    ).first()
+    if assignment:
+        return assignment
+    # Prefer the student's active batch for the course
+    enrollment = db.query(models.BatchEnrollment).join(
+        models.Batch, models.BatchEnrollment.batch_id == models.Batch.id
+    ).filter(
+        models.BatchEnrollment.student_id == student_id,
+        models.Batch.course_id == course.id,
+        models.BatchEnrollment.status == "active",
+    ).first()
+    target_batch_id = enrollment.batch_id if enrollment else batch_ids[0]
+    assignment = models.BatchExamAssignment(
+        batch_id=target_batch_id,
+        exam_id=course.mock_test_exam_id,
+        status="active",
+    )
+    db.add(assignment)
+    db.flush()
+    return assignment
 
 
 def _check_unlock(db: Session, assignment: models.BatchExamAssignment, student_id: int):
@@ -336,7 +407,10 @@ def list_course_exams(course_id: int, student: models.Student = Depends(require_
 
     assignments = (
         db.query(models.BatchExamAssignment)
-        .options(joinedload(models.BatchExamAssignment.exam).joinedload(models.Exam.questions))
+        .options(
+            joinedload(models.BatchExamAssignment.exam).joinedload(models.Exam.questions),
+            joinedload(models.BatchExamAssignment.batch).joinedload(models.Batch.course),
+        )
         .filter(
             models.BatchExamAssignment.batch_id.in_(batch_ids),
             models.BatchExamAssignment.status != "cancelled",
@@ -361,10 +435,19 @@ def list_course_exams(course_id: int, student: models.Student = Depends(require_
     for att in attempts:
         attempts_by_assignment.setdefault(att.assignment_id, []).append(att)
 
+    entitled_course_ids = {
+        e.course_id for e in db.query(models.MockTestEntitlement).filter(
+            models.MockTestEntitlement.student_id == student.id,
+            models.MockTestEntitlement.status == "paid",
+        ).all()
+    }
+
     now = _now()
     result = []
     for a in assignments:
         exam = a.exam
+        course = _assignment_course(a)
+        mt = _mock_test_state(a, course, entitled_course_ids)
         att_list = attempts_by_assignment.get(a.id, [])
         submitted = [t for t in att_list if t.status == "submitted"]
         active = next((t for t in att_list if t.status == "in_progress"), None)
@@ -391,6 +474,9 @@ def list_course_exams(course_id: int, student: models.Student = Depends(require_
         elif attempts_remaining is not None and attempts_remaining <= 0:
             state = "locked"
             unlock_reason = "No attempts remaining for this exam."
+        elif mt["requires_payment"] and not mt["entitled"]:
+            state = "payment_required"
+            unlock_reason = "This mock test requires a separate purchase."
         else:
             state = "available"
 
@@ -407,10 +493,14 @@ def list_course_exams(course_id: int, student: models.Student = Depends(require_
             "pass_marks": a.pass_marks,
             "pass_percentage": exam.pass_percentage if exam else None,
             "state": state,
-            "unlock_reason": unlock_reason if state == "locked" else None,
+            "unlock_reason": unlock_reason if state in ("locked", "payment_required") else None,
             "attempts_used": attempts_used,
             "attempts_allowed": allowed,
             "attempts_remaining": attempts_remaining,
+            "is_mock_test": mt["is_mock_test"],
+            "requires_payment": mt["requires_payment"],
+            "mock_test_price": mt["mock_test_price"],
+            "entitled": mt["entitled"],
             "can_retake": bool(submitted) and (attempts_remaining is None or attempts_remaining > 0)
                           and not (end and now > end) and not is_locked,
             "active_attempt": _attempt_summary(active, a) if active else None,
@@ -480,6 +570,26 @@ def start_exam_attempt(assignment_id: int, student: models.Student = Depends(req
     if live:
         # Idempotent resume — one active attempt per student per assignment.
         return {"attempt": _attempt_summary(live, assignment), "resumed": True}
+
+    # Paid mock-test paywall: starting a NEW attempt on the course's configured
+    # paid mock test requires a paid MockTestEntitlement (second purchase).
+    course = _assignment_course(assignment)
+    entitled_ids = (
+        {e.course_id for e in db.query(models.MockTestEntitlement).filter(
+            models.MockTestEntitlement.student_id == student.id,
+            models.MockTestEntitlement.status == "paid",
+        ).all()}
+    )
+    mt = _mock_test_state(assignment, course, entitled_ids)
+    if mt["requires_payment"] and not mt["entitled"]:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "mock_test_payment_required",
+                "message": "This mock test requires a separate purchase before you can start it.",
+                "price": mt["mock_test_price"],
+            },
+        )
 
     exam = assignment.exam
     if exam and exam.restrict_attempts and exam.number_of_attempts is not None:
@@ -718,6 +828,145 @@ def course_results(course_id: int, student: models.Student = Depends(require_stu
     return {"results": results}
 
 
+# ─── Course Mock Test (course-scoped second purchase) ─────────────────────────
+
+class MockTestVerifyRequest(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
+def _mock_test_course(db: Session, course_id: int) -> models.Course:
+    course = db.query(models.Course).filter(models.Course.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    if not course.mock_test_exam_id:
+        raise HTTPException(status_code=404, detail="This course has no mock test configured")
+    return course
+
+
+@router.get("/courses/{course_id}/mock-test")
+def get_mock_test(course_id: int, student: models.Student = Depends(require_student),
+                  db: Session = Depends(get_db)):
+    """Mock-test config + the student's entitlement + the assignment id they
+    would start (lazily created for their batch if configured later)."""
+    _purchase, _enrollment, batch_ids = _course_context(db, student.id, course_id)
+    course = _mock_test_course(db, course_id)
+    entitlement = _paid_entitlement(db, student.id, course_id)
+    is_paid = bool(course.mock_test_price and course.mock_test_price > 0)
+
+    assignment = _ensure_mock_test_assignment(db, student.id, course, batch_ids)
+    db.commit()
+
+    return {
+        "configured": True,
+        "exam_id": course.mock_test_exam_id,
+        "assignment_id": assignment.id if assignment else None,
+        "is_paid": is_paid,
+        "price": course.mock_test_price,
+        "entitled": (not is_paid) or entitlement is not None,
+        "entitlement": {
+            "id": entitlement.id,
+            "amount": entitlement.amount,
+            "currency": entitlement.currency,
+            "created_at": entitlement.created_at.isoformat() if entitlement.created_at else None,
+        } if entitlement else None,
+    }
+
+
+@router.post("/courses/{course_id}/mock-test/create-order")
+def create_mock_test_order(course_id: int, student: models.Student = Depends(require_student),
+                           db: Session = Depends(get_db)):
+    """Create a Razorpay order for the course's paid mock test."""
+    _purchase, _enrollment, _batch_ids = _course_context(db, student.id, course_id)
+    course = _mock_test_course(db, course_id)
+    price = float(course.mock_test_price or 0)
+    if price <= 0:
+        raise HTTPException(status_code=400, detail="This mock test is free — no purchase needed")
+    if _paid_entitlement(db, student.id, course_id):
+        raise HTTPException(status_code=400, detail="Mock test already unlocked")
+
+    from routers.slot_booking import _get_razorpay_client
+    client = _get_razorpay_client(db)
+    try:
+        order = client.order.create(data={
+            "amount": int(round(price * 100)),
+            "currency": "INR",
+            "receipt": f"mt_{course.id}_{student.id}_{int(_now().timestamp())}",
+            "notes": {
+                "kind": "mock_test",
+                "course_id": str(course.id),
+                "exam_id": str(course.mock_test_exam_id),
+                "student_id": str(student.id),
+            },
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Razorpay error: {str(e)}")
+
+    return {
+        "order_id": order["id"],
+        "amount": order["amount"],
+        "currency": order["currency"],
+    }
+
+
+@router.post("/courses/{course_id}/mock-test/verify")
+def verify_mock_test_payment(course_id: int, req: MockTestVerifyRequest,
+                             student: models.Student = Depends(require_student),
+                             db: Session = Depends(get_db)):
+    """Verify the Razorpay signature and grant the mock-test entitlement.
+    Idempotent on razorpay_payment_id (unique constraint)."""
+    _purchase, _enrollment, batch_ids = _course_context(db, student.id, course_id)
+    course = _mock_test_course(db, course_id)
+    price = float(course.mock_test_price or 0)
+    if price <= 0:
+        raise HTTPException(status_code=400, detail="This mock test is free — no purchase needed")
+
+    key_secret = _razorpay_key_secret(db)
+    if not key_secret:
+        raise HTTPException(status_code=503, detail="Razorpay key secret is not configured.")
+
+    expected_sig = hmac.new(
+        key_secret.encode("utf-8"),
+        f"{req.razorpay_order_id}|{req.razorpay_payment_id}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(expected_sig, req.razorpay_signature):
+        raise HTTPException(status_code=400, detail="Payment verification failed — invalid signature.")
+
+    existing = _paid_entitlement(db, student.id, course_id)
+    if existing:
+        return {"status": "success", "already_unlocked": True, "entitlement_id": existing.id}
+
+    entitlement = models.MockTestEntitlement(
+        student_id=student.id,
+        course_id=course.id,
+        exam_id=course.mock_test_exam_id,
+        amount=price,
+        currency="INR",
+        razorpay_order_id=req.razorpay_order_id,
+        razorpay_payment_id=req.razorpay_payment_id,
+        status="paid",
+    )
+    db.add(entitlement)
+    try:
+        db.flush()
+    except Exception:
+        db.rollback()
+        # Unique race — another request granted it first; re-read.
+        existing = _paid_entitlement(db, student.id, course_id)
+        if existing:
+            return {"status": "success", "already_unlocked": True, "entitlement_id": existing.id}
+        raise
+
+    _ensure_mock_test_assignment(db, student.id, course, batch_ids)
+    db.commit()
+    db.refresh(entitlement)
+    return {"status": "success", "already_unlocked": False, "entitlement_id": entitlement.id}
+
+
 # ─── Payments ────────────────────────────────────────────────────────────────
 
 @router.get("/courses/{course_id}/payments")
@@ -878,10 +1127,37 @@ def course_certificate(course_id: int, student: models.Student = Depends(require
     graduated = bool(enrollment and enrollment.status == "graduated")
     complete = graduated or (total_materials > 0 and completed >= total_materials)
 
+    # eBook-type courses with a configured mock test issue the certificate on
+    # a passed mock-test attempt instead of raw material completion.
+    mock_test_gate = (
+        (course.course_type or "live_batch") in ("ebook", "ebook_video")
+        and course.mock_test_exam_id is not None
+        and batch_ids
+    )
+    if mock_test_gate:
+        passed_attempt = (
+            db.query(models.StudentExamAttempt)
+            .join(models.BatchExamAssignment,
+                  models.StudentExamAttempt.assignment_id == models.BatchExamAssignment.id)
+            .filter(
+                models.StudentExamAttempt.student_id == student.id,
+                models.StudentExamAttempt.status == "submitted",
+                models.StudentExamAttempt.passed == True,
+                models.BatchExamAssignment.batch_id.in_(batch_ids),
+                models.BatchExamAssignment.exam_id == course.mock_test_exam_id,
+            )
+            .first()
+        )
+        complete = graduated or passed_attempt is not None
+
     if not complete:
         return {
             "state": "pending",
-            "reason": "Complete all course materials to unlock your certificate.",
+            "reason": (
+                "Pass the course mock test to unlock your certificate."
+                if mock_test_gate else
+                "Complete all course materials to unlock your certificate."
+            ),
             "progress": {
                 "total_materials": total_materials,
                 "completed_materials": completed,

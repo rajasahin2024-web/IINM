@@ -179,7 +179,13 @@ class Course(Base):
     upload_syllabus  = Column(Text, nullable=True)
     has_certificate  = Column(Boolean, default=False)
     certificate_image_url = Column(Text, nullable=True)
-    
+
+    # ── Course Type & Mock Test (IIN-152)
+    course_type          = Column(String(20), nullable=False, default="live_batch", server_default="live_batch")  # live_batch | ebook | ebook_video
+    mock_test_exam_id    = Column(Integer, ForeignKey("exams.id", ondelete="SET NULL"), nullable=True)             # exam template used as this course's mock test
+    mock_test_price      = Column(Float, nullable=True)                                                          # NULL/<=0 → free mock test
+    ebook_batch_capacity = Column(Integer, nullable=True)                                                        # capacity for auto-created eBook batches
+
     # ── SEO Metadata
     seo_title        = Column(String(255), nullable=True)
     seo_description  = Column(Text, nullable=True)
@@ -228,10 +234,23 @@ class CourseMaterial(Base):
     thumbnail_url = Column(Text, nullable=True)  # custom thumbnail for videos
     file_size    = Column(Integer, nullable=True)  # bytes
     order_position = Column(Integer, default=0)  # for drag-and-drop ordering
+
+    # ── eBook fields (file_type='ebook') — PRIVATE delivery.
+    # file_url stays NULL for eBooks; bytes are served only via the
+    # authenticated reader API (/api/student/ebooks/{id}/file).
+    ebook_file_key   = Column(String(500), nullable=True)  # private object key (R2 key or local/... path)
+    ebook_cover_url  = Column(Text, nullable=True)         # public cover image URL
+    ebook_toc        = Column(JSON, nullable=True)         # [{"title": "...", "page": 1}, ...]
+    ebook_page_count = Column(Integer, nullable=True)
+
     created_at   = Column(DateTime(timezone=True), server_default=func.now())
     updated_at   = Column(DateTime(timezone=True), onupdate=func.now())
     
     chapters     = relationship("Chapter", secondary=topic_materials, back_populates="materials")
+
+    @property
+    def has_ebook_file(self) -> bool:
+        return bool(self.ebook_file_key)
 
 
 class ChapterLiveClass(Base):
@@ -527,6 +546,7 @@ class Batch(Base):
     id                  = Column(Integer, primary_key=True, index=True)
     course_id           = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"))
     name                = Column(String(255), nullable=False)
+    batch_type          = Column(String(20), nullable=False, default="standard", server_default="standard")  # standard | ebook (auto-created on eBook purchase)
     mode                = Column(String(50), default="Online")      # Online, Offline, Hybrid
     meeting_url         = Column(String(500), nullable=True)
     status              = Column(String(50), default="Upcoming")    # Upcoming, Ongoing, Completed, Cancelled
@@ -706,6 +726,42 @@ class BatchStudentMaterialProgress(Base):
     material = relationship("CourseMaterial")
 
 
+class StudentEbookProgress(Base):
+    """Resume-where-left marker for a student reading an eBook material."""
+    __tablename__ = "student_ebook_progress"
+    id                = Column(Integer, primary_key=True, index=True)
+    student_id        = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    material_id       = Column(Integer, ForeignKey("course_materials.id", ondelete="CASCADE"), nullable=False)
+    last_page         = Column(Integer, default=0)
+    last_chapter_index = Column(Integer, nullable=True)
+    last_accessed     = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at        = Column(DateTime(timezone=True), server_default=func.now())
+
+    student  = relationship("Student")
+    material = relationship("CourseMaterial")
+
+    __table_args__ = (
+        Index("uq_student_ebook_progress", "student_id", "material_id", unique=True),
+    )
+
+
+class StudentEbookChapterProgress(Base):
+    """Per-TOC-chapter completion inside an eBook material. chapter_index is the
+    position inside CourseMaterial.ebook_toc."""
+    __tablename__ = "student_ebook_chapter_progress"
+    id            = Column(Integer, primary_key=True, index=True)
+    student_id    = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    material_id   = Column(Integer, ForeignKey("course_materials.id", ondelete="CASCADE"), nullable=False)
+    chapter_index = Column(Integer, nullable=False)
+    is_completed  = Column(Boolean, default=True)
+    completed_at  = Column(DateTime(timezone=True), nullable=True)
+    created_at    = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at    = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (
+        Index("uq_student_ebook_chapter_progress", "student_id", "material_id", "chapter_index", unique=True),
+    )
+
 
 # ==========================================
 # COURSE PURCHASE & PAYMENT TRACKING
@@ -766,6 +822,34 @@ class PaymentTransaction(Base):
     created_at    = Column(DateTime(timezone=True), server_default=func.now())
 
     purchase      = relationship("CoursePurchase", back_populates="transactions")
+
+
+class MockTestEntitlement(Base):
+    """Course-scoped paid mock-test purchase — the "second purchase" flow.
+    One entitlement per (student, course); grants access to the course's
+    configured mock test (courses.mock_test_exam_id)."""
+    __tablename__ = "mock_test_entitlements"
+    id                  = Column(Integer, primary_key=True, index=True)
+    student_id          = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    course_id           = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), nullable=False)
+    exam_id             = Column(Integer, ForeignKey("exams.id", ondelete="SET NULL"), nullable=True)
+
+    amount              = Column(Float, nullable=False)
+    currency            = Column(String(10), default="INR")
+    razorpay_order_id   = Column(String(64), nullable=True)
+    razorpay_payment_id = Column(String(64), nullable=True)
+    status              = Column(String(20), default="paid")   # paid | refunded
+
+    created_at          = Column(DateTime(timezone=True), server_default=func.now())
+
+    student = relationship("Student")
+    course  = relationship("Course")
+    exam    = relationship("Exam")
+
+    __table_args__ = (
+        Index("uq_mock_test_entitlement", "student_id", "course_id", unique=True),
+        Index("uq_mock_test_entitlement_payment", "razorpay_payment_id", unique=True),
+    )
 
 
 class InstallmentSchedule(Base):

@@ -428,6 +428,7 @@ def my_courses(student: models.Student = Depends(require_student), db: Session =
             "course_id": course.id,
             "title": course.title,
             "slug": course.slug,
+            "course_type": course.course_type or "live_batch",
             "thumbnail_url": rewrite_url_relative(course.thumbnail_url),
             "instructor_name": instructor_name,
             "instructors": instructors,
@@ -532,6 +533,20 @@ def course_dashboard(course_id: int, student: models.Student = Depends(require_s
         ).order_by(models.ChapterLiveClass.scheduled_at).all():
             live_classes_by_chapter.setdefault(lc.chapter_id, []).append(lc)
 
+    # Sequential unlock for ebook_video courses: recorded videos stay locked
+    # until every eBook material in the course is complete.
+    is_ebook_video = (course.course_type or "live_batch") == "ebook_video"
+    ebook_material_ids: set[int] = set()
+    if is_ebook_video:
+        for ch in chapters:
+            for m in ch.materials:
+                if m.file_type == "ebook":
+                    ebook_material_ids.add(m.id)
+    ebooks_done = bool(ebook_material_ids) and all(
+        bool(material_progress.get(mid) and material_progress[mid].is_completed)
+        for mid in ebook_material_ids
+    )
+
     chapter_items = []
     all_live_classes = []
     material_ids: set[int] = set()
@@ -544,17 +559,24 @@ def course_dashboard(course_id: int, student: models.Student = Depends(require_s
             material_ids.add(m.id)
             if done:
                 completed_ids.add(m.id)
+            is_ebook = m.file_type == "ebook"
+            video_locked = is_ebook_video and m.file_type == "video" and not ebooks_done
             mats.append({
                 "id": m.id,
                 "title": m.title,
                 "file_type": m.file_type,
-                "file_url": rewrite_url_relative(m.file_url),
-                "hls_url": rewrite_url_relative(m.hls_url) if m.hls_status == "ready" else None,
+                # Locked videos never leak their stream URLs; eBooks never have
+                # a file_url (private reader API only).
+                "file_url": None if (video_locked or is_ebook) else rewrite_url_relative(m.file_url),
+                "hls_url": None if video_locked else (rewrite_url_relative(m.hls_url) if m.hls_status == "ready" else None),
                 "hls_status": m.hls_status,
-                "youtube_url": m.youtube_url,
+                "youtube_url": m.youtube_url if not video_locked else None,
                 "thumbnail_url": rewrite_url_relative(m.thumbnail_url),
+                "ebook_cover_url": rewrite_url_relative(m.ebook_cover_url) if is_ebook else None,
+                "ebook_page_count": m.ebook_page_count if is_ebook else None,
                 "order_position": m.order_position,
                 "is_completed": done,
+                "locked": video_locked,
                 "watch_time_sec": p.watch_time_sec if p else 0,
                 "last_accessed": p.last_accessed.isoformat() if p and p.last_accessed else None,
             })
@@ -595,6 +617,7 @@ def course_dashboard(course_id: int, student: models.Student = Depends(require_s
             "thumbnail_url": rewrite_url_relative(course.thumbnail_url),
             "instructor_name": course.instructor_name,
             "skill_level": course.skill_level,
+            "course_type": course.course_type or "live_batch",
         },
         "batch": _batch_payload(batch),
         "routine": [{

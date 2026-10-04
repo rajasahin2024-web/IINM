@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Header, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Header, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
@@ -17,6 +17,7 @@ BASE_URL = os.getenv("BASE_URL", "http://localhost:2007")
 
 from database import get_db
 import models
+import ebook_storage
 from routers.auth import require_device
 
 router = APIRouter(prefix="/api", tags=["materials"])
@@ -270,6 +271,10 @@ class MaterialResponse(BaseModel):
     thumbnail_url: Optional[str] = None
     file_size: Optional[int] = None
     order_position: int = 0
+    ebook_cover_url: Optional[str] = None
+    ebook_toc: Optional[list] = None
+    ebook_page_count: Optional[int] = None
+    has_ebook_file: bool = False
 
     created_at: datetime
 
@@ -363,6 +368,41 @@ def presign_material_upload(
         "file_key": key,
         "expires_in": 1800,
     }
+
+
+@router.post("/materials/ebook/presign")
+def presign_ebook_upload(
+    body: PresignRequest,
+    device: str = Depends(require_device),
+    db: Session = Depends(get_db),
+):
+    """Issue a short-lived presigned PUT URL for a PRIVATE eBook object.
+    Unlike /materials/presign this never returns a public URL — the confirmed
+    key is stored in CourseMaterial.ebook_file_key and bytes are served only
+    via the authenticated reader API."""
+    ext = os.path.splitext(body.filename)[1].lower()
+    if ext not in ebook_storage.ALLOWED_EBOOK_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="eBook files must be PDF")
+    if body.size <= 0:
+        raise HTTPException(status_code=400, detail="Invalid file size")
+    if body.size > ebook_storage.MAX_EBOOK_SIZE_BYTES:
+        raise HTTPException(status_code=413, detail="File too large. Maximum allowed size is 200 MB.")
+
+    s3, r2 = _get_r2_client(db)
+    if not s3 or not r2:
+        raise HTTPException(status_code=503, detail="Storage is not configured")
+
+    key = f"{ebook_storage.EBOOK_R2_PREFIX}{uuid.uuid4()}{ext}"
+    upload_url = s3.generate_presigned_url(
+        "put_object",
+        Params={
+            "Bucket": r2.bucket_name,
+            "Key": key,
+            "ContentType": "application/pdf",
+        },
+        ExpiresIn=1800,
+    )
+    return {"upload_url": upload_url, "file_key": key, "expires_in": 1800}
 
 
 @router.post("/materials/{material_id}/retranscode", response_model=MaterialResponse)
@@ -652,6 +692,11 @@ async def upload_material(
     youtube_url: Optional[str]          = Form(None),
     file_url:    Optional[str]          = Form(None),   # presigned-flow: R2 public URL of an already-uploaded object
     file_key:    Optional[str]          = Form(None),   # presigned-flow: R2 object key
+    is_ebook:    bool                   = Form(False),  # private eBook upload (PDF only — never a public URL)
+    ebook_file_key: Optional[str]       = Form(None),   # presigned ebook flow: confirmed private object key
+    ebook_toc:   Optional[str]          = Form(None),   # JSON string: [{"title": "...", "page": 1}]
+    ebook_page_count: Optional[int]     = Form(None),
+    ebook_cover: Optional[UploadFile]   = File(None),
     file:        Optional[UploadFile]   = File(None),
     thumbnail:   Optional[UploadFile]   = File(None),
     background_tasks: BackgroundTasks   = None,
@@ -671,8 +716,47 @@ async def upload_material(
     hls_status    = None
     source_key    = None   # R2 key of the source video, when HLS transcode should run
     content       = None   # raw bytes, only in multipart fallback mode
+    ebook_key     = None   # private storage key for eBook materials
+    ebook_cover_url = None
 
-    if youtube_url and youtube_url.strip():
+    if is_ebook:
+        # ── Private eBook path — bytes never get a public URL ──────────
+        if ebook_file_key and ebook_file_key.strip():
+            # Presigned flow: confirm the private object exists in storage
+            key = ebook_file_key.strip()
+            if not key.startswith(ebook_storage.EBOOK_R2_PREFIX):
+                raise HTTPException(status_code=400, detail="Invalid ebook storage key")
+            s3, r2 = _get_r2_client(db)
+            if not s3 or not r2:
+                raise HTTPException(status_code=503, detail="Storage is not configured")
+            try:
+                head = s3.head_object(Bucket=r2.bucket_name, Key=key)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Uploaded eBook not found in storage. Please retry the upload.")
+            if head.get("ContentLength", 0) > ebook_storage.MAX_EBOOK_SIZE_BYTES:
+                raise HTTPException(status_code=413, detail="File too large. Maximum allowed size is 200 MB.")
+            file_size = head.get("ContentLength")
+            ebook_key = key
+        elif file:
+            ext = os.path.splitext(file.filename or "")[1].lower()
+            if ext not in ebook_storage.ALLOWED_EBOOK_EXTENSIONS:
+                raise HTTPException(status_code=400, detail="eBook files must be PDF")
+            content = await file.read()
+            if len(content) > ebook_storage.MAX_EBOOK_SIZE_BYTES:
+                raise HTTPException(status_code=413, detail="File too large. Maximum allowed size is 200 MB.")
+            file_size = len(content)
+            ebook_key = ebook_storage.store_ebook_file(db, content, ext, "application/pdf")
+        else:
+            raise HTTPException(status_code=400, detail="An eBook PDF file is required")
+        file_type = "ebook"
+
+        if ebook_cover:
+            c_ext = os.path.splitext(ebook_cover.filename or "")[1].lower()
+            if c_ext not in ebook_storage.ALLOWED_COVER_EXTENSIONS:
+                raise HTTPException(status_code=400, detail="Cover must be a JPG, PNG or WebP image")
+            ebook_cover_url = ebook_storage.store_ebook_cover(db, await ebook_cover.read(), c_ext or ".jpg")
+
+    elif youtube_url and youtube_url.strip():
         file_type = "youtube"
 
     elif file_key and file_url:
@@ -796,6 +880,16 @@ async def upload_material(
     if file_type == "video" and source_key:
         hls_status = "pending"
 
+    parsed_toc = None
+    if ebook_toc:
+        import json as _json
+        try:
+            parsed_toc = _json.loads(ebook_toc)
+            if not isinstance(parsed_toc, list):
+                parsed_toc = None
+        except Exception:
+            raise HTTPException(status_code=400, detail="ebook_toc must be a JSON array")
+
     material = models.CourseMaterial(
         title=title, description=description, tags=clean_tags,
         file_type=file_type, file_url=file_url_out,
@@ -803,6 +897,10 @@ async def upload_material(
         thumbnail_url=thumbnail_url, file_size=file_size,
         order_position=next_position,
         hls_status=hls_status,
+        ebook_file_key=ebook_key,
+        ebook_cover_url=ebook_cover_url,
+        ebook_toc=parsed_toc,
+        ebook_page_count=ebook_page_count,
     )
     db.add(material)
     db.commit()
@@ -827,6 +925,11 @@ async def update_material(
     tags:        Optional[str] = Form(None),
     file_url:    Optional[str] = Form(None),   # presigned-flow: replacement file already in R2
     file_key:    Optional[str] = Form(None),
+    is_ebook:    bool          = Form(False),  # private eBook replacement (PDF only)
+    ebook_file_key: Optional[str] = Form(None),
+    ebook_toc:   Optional[str] = Form(None),
+    ebook_page_count: Optional[int] = Form(None),
+    ebook_cover: Optional[UploadFile] = File(None),
     file:        Optional[UploadFile] = File(None),      # multipart fallback replacement
     thumbnail:   Optional[UploadFile] = File(None),      # replacement thumbnail
     background_tasks: BackgroundTasks = None,
@@ -874,6 +977,57 @@ async def update_material(
             with open(t_path, "wb") as tbuf:
                 tbuf.write(t_content)
             mat.thumbnail_url = f"{BASE_URL}/uploads/thumbnails/{t_name}"
+
+    # ── Private eBook replacement ────────────────────────────────────────────
+    if is_ebook:
+        import json as _json
+        old_ebook_key = mat.ebook_file_key
+        if ebook_file_key and ebook_file_key.strip():
+            key = ebook_file_key.strip()
+            if not key.startswith(ebook_storage.EBOOK_R2_PREFIX):
+                raise HTTPException(status_code=400, detail="Invalid ebook storage key")
+            if not s3 or not r2:
+                raise HTTPException(status_code=503, detail="Storage is not configured")
+            try:
+                head = s3.head_object(Bucket=r2.bucket_name, Key=key)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Uploaded eBook not found in storage. Please retry the upload.")
+            mat.ebook_file_key = key
+            mat.file_size = head.get("ContentLength")
+        elif file is not None:
+            ext = os.path.splitext(file.filename or "")[1].lower()
+            if ext not in ebook_storage.ALLOWED_EBOOK_EXTENSIONS:
+                raise HTTPException(status_code=400, detail="eBook files must be PDF")
+            content = await file.read()
+            if len(content) > ebook_storage.MAX_EBOOK_SIZE_BYTES:
+                raise HTTPException(status_code=413, detail="File too large. Maximum allowed size is 200 MB.")
+            mat.ebook_file_key = ebook_storage.store_ebook_file(db, content, ext, "application/pdf")
+            mat.file_size = len(content)
+        if mat.ebook_file_key != old_ebook_key:
+            ebook_storage.delete_ebook_file(db, old_ebook_key)
+        mat.file_type = "ebook"
+        mat.file_url = None
+        mat.youtube_url = None
+        mat.hls_url = None
+        mat.hls_status = None
+        mat.hls_error = None
+        if ebook_cover is not None:
+            c_ext = os.path.splitext(ebook_cover.filename or "")[1].lower()
+            if c_ext not in ebook_storage.ALLOWED_COVER_EXTENSIONS:
+                raise HTTPException(status_code=400, detail="Cover must be a JPG, PNG or WebP image")
+            mat.ebook_cover_url = ebook_storage.store_ebook_cover(db, await ebook_cover.read(), c_ext or ".jpg")
+        if ebook_toc is not None:
+            try:
+                parsed = _json.loads(ebook_toc)
+                mat.ebook_toc = parsed if isinstance(parsed, list) else None
+            except Exception:
+                raise HTTPException(status_code=400, detail="ebook_toc must be a JSON array")
+        if ebook_page_count is not None:
+            mat.ebook_page_count = ebook_page_count
+
+        db.commit()
+        db.refresh(mat)
+        return mat
 
     # ── File (video/document) replacement ────────────────────────────────────
     new_source_key: Optional[str] = None
@@ -1038,9 +1192,47 @@ def delete_material(
         except Exception:
             pass
 
+    # ── Private eBook object (never had a public URL) ──
+    if mat.ebook_file_key:
+        ebook_storage.delete_ebook_file(db, mat.ebook_file_key)
+
     db.delete(mat)
     db.commit()
     return {"message": "Deleted"}
+
+
+# ─── Private eBook preview (admin) ────────────────────────────────────────────
+
+@router.get("/materials/{material_id}/ebook/file")
+def stream_ebook_file_admin(
+    material_id: int,
+    request: Request,
+    device: str = Depends(require_device),
+    db: Session = Depends(get_db),
+):
+    """Admin preview of a private eBook file. Range-capable so the PDF viewer
+    can paginate; no public URL is ever minted."""
+    from fastapi import Response
+    mat = db.query(models.CourseMaterial).filter(models.CourseMaterial.id == material_id).first()
+    if not mat:
+        raise HTTPException(status_code=404, detail="Material not found")
+    if not mat.ebook_file_key:
+        raise HTTPException(status_code=404, detail="No eBook file attached")
+
+    try:
+        obj = ebook_storage.read_ebook_object(db, mat.ebook_file_key, request.headers.get("range"))
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="eBook file not found in storage")
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(len(obj["content"])),
+        "Cache-Control": "private, no-store",
+    }
+    if obj["content_range"]:
+        headers["Content-Range"] = obj["content_range"]
+    return Response(content=obj["content"], status_code=obj["status"],
+                    media_type=obj["content_type"], headers=headers)
 
 
 # ─── Orphaned / Redundant Storage Files ───────────────────────────────────────

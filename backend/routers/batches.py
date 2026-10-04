@@ -75,6 +75,7 @@ class BatchRoutineResponse(BatchRoutineBase):
 
 class BatchBase(BaseModel):
     name: str
+    batch_type: str = "standard"       # standard | ebook
     mode: str = "Online"
     meeting_url: Optional[str] = None
     status: str = "Upcoming"
@@ -94,6 +95,7 @@ class BatchCreate(BatchBase):
 
 class BatchUpdate(BaseModel):
     name: Optional[str] = None
+    batch_type: Optional[str] = None
     mode: Optional[str] = None
     meeting_url: Optional[str] = None
     status: Optional[str] = None
@@ -253,6 +255,7 @@ def create_batch(req: BatchCreate, device: str = Depends(require_device), db: Se
         
     db_batch = models.Batch(
         name=req.name,
+        batch_type=req.batch_type or "standard",
         mode=req.mode,
         meeting_url=req.meeting_url,
         status=req.status,
@@ -317,7 +320,7 @@ def update_batch(batch_id: int, req: BatchUpdate, device: str = Depends(require_
     update_data = req.dict(exclude_unset=True)
     
     # Handle simple fields
-    for field in ["name", "mode", "meeting_url", "status", "start_date", "end_date", "max_capacity", "starting_count", "enable_waitlist", "discount_amount", "enable_installments"]:
+    for field in ["name", "batch_type", "mode", "meeting_url", "status", "start_date", "end_date", "max_capacity", "starting_count", "enable_waitlist", "discount_amount", "enable_installments"]:
         if field in update_data and update_data[field] is not None:
             setattr(db_batch, field, update_data[field])
 

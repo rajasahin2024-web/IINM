@@ -20,7 +20,7 @@ import logging
 from datetime import date, datetime
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from pydantic import BaseModel, EmailStr
@@ -35,6 +35,9 @@ from security import (
     validate_upload,
     ALLOWED_IMAGE_EXTENSIONS,
     MAX_IMAGE_SIZE_BYTES,
+    make_student_token,
+    STUDENT_TOKEN_TTL_SECONDS,
+    STUDENT_TOKEN_COOKIE,
 )
 
 logger = logging.getLogger(__name__)
@@ -122,6 +125,77 @@ def _compute_booking_amount(course: models.Course) -> float:
             return float(course.min_payment_value)
     # Default: full course price
     return float(course.discount_price if course.discount_price else (course.price or 0.0))
+
+
+def _is_ebook_course(course: models.Course) -> bool:
+    return (course.course_type or "live_batch") in ("ebook", "ebook_video")
+
+
+def _ebook_full_price(course: models.Course) -> float:
+    """eBook purchases are always the full course price — no slot-booking
+    partial payments or installments."""
+    return float(course.discount_price if course.discount_price else (course.price or 0.0))
+
+
+DEFAULT_EBOOK_BATCH_CAPACITY = 500
+
+
+def _pick_or_create_ebook_batch(db: Session, course: models.Course) -> models.Batch:
+    """Pick the current open eBook batch for the course, or auto-create the
+    next one when all existing eBook batches are full. The caller must hold a
+    row lock on the course (SELECT ... FOR UPDATE) so concurrent purchases
+    serialize on capacity checks."""
+    cap = course.ebook_batch_capacity or DEFAULT_EBOOK_BATCH_CAPACITY
+    open_batches = (
+        db.query(models.Batch)
+        .filter(
+            models.Batch.course_id == course.id,
+            models.Batch.batch_type == "ebook",
+            models.Batch.status.in_(["Upcoming", "Ongoing"]),
+        )
+        .order_by(models.Batch.id.desc())
+        .all()
+    )
+    for b in open_batches:
+        enrolled = (
+            db.query(func.count(models.BatchEnrollment.id))
+            .filter(
+                models.BatchEnrollment.batch_id == b.id,
+                models.BatchEnrollment.status == "active",
+            )
+            .scalar() or 0
+        )
+        if enrolled < (b.max_capacity or cap):
+            return b
+
+    total_ebook = (
+        db.query(func.count(models.Batch.id))
+        .filter(
+            models.Batch.course_id == course.id,
+            models.Batch.batch_type == "ebook",
+        )
+        .scalar() or 0
+    )
+    batch = models.Batch(
+        course_id=course.id,
+        name=f"eBook Batch {total_ebook + 1}",
+        batch_type="ebook",
+        mode="Online",
+        status="Upcoming",
+        start_date=date.today(),
+        max_capacity=cap,
+    )
+    db.add(batch)
+    db.flush()
+    # The course's configured mock test rides along with every new eBook batch.
+    if course.mock_test_exam_id:
+        db.add(models.BatchExamAssignment(
+            batch_id=batch.id,
+            exam_id=course.mock_test_exam_id,
+            status="active",
+        ))
+        db.flush()
+    return batch
 
 
 def _compute_full_payment_discounted(course: models.Course) -> float:
@@ -224,6 +298,7 @@ class CourseListItem(BaseModel):
     id: int
     title: str
     slug: Optional[str] = None
+    course_type: str = "live_batch"
     price: Optional[float] = None
     discount_price: Optional[float] = None
     is_free: bool = False
@@ -346,6 +421,7 @@ def list_public_courses_for_booking(db: Session = Depends(get_db)):
             "id": c.id,
             "title": c.title,
             "slug": c.slug,
+            "course_type": c.course_type or "live_batch",
             "price": c.price,
             "discount_price": c.discount_price,
             "is_free": c.is_free,
@@ -396,7 +472,8 @@ def list_public_batches(course_id: int, db: Session = Depends(get_db)):
         .outerjoin(counts_subquery, models.Batch.id == counts_subquery.c.batch_id)
         .filter(
             models.Batch.course_id == course_id,
-            models.Batch.status.in_(["Upcoming", "Ongoing", "Completed"])
+            models.Batch.status.in_(["Upcoming", "Ongoing", "Completed"]),
+            models.Batch.batch_type == "standard",
         )
         .all()
     )
@@ -542,7 +619,10 @@ def create_booking_order(req: CreateOrderRequest, request: Request, db: Session 
             )
 
     # Verify the amount matches the expected booking amount (prevent tampering)
-    if req.pay_mode == "full":
+    if _is_ebook_course(course):
+        # eBook purchase = full course price, always (no slot-booking splits)
+        expected = _ebook_full_price(course)
+    elif req.pay_mode == "full":
         expected = _compute_full_payment_discounted(course)
         if expected <= 0:
             raise HTTPException(
@@ -583,9 +663,11 @@ def create_booking_order(req: CreateOrderRequest, request: Request, db: Session 
 
 
 @router.post("/verify-and-register")
-def verify_and_register(req: VerifyAndRegisterRequest, request: Request, db: Session = Depends(get_db)):
+def verify_and_register(req: VerifyAndRegisterRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     """Public: verify Razorpay signature, create Student + CoursePurchase + BatchEnrollment +
-    PaymentTransaction, send email + push notification, return receipt data."""
+    PaymentTransaction, send email + push notification, return receipt data.
+    eBook-type courses additionally auto-pick/auto-create an eBook batch and
+    set the student session cookie (auto-login) in the same transaction."""
     client_ip = get_client_ip(request)
     check_public_rate_limit(client_ip, limit=10, window=300)
 
@@ -619,9 +701,18 @@ def verify_and_register(req: VerifyAndRegisterRequest, request: Request, db: Ses
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
 
-    # 3. Validate batch (if provided)
+    # 3. Validate batch (if provided) — live-batch path only; eBook courses
+    # auto-assign an eBook batch below.
     batch = None
-    if req.batch_id:
+    is_ebook = _is_ebook_course(course)
+    if is_ebook:
+        expected_price = _ebook_full_price(course)
+        if abs(req.amount_paid - expected_price) > 0.01:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Amount mismatch. Expected Rs. {expected_price:.2f}."
+            )
+    elif req.batch_id:
         batch = db.query(models.Batch).filter(
             models.Batch.id == req.batch_id,
             models.Batch.course_id == req.course_id,
@@ -762,7 +853,13 @@ def verify_and_register(req: VerifyAndRegisterRequest, request: Request, db: Ses
     if not txn.reference_no or not txn.reference_no.startswith("IINM-TXN"):
         txn.reference_no = f"IINM-TXN-{datetime.now().strftime('%Y%m')}-{txn.id:04d}"
 
-    # 9. Create BatchEnrollment
+    # 9. Create BatchEnrollment — eBook buyers are auto-enrolled into the
+    # current open eBook batch (auto-created when all are full). The course
+    # row lock serializes concurrent purchases on the capacity check.
+    if is_ebook:
+        db.query(models.Course).filter(models.Course.id == course.id).with_for_update().first()
+        batch = _pick_or_create_ebook_batch(db, course)
+
     enrollment_status = "active"
     if batch:
         enrolled_count = (
@@ -787,6 +884,24 @@ def verify_and_register(req: VerifyAndRegisterRequest, request: Request, db: Ses
     db.refresh(student)
     if batch:
         cache.invalidate(f"slot_booking_batches_{course.id}")
+
+    # 9b. eBook buyers are auto-logged in — issue the student session cookie.
+    auto_login = False
+    if is_ebook:
+        try:
+            token = make_student_token(student.id)
+            response.set_cookie(
+                STUDENT_TOKEN_COOKIE,
+                token,
+                max_age=STUDENT_TOKEN_TTL_SECONDS,
+                httponly=True,
+                secure=request.url.scheme == "https",
+                samesite="lax",
+                path="/",
+            )
+            auto_login = True
+        except RuntimeError as e:
+            logger.warning(f"eBook auto-login skipped (session secret missing): {e}")
 
     # 10. Send confirmation email (non-blocking — fails silently)
     class_start_date = batch.start_date if batch else course.start_date.date() if course.start_date else None
@@ -813,11 +928,14 @@ def verify_and_register(req: VerifyAndRegisterRequest, request: Request, db: Ses
     contact = db.query(models.ContactSettings).first()
     return {
         "status": "success",
-        "message": "Slot booked successfully!",
+        "message": "eBook purchased successfully!" if is_ebook else "Slot booked successfully!",
         "invoice_uuid": inv_uuid,
         "student_id": student.id,
         "purchase_id": purchase.id,
         "transaction_id": txn.id,
+        "course_type": course.course_type or "live_batch",
+        "auto_login": auto_login,
+        "batch_id": batch.id if batch else None,
         "batch_name": batch.name if batch else None,
         "batch_status": enrollment_status if batch else None,
         "class_start_date": class_start_date.isoformat() if class_start_date else None,

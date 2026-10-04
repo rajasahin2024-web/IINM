@@ -132,6 +132,10 @@ class CourseBase(BaseModel):
     target_audience: Optional[str] = None
     has_certificate: bool = False
     certificate_image_url: Optional[str] = None
+    course_type: str = "live_batch"                    # live_batch | ebook | ebook_video
+    mock_test_exam_id: Optional[int] = None            # exam template used as this course's mock test
+    mock_test_price: Optional[float] = None            # NULL/<=0 → free mock test
+    ebook_batch_capacity: Optional[int] = None         # capacity for auto-created eBook batches
     seo_title: Optional[str] = None
     seo_description: Optional[str] = None
     seo_keywords: Optional[str] = None
@@ -174,6 +178,10 @@ class CourseUpdate(BaseModel):
     target_audience: Optional[str] = None
     has_certificate: Optional[bool] = None
     certificate_image_url: Optional[str] = None
+    course_type: Optional[str] = None
+    mock_test_exam_id: Optional[int] = None
+    mock_test_price: Optional[float] = None
+    ebook_batch_capacity: Optional[int] = None
     seo_title: Optional[str] = None
     seo_description: Optional[str] = None
     seo_keywords: Optional[str] = None
@@ -524,6 +532,7 @@ def get_public_courses(search: Optional[str] = None, db: Session = Depends(get_d
             "validity_days": c.validity_days,
             "upload_syllabus": rewrite_url(c.upload_syllabus),
             "instructors": [{"id": i.id, "name": i.name} for i in getattr(c, "instructors", [])],
+            "course_type": c.course_type or "live_batch",
         })
     return result
 
@@ -614,6 +623,12 @@ def get_public_course_details(slug: str, db: Session = Depends(get_db)):
         "target_audience": c.target_audience,
         "upload_syllabus": rewrite_url(c.upload_syllabus),
         "show_instructor_publicly": c.show_instructor_publicly if c.show_instructor_publicly is not None else True,
+        "course_type": c.course_type or "live_batch",
+        "mock_test": {
+            "configured": c.mock_test_exam_id is not None,
+            "is_paid": bool(c.mock_test_price and c.mock_test_price > 0),
+            "price": c.mock_test_price,
+        },
         "chapters": chapters_data,
         "instructors": instructors_data,
         # ── SEO fields (additive — already in DB, now exposed for SSR metadata) ──
@@ -1139,8 +1154,12 @@ def get_course(course_id: int, device: str = Depends(require_device), db: Sessio
         raise HTTPException(status_code=404, detail="Course not found")
     return CourseResponse.from_orm_model(course)
 
+VALID_COURSE_TYPES = {"live_batch", "ebook", "ebook_video"}
+
 @router.post("/courses", response_model=CourseResponse)
 def create_course(course: CourseCreate, device: str = Depends(require_device), db: Session = Depends(get_db)):
+    if course.course_type and course.course_type not in VALID_COURSE_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid course_type. Allowed: {', '.join(sorted(VALID_COURSE_TYPES))}")
     db_course = models.Course(
         title=course.title,
         description=course.description,
@@ -1168,6 +1187,10 @@ def create_course(course: CourseCreate, device: str = Depends(require_device), d
         what_you_will_learn=course.what_you_will_learn,
         has_certificate=course.has_certificate,
         certificate_image_url=course.certificate_image_url,
+        course_type=course.course_type or "live_batch",
+        mock_test_exam_id=course.mock_test_exam_id,
+        mock_test_price=course.mock_test_price,
+        ebook_batch_capacity=course.ebook_batch_capacity,
         upload_syllabus=course.upload_syllabus
     )
     
@@ -1197,6 +1220,8 @@ def update_course(course_id: int, course: CourseUpdate, device: str = Depends(re
     db_c = db.query(models.Course).filter(models.Course.id == course_id).first()
     if not db_c:
         raise HTTPException(status_code=404, detail="Course not found")
+    if course.course_type is not None and course.course_type not in VALID_COURSE_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid course_type. Allowed: {', '.join(sorted(VALID_COURSE_TYPES))}")
     for key, val in course.dict(exclude_unset=True).items():
         if key not in ["subject_ids", "chapter_ids"]:
             setattr(db_c, key, val)
@@ -1604,6 +1629,10 @@ class JsonMaterialUpdate(BaseModel):
     description: Optional[str] = None
     youtube_url: Optional[str] = None
     tags: Optional[str] = None
+    ebook_file_key: Optional[str] = None     # private object key from the ebook presign/upload flow
+    ebook_cover_url: Optional[str] = None
+    ebook_toc: Optional[list] = None         # [{"title": "...", "page": 1}, ...]
+    ebook_page_count: Optional[int] = None
 
 @router.put("/materials/{material_id}/json")
 def update_material_json(
@@ -1625,6 +1654,20 @@ def update_material_json(
         mat.file_type = "youtube" if mat.youtube_url else mat.file_type
     if data.tags is not None:
         mat.tags = data.tags
+    if data.ebook_file_key is not None:
+        key = data.ebook_file_key.strip()
+        # Only accept keys issued by the private ebook upload flow — never a public URL.
+        if key.startswith(("http://", "https://")) or not key.startswith(("ebooks/", "local/ebooks/")):
+            raise HTTPException(status_code=400, detail="Invalid ebook storage key")
+        mat.ebook_file_key = key
+        mat.file_type = "ebook"
+        mat.file_url = None  # eBooks are never reachable via a public URL
+    if data.ebook_cover_url is not None:
+        mat.ebook_cover_url = data.ebook_cover_url.strip() or None
+    if data.ebook_toc is not None:
+        mat.ebook_toc = data.ebook_toc or None
+    if data.ebook_page_count is not None:
+        mat.ebook_page_count = data.ebook_page_count
     db.commit()
     db.refresh(mat)
     return {"id": mat.id, "title": mat.title, "file_type": mat.file_type, "status": "updated"}
