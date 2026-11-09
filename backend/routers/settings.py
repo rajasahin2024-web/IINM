@@ -3804,7 +3804,7 @@ async def delete_learner_review(review_id: int, device: str = Depends(require_de
 class HomeAIEcosystemCardSchema(BaseModel):
     title: str
     description: str
-    accent_color: Optional[str] = "#4facfe"
+    accent_color: Optional[str] = "#e63946"
     order_position: int = 0
     is_active: Optional[bool] = True
 
@@ -3873,22 +3873,22 @@ async def get_ai_ecosystem_cards(db: Session = Depends(get_db)):
         defaults = [
             {"title": "AI Doubt Portal",
              "description": "24/7 curriculum-trained AI mentor helping students solve coding, automation, prompting and AI workflow problems instantly.",
-             "accent_color": "#4facfe", "order_position": 1},
+             "accent_color": "#e63946", "order_position": 1},
             {"title": "Latest AI Tools",
              "description": "Hands-on training with ChatGPT, Claude, Gemini, Cursor and every cutting-edge tool the industry adopts. Stay ahead of the curve.",
-             "accent_color": "#00f2fe", "order_position": 2},
+             "accent_color": "#ff6b7a", "order_position": 2},
             {"title": "Live Practical Classes",
              "description": "Real instructors, live coding, screen sharing and interactive problem solving. Learn by building, not just watching.",
-             "accent_color": "#4facfe", "order_position": 3},
+             "accent_color": "#e63946", "order_position": 3},
             {"title": "Verified Credentials",
              "description": "Earn industry-recognized certificates after rigorous assessment. Blockchain-verified badges that recruiters trust.",
-             "accent_color": "#00f2fe", "order_position": 4},
+             "accent_color": "#ff6b7a", "order_position": 4},
             {"title": "Lifetime Updates",
              "description": "AI evolves daily. Your enrollment unlocks every future module, tool update and curriculum refresh forever. Pay once, grow forever.",
-             "accent_color": "#4facfe", "order_position": 5},
+             "accent_color": "#e63946", "order_position": 5},
             {"title": "AI Community",
              "description": "Join a high-signal global network of AI builders, mentors and collaborators. Share prompts, find partners, accelerate together.",
-             "accent_color": "#00f2fe", "order_position": 6},
+             "accent_color": "#ff6b7a", "order_position": 6},
         ]
         for d in defaults:
             db.add(HomeAIEcosystemCard(**d))
@@ -3982,7 +3982,7 @@ async def create_ai_ecosystem_card(req: HomeAIEcosystemCardSchema, device: str =
     new_card = HomeAIEcosystemCard(
         title=req.title,
         description=req.description,
-        accent_color=req.accent_color or "#4facfe",
+        accent_color=req.accent_color or "#e63946",
         order_position=req.order_position,
         is_active=req.is_active if req.is_active is not None else True,
     )

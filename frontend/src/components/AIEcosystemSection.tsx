@@ -36,12 +36,12 @@ const DEFAULT_SECTION: SectionData = {
 };
 
 const DEFAULT_CARDS: CardData[] = [
-  { id: 1, title: "AI Doubt Portal", description: "24/7 curriculum-trained AI mentor helping students solve coding, automation, prompting and AI workflow problems instantly.", accent_color: "#4facfe", order_position: 1, is_active: true },
-  { id: 2, title: "Latest AI Tools", description: "Hands-on training with ChatGPT, Claude, Gemini, Cursor and every cutting-edge tool the industry adopts. Stay ahead of the curve.", accent_color: "#00f2fe", order_position: 2, is_active: true },
-  { id: 3, title: "Live Practical Classes", description: "Real instructors, live coding, screen sharing and interactive problem solving. Learn by building, not just watching.", accent_color: "#4facfe", order_position: 3, is_active: true },
-  { id: 4, title: "Verified Credentials", description: "Earn industry-recognized certificates after rigorous assessment. Blockchain-verified badges that recruiters trust.", accent_color: "#00f2fe", order_position: 4, is_active: true },
-  { id: 5, title: "Lifetime Updates", description: "AI evolves daily. Your enrollment unlocks every future module, tool update and curriculum refresh forever. Pay once, grow forever.", accent_color: "#4facfe", order_position: 5, is_active: true },
-  { id: 6, title: "AI Community", description: "Join a high-signal global network of AI builders, mentors and collaborators. Share prompts, find partners, accelerate together.", accent_color: "#00f2fe", order_position: 6, is_active: true },
+  { id: 1, title: "AI Doubt Portal", description: "24/7 curriculum-trained AI mentor helping students solve coding, automation, prompting and AI workflow problems instantly.", accent_color: "#e63946", order_position: 1, is_active: true },
+  { id: 2, title: "Latest AI Tools", description: "Hands-on training with ChatGPT, Claude, Gemini, Cursor and every cutting-edge tool the industry adopts. Stay ahead of the curve.", accent_color: "#ff6b7a", order_position: 2, is_active: true },
+  { id: 3, title: "Live Practical Classes", description: "Real instructors, live coding, screen sharing and interactive problem solving. Learn by building, not just watching.", accent_color: "#e63946", order_position: 3, is_active: true },
+  { id: 4, title: "Verified Credentials", description: "Earn industry-recognized certificates after rigorous assessment. Blockchain-verified badges that recruiters trust.", accent_color: "#ff6b7a", order_position: 4, is_active: true },
+  { id: 5, title: "Lifetime Updates", description: "AI evolves daily. Your enrollment unlocks every future module, tool update and curriculum refresh forever. Pay once, grow forever.", accent_color: "#e63946", order_position: 5, is_active: true },
+  { id: 6, title: "AI Community", description: "Join a high-signal global network of AI builders, mentors and collaborators. Share prompts, find partners, accelerate together.", accent_color: "#ff6b7a", order_position: 6, is_active: true },
 ];
 
 function isAdminLoggedIn(): boolean {
@@ -95,7 +95,7 @@ function ParticleCanvas() {
         if (p.y > h) p.y = 0;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(79,172,254,${p.alpha})`;
+        ctx.fillStyle = `rgba(230,57,70,${p.alpha})`;
         ctx.fill();
       }
     };
@@ -124,7 +124,7 @@ function InlineEdit({
 }) {
   const inputStyle: React.CSSProperties = {
     background: "rgba(255,255,255,0.08)",
-    border: "1px solid rgba(79,172,254,0.4)",
+    border: "1px solid rgba(230,57,70,0.45)",
     borderRadius: "6px",
     padding: "6px 10px",
     color: "#fff",
@@ -328,9 +328,9 @@ export default function AIEcosystemSection({
                   style={{
                     padding: "6px 14px",
                     borderRadius: 6,
-                    border: "1px solid rgba(79,172,254,0.4)",
-                    background: "rgba(79,172,254,0.1)",
-                    color: "#4facfe",
+                    border: "1px solid rgba(230,57,70,0.45)",
+                    background: "rgba(230,57,70,0.12)",
+                    color: "#ff6b7a",
                     fontSize: 12,
                     fontWeight: 600,
                     cursor: "pointer",
@@ -349,9 +349,9 @@ export default function AIEcosystemSection({
                   style={{
                     padding: "6px 14px",
                     borderRadius: 6,
-                    border: "1px solid rgba(0,242,254,0.4)",
-                    background: "rgba(0,242,254,0.1)",
-                    color: "#00f2fe",
+                    border: "1px solid rgba(255,107,122,0.45)",
+                    background: "rgba(255,107,122,0.12)",
+                    color: "#ff6b7a",
                     fontSize: 12,
                     fontWeight: 600,
                     cursor: saving ? "not-allowed" : "pointer",

@@ -107,7 +107,7 @@
 .accordionItem:hover,
 .accordionItem.active {
   background: rgba(255, 255, 255, 0.045);
-  border-color: var(--card-accent, rgba(79, 172, 254, 0.25));
+  border-color: var(--card-accent, rgba(230, 57, 70, 0.3));
 }
 
 .accordionItem:hover .cardGlow,
@@ -127,7 +127,7 @@
 .cardNumber {
   font-size: 13px;
   font-weight: 700;
-  color: var(--card-accent, #4facfe);
+  color: var(--card-accent, #e63946);
   opacity: 0.6;
   min-width: 28px;
   line-height: 1.4;
@@ -148,7 +148,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--card-accent, #4facfe);
+  color: var(--card-accent, #e63946);
   opacity: 0.5;
   transition: transform 0.4s ease, opacity 0.3s ease;
   flex-shrink: 0;
@@ -191,7 +191,7 @@
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: radial-gradient(circle, var(--card-accent, #4facfe) 0%, transparent 70%);
+  background: radial-gradient(circle, var(--card-accent, #e63946) 0%, transparent 70%);
   opacity: 0;
   filter: blur(20px);
   transition: opacity 0.6s ease;

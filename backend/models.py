@@ -1712,7 +1712,7 @@ class HomeAIEcosystemCard(Base):
     id             = Column(Integer, primary_key=True, index=True)
     title          = Column(String(255), nullable=False)
     description    = Column(Text, nullable=False)
-    accent_color   = Column(String(20), nullable=False, default="#4facfe")
+    accent_color   = Column(String(20), nullable=False, default="#e63946")
     order_position = Column(Integer, default=0, server_default=text('0'))
     is_active      = Column(Boolean, default=True, server_default=text('true'))
     created_at     = Column(DateTime(timezone=True), server_default=func.now())
