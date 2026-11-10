@@ -70,10 +70,10 @@ export interface StudentCourseCard {
 }
 
 /** Course delivery format — live_batch is the classic flow. */
-export type CourseType = "live_batch" | "ebook" | "ebook_video";
+export type CourseType = "live_batch" | "ebook" | "ebook_video" | "micro";
 
 export function normalizeCourseType(v: unknown): CourseType {
-  return v === "ebook" || v === "ebook_video" ? v : "live_batch";
+  return v === "ebook" || v === "ebook_video" || v === "micro" ? v : "live_batch";
 }
 
 export function courseTypeLabel(t: CourseType): string {
@@ -82,6 +82,8 @@ export function courseTypeLabel(t: CourseType): string {
       return "eBook";
     case "ebook_video":
       return "eBook + Video";
+    case "micro":
+      return "Micro Course";
     default:
       return "Live Batch";
   }

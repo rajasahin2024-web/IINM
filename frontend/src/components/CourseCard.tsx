@@ -57,6 +57,9 @@ const Icon = {
   BookMini: () => (
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
   ),
+  BoltMini: () => (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+  ),
   Cert: () => (
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
   ),
@@ -110,18 +113,23 @@ export default function CourseCard({
   const initials = displayInstructorName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
   const thumb = resolveAssetUrl(course.thumbnail_url);
 
-  // course-type chip (live_batch | ebook | ebook_video)
+  // course-type chip (live_batch | ebook | ebook_video | micro)
   const ct = course.course_type || "live_batch";
-  const typeChip = ct === "live_batch"
-    ? <span className="cc-type-chip cc-type-live"><span className="cc-live-dot" aria-hidden="true" />Live</span>
-    : ct === "ebook"
+  const typeChip = ct === "ebook"
     ? <span className="cc-type-chip cc-type-ebook"><Icon.BookMini />eBook</span>
-    : <span className="cc-type-chip cc-type-ebook"><Icon.BookMini />eBook + Video</span>;
+    : ct === "ebook_video"
+    ? <span className="cc-type-chip cc-type-ebook"><Icon.BookMini />eBook + Video</span>
+    : ct === "micro"
+    ? <span className="cc-type-chip cc-type-micro"><Icon.BoltMini />Micro</span>
+    : <span className="cc-type-chip cc-type-live"><span className="cc-live-dot" aria-hidden="true" />Live</span>;
+
+  // Micro courses live under their own route family (/micro-courses/*).
+  const detailHref = ct === "micro" ? `/micro-courses/${course.slug}` : `/courses/${course.slug}`;
 
   if (listView) {
     return (
-      <div className="cc-card cc-card-list reveal-item" onClick={() => router.push(`/courses/${course.slug}`)} style={{ cursor: "pointer" }}>
-        <Link href={`/courses/${course.slug}`} className="cc-thumb cc-thumb-list" onClick={(e) => e.stopPropagation()} aria-label={`View ${course.title}`}>
+      <div className="cc-card cc-card-list reveal-item" onClick={() => router.push(detailHref)} style={{ cursor: "pointer" }}>
+        <Link href={detailHref} className="cc-thumb cc-thumb-list" onClick={(e) => e.stopPropagation()} aria-label={`View ${course.title}`}>
           {thumb ? <img src={thumb} alt={course.title} className="cc-thumb-img" /> : <div className="cc-thumb-placeholder"><Icon.Book /></div>}
           {badge && <span className={`cc-badge ${badge.cls}`}>{badge.label}</span>}
           {course.promo_video_url && (
@@ -137,7 +145,7 @@ export default function CourseCard({
             {course.has_certificate && <span className="cc-cert-chip"><Icon.Cert /> Certificate</span>}
             <span className="cc-meta-est" title="Estimated — pending final data">~{fakeDuration}h (est.)</span>
           </div>
-          <Link href={`/courses/${course.slug}`} style={{ textDecoration: "none" }} onClick={(e) => e.stopPropagation()}>
+          <Link href={detailHref} style={{ textDecoration: "none" }} onClick={(e) => e.stopPropagation()}>
             <h3 className="cc-title">{course.title}</h3>
           </Link>
           {course.description && (
@@ -159,15 +167,15 @@ export default function CourseCard({
               </>
             ) : <span className="cc-price-main" style={{ fontSize: 14 }}>Contact us</span>}
           </div>
-          <Link href={`/courses/${course.slug}`} className="cc-enroll-btn" onClick={(e) => e.stopPropagation()}>View Course</Link>
+          <Link href={detailHref} className="cc-enroll-btn" onClick={(e) => e.stopPropagation()}>View Course</Link>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="cc-card reveal-item" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onClick={() => router.push(`/courses/${course.slug}`)} style={{ cursor: "pointer" }}>
-      <Link href={`/courses/${course.slug}`} className="cc-thumb" onClick={(e) => e.stopPropagation()} aria-label={`View ${course.title}`}>
+    <div className="cc-card reveal-item" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onClick={() => router.push(detailHref)} style={{ cursor: "pointer" }}>
+      <Link href={detailHref} className="cc-thumb" onClick={(e) => e.stopPropagation()} aria-label={`View ${course.title}`}>
         {thumb ? <img src={thumb} alt={course.title} className="cc-thumb-img" /> : <div className="cc-thumb-placeholder"><Icon.Book /></div>}
         {badge && <span className={`cc-badge ${badge.cls}`}>{badge.label}</span>}
         {course.promo_video_url && (
@@ -193,7 +201,7 @@ export default function CourseCard({
           {course.has_certificate && <span className="cc-cert-chip"><Icon.Cert /> Certificate</span>}
           <span className="cc-meta-est" style={{ marginLeft: "auto" }} title="Estimated — pending final data">~{fakeDuration}h (est.)</span>
         </div>
-        <Link href={`/courses/${course.slug}`} style={{ textDecoration: "none" }} onClick={(e) => e.stopPropagation()}>
+        <Link href={detailHref} style={{ textDecoration: "none" }} onClick={(e) => e.stopPropagation()}>
           <h3 className="cc-title">{course.title}</h3>
         </Link>
 
@@ -214,7 +222,7 @@ export default function CourseCard({
               </>
             ) : <span className="cc-price-main" style={{ fontSize: 14 }}>Contact us</span>}
           </div>
-          <Link href={`/courses/${course.slug}`} className="cc-enroll-btn" onClick={(e) => e.stopPropagation()}>Enroll</Link>
+          <Link href={detailHref} className="cc-enroll-btn" onClick={(e) => e.stopPropagation()}>Enroll</Link>
         </div>
       </div>
     </div>

@@ -249,8 +249,10 @@ function CoursesPageInner() {
   const filtered = useMemo(() => {
     const result = courses.filter(c => {
       const ct = c.course_type || "live_batch";
+      // eBooks tab is an explicit bucket (ebook | ebook_video) — micro and
+      // any future type must not silently fall into it.
       const matchType = typeFilter === "all" ||
-        (typeFilter === "live" ? ct === "live_batch" : ct !== "live_batch");
+        (typeFilter === "live" ? ct === "live_batch" : ct === "ebook" || ct === "ebook_video");
       const matchSearch = c.title.toLowerCase().includes(search.toLowerCase()) || (c.description ?? "").toLowerCase().includes(search.toLowerCase());
       let matchPrice = true;
       if (priceFilter === "Free") matchPrice = c.is_free;

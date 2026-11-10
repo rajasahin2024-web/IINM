@@ -1058,7 +1058,9 @@ export default function CourseDetailsPage({ slug: propSlug, initialData }: { slu
 
   const ext = course.extended || {};
 
-  // ── Course type (live_batch | ebook | ebook_video) ──
+  // ── Course type (live_batch | ebook | ebook_video | micro) ──
+  // Note: micro slugs never reach this component — /courses/[slug] redirects
+  // them to /micro-courses/[slug] first (one canonical route family).
   const courseType = course.course_type || "live_batch";
   const isEbookType = courseType === "ebook" || courseType === "ebook_video";
   const primaryEbook: EbookBlock | null = (course.ebooks && course.ebooks.length > 0) ? course.ebooks[0] : null;

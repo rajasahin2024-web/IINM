@@ -64,12 +64,16 @@ const STUDENT_CATEGORIES = [
 ];
 
 const STEPS = ["Details", "Batch", "Pay", "Done"];
-// eBook purchases skip the Batch step (auto-assigned server-side).
-const EBOOK_STEP_INDICES = [0, 2, 3];
+// Instant-access purchases (eBook / micro) skip the Batch step entirely —
+// the server auto-assigns a hidden auto-batch.
+const INSTANT_STEP_INDICES = [0, 2, 3];
 const ALL_STEP_INDICES = [0, 1, 2, 3];
 
-const isEbookCourse = (c?: Course | null) =>
-  (c?.course_type || "live_batch") !== "live_batch";
+const INSTANT_ACCESS_TYPES = ["ebook", "ebook_video", "micro"];
+const isInstantAccessCourse = (c?: Course | null) =>
+  INSTANT_ACCESS_TYPES.includes(c?.course_type || "live_batch");
+const isMicroCourse = (c?: Course | null) =>
+  (c?.course_type || "live_batch") === "micro";
 
 /* ─────────────────────────────────────────
    Icons
@@ -206,7 +210,8 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
 
   // Course-type derivation — must come before effects/dep arrays that read it.
   const selectedCourse = courses.find(c => c.id === selectedCourseId) || course;
-  const isEbook = isEbookCourse(selectedCourse);
+  const isInstant = isInstantAccessCourse(selectedCourse);
+  const isMicro = isMicroCourse(selectedCourse);
 
   // Reset & init when opened
   useEffect(() => {
@@ -234,26 +239,29 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
     }
   }, [open, step, selectedCourseId]);
 
-  // eBook purchase success — the backend already set the student session
-  // cookie, so hand off to the in-platform reader after a short beat.
+  // Instant-access purchase success — the backend already set the student
+  // session cookie, so hand off to the student dashboard after a short beat
+  // (eBooks go to the reader, micro courses to the course overview).
   useEffect(() => {
     if (step === 3 && autoLoginDone && selectedCourseId) {
       const t = setTimeout(() => {
-        window.location.href = `/student/courses/${selectedCourseId}/ebook`;
+        window.location.href = isMicro
+          ? `/student/courses/${selectedCourseId}/overview`
+          : `/student/courses/${selectedCourseId}/ebook`;
       }, 1600);
       return () => clearTimeout(t);
     }
     return undefined;
-  }, [step, autoLoginDone, selectedCourseId]);
+  }, [step, autoLoginDone, selectedCourseId, isMicro]);
 
   // Auto-detect location once when the drawer opens and config is loaded
-  // (skipped for eBook purchases — no address needed for a digital download).
+  // (skipped for instant-access purchases — no address needed).
   useEffect(() => {
-    if (open && !isEbook && !locating && config && !locationAutoTriggeredRef.current) {
+    if (open && !isInstant && !locating && config && !locationAutoTriggeredRef.current) {
       locationAutoTriggeredRef.current = true;
       handleDetectLocation();
     }
-  }, [open, isEbook, locating, config]);
+  }, [open, isInstant, locating, config]);
 
   // Lock body scroll when open
   useEffect(() => {
@@ -512,7 +520,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
     if (!phone.trim()) { setError("Please enter your phone number."); return false; }
     if (!selectedCourseId) { setError("Please select a course."); return false; }
     if (!agreeTerms) { setError("You must agree to the Terms & Conditions."); return false; }
-    if (!isEbook) {
+    if (!isInstant) {
       if (!category) { setError("Please select a student category."); return false; }
       if (category === "Others" && !otherCategory.trim()) { setError("Please specify your category."); return false; }
       // Location validation (merged from former step 1)
@@ -551,13 +559,13 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
     } else if (step === 1) {
       if (!validateStep1()) return;
     }
-    // eBook purchases skip the Batch step entirely.
-    setStep(isEbook && step === 0 ? 2 : step + 1);
+    // Instant-access purchases skip the Batch step entirely.
+    setStep(isInstant && step === 0 ? 2 : step + 1);
   };
 
   const handleBack = () => {
     if (step > 0) {
-      setStep(isEbook && step === 2 ? 0 : step - 1);
+      setStep(isInstant && step === 2 ? 0 : step - 1);
       setError("");
     }
   };
@@ -602,9 +610,9 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
     return basePrice;
   })();
 
-  // Final booking amount based on pay mode — eBook purchases are always the
-  // full course price (no slot-booking splits, no full-pay discount).
-  const bookingAmount = isEbook
+  // Final booking amount based on pay mode — instant-access purchases are
+  // always the full course price (no slot-booking splits, no full-pay discount).
+  const bookingAmount = isInstant
     ? (selectedCourse?.discount_price ?? selectedCourse?.price ?? 0)
     : ((payMode === "full" && discountActive) ? fullPayDiscountedPrice : normalBookingAmount);
 
@@ -740,7 +748,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
       }
       setReceipt(data);
       setStep(3);
-      // eBook buyers are auto-logged in by the backend (session cookie) —
+      // Instant-access buyers are auto-logged in by the backend (session cookie) —
       // flag it so the success screen can hand off to the reader.
       if (data?.auto_login) setAutoLoginDone(true);
     } catch (err: any) {
@@ -771,10 +779,14 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
             <div className="sb-success-check">
               <Icon.Check />
             </div>
-            <h2 className="sb-success-title">{autoLoginDone ? "eBook Purchased!" : "Successfully Slot Booked!"}</h2>
+            <h2 className="sb-success-title">
+              {autoLoginDone ? (isMicro ? "Micro Course Purchased!" : "eBook Purchased!") : "Successfully Slot Booked!"}
+            </h2>
             <p className="sb-success-subtitle">
               {autoLoginDone
-                ? "You're signed in — opening your eBook reader…"
+                ? isMicro
+                  ? "You're signed in — opening your course…"
+                  : "You're signed in — opening your eBook reader…"
                 : `A confirmation email has been sent to ${receipt.student_email}`}
             </p>
 
@@ -795,9 +807,9 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
               <a
                 className="sb-btn sb-btn-pay"
                 style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", textDecoration: "none", marginBottom: 16 }}
-                href={`/student/courses/${selectedCourseId}/ebook`}
+                href={isMicro ? `/student/courses/${selectedCourseId}/overview` : `/student/courses/${selectedCourseId}/ebook`}
               >
-                Open Your eBook Now
+                {isMicro ? "Open Your Course Now" : "Open Your eBook Now"}
               </a>
             )}
 
@@ -851,7 +863,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
         {/* ── Header ── */}
         <div className="sb-header">
           <div>
-            <h2 className="sb-header-title">{isEbook ? "Buy eBook" : "Book Your Slot"}</h2>
+            <h2 className="sb-header-title">{isInstant ? (isMicro ? "Buy Micro Course" : "Buy eBook") : "Book Your Slot"}</h2>
             <p className="sb-header-subtitle">{selectedCourse?.title || "Course"}</p>
           </div>
           <button className="sb-close-btn" onClick={onClose} aria-label="Close">
@@ -861,7 +873,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
 
         {/* ── Progress ── */}
         <div className="sb-progress">
-          {(isEbook ? EBOOK_STEP_INDICES : ALL_STEP_INDICES).map((si, pos, arr) => (
+          {(isInstant ? INSTANT_STEP_INDICES : ALL_STEP_INDICES).map((si, pos, arr) => (
             <div key={si} className={`sb-step ${si === step ? "active" : si < step ? "done" : ""}`}>
               {pos < arr.length - 1 && <div className="sb-step-line" />}
               <div className="sb-step-circle">
@@ -887,7 +899,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
               )}
 
               {/* Photo Upload — not needed for a digital eBook purchase */}
-              {!isEbook && (
+              {!isInstant && (
               <div className="sb-field">
                 <label className="sb-label">Profile Photo</label>
                 <div className="sb-photo-upload">
@@ -927,7 +939,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
 
               {/* DOB & Phone */}
               <div className="sb-row">
-                {!isEbook && (
+                {!isInstant && (
                 <div className="sb-field">
                   <label className="sb-label">Date of Birth<span className="sb-req">*</span></label>
                   <input className="sb-input" type="date" value={dob} onChange={e => setDob(e.target.value)} />
@@ -957,7 +969,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
               </div>
 
               {/* Qualification & category — admissions metadata, not needed for eBooks */}
-              {!isEbook && (
+              {!isInstant && (
                 <>
               <div className="sb-field">
                 <label className="sb-label">Last Qualification</label>
@@ -1000,7 +1012,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
               </label>
 
               {/* ── Collapsible Location Section (merged from former Location step) ── */}
-              {!isEbook && (
+              {!isInstant && (
               <div className="sb-location-collapse-wrap">
                 <button
                   type="button"
@@ -1289,7 +1301,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
               <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: "0 0 16px" }}>Review & Pay</h3>
 
               {/* ── Payment Mode Selection (top) — slot-booking splits only, not eBooks ── */}
-              {!isEbook && discountActive && savingsAmount > 0 && (
+              {!isInstant && discountActive && savingsAmount > 0 && (
                 <div className="sb-pay-mode-wrap">
                   <div
                     className={`sb-pay-mode-option ${payMode === "booking" ? "selected" : ""}`}
@@ -1345,7 +1357,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
               )}
 
               {/* ── Full Payment Discount Offer Card (compact, with countdown) ── */}
-              {!isEbook && discountActive && savingsAmount > 0 && (
+              {!isInstant && discountActive && savingsAmount > 0 && (
                 <div className={`sb-discount-card ${payMode === "full" ? "sb-discount-card-active" : ""}`}>
                   <div className="sb-discount-card-glow" />
                   {/* Gift icon */}
@@ -1418,7 +1430,7 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
                   </div>
                 )}
                 <div className="sb-summary-row sb-summary-total">
-                  <span className="sb-summary-label">{isEbook ? "Total" : "Booking Amount"}</span>
+                  <span className="sb-summary-label">{isInstant ? "Total" : "Booking Amount"}</span>
                   <span className="sb-summary-value">{formatCurrency(bookingAmount, currency)}</span>
                 </div>
               </div>
@@ -1448,8 +1460,8 @@ export default function SlotBookingDrawer({ open, onClose, course }: SlotBooking
               <button className="sb-btn sb-btn-pay" onClick={handlePay} disabled={submitting}>
                 {submitting
                   ? "Processing…"
-                  : isEbook
-                    ? `Buy eBook — ${formatCurrency(bookingAmount, currency)}`
+                  : isInstant
+                    ? `${isMicro ? "Buy Now" : "Buy eBook"} — ${formatCurrency(bookingAmount, currency)}`
                     : `Pay ${formatCurrency(bookingAmount, currency)}`}
               </button>
             )}

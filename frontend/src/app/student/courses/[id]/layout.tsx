@@ -39,11 +39,13 @@ interface NavGroup {
 function navGroups(base: string, courseType: string): NavGroup[] {
   // Type-aware course shell: eBook-type courses never run live classes —
   // eBook-only gets an eBook tab, eBook+video orders eBook before content.
+  // Micro courses are Content-only (no eBook tab, no Live Classes tab).
   const isEbookType = courseType === "ebook" || courseType === "ebook_video";
+  const isMicro = courseType === "micro";
   const learn: NavItem[] = [{ href: `${base}/overview`, label: "Overview", icon: "home" }];
   if (isEbookType) learn.push({ href: `${base}/ebook`, label: "eBook", icon: "book-open" });
   learn.push({ href: `${base}/content`, label: "Course Content", icon: "book" });
-  if (!isEbookType) learn.push({ href: `${base}/classes`, label: "Live Classes", icon: "video-call" });
+  if (!isEbookType && !isMicro) learn.push({ href: `${base}/classes`, label: "Live Classes", icon: "video-call" });
   return [
     {
       title: "Learn",
@@ -178,6 +180,8 @@ export default function CourseLayout({ children }: { children: React.ReactNode }
   const base = `/student/courses/${courseId}`;
   const courseType = course?.courseType ?? "live_batch";
   const isEbookType = courseType === "ebook" || courseType === "ebook_video";
+  const isMicro = courseType === "micro";
+  const showTypeBadge = courseType !== "live_batch";
   const groups = useMemo(() => navGroups(base, courseType), [base, courseType]);
 
   const isActive = (href: string) => pathname === href;
@@ -275,7 +279,7 @@ export default function CourseLayout({ children }: { children: React.ReactNode }
                 {course.batchMode ? ` · ${course.batchMode}` : ""}
               </span>
             )}
-            {isEbookType && (
+            {showTypeBadge && (
               <span className="stu-badge stu-badge-navy stu-course-type-badge">
                 {courseTypeLabel(courseType)}
               </span>
@@ -365,7 +369,7 @@ export default function CourseLayout({ children }: { children: React.ReactNode }
                       {course.batchMode ? ` · ${course.batchMode}` : ""}
                     </span>
                   )}
-                  {isEbookType && (
+                  {showTypeBadge && (
                     <span className="stu-badge stu-badge-navy stu-course-type-badge">
                       {courseTypeLabel(courseType)}
                     </span>
@@ -473,7 +477,7 @@ export default function CourseLayout({ children }: { children: React.ReactNode }
               <SIcon name="book-open" size={19} />
               eBook
             </Link>
-          ) : (
+          ) : isMicro ? null : (
             <Link
               href={`${base}/classes`}
               className={`stu-bottom-item ${isActive(`${base}/classes`) ? "active" : ""}`}

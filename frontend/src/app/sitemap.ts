@@ -8,6 +8,7 @@ const REVALIDATE = 3600;
 const STATIC_PAGES: { path: string; priority: number; changeFrequency: "daily" | "weekly" | "monthly" | "yearly" | "always" | "hourly" | "never" }[] = [
   { path: "", priority: 1.0, changeFrequency: "daily" },
   { path: "/courses", priority: 0.9, changeFrequency: "daily" },
+  { path: "/micro-courses", priority: 0.9, changeFrequency: "daily" },
   { path: "/blog", priority: 0.8, changeFrequency: "daily" },
   { path: "/about-us", priority: 0.6, changeFrequency: "monthly" },
   { path: "/about-iinm", priority: 0.6, changeFrequency: "monthly" },
@@ -55,8 +56,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     : [];
   for (const course of courseList) {
     if (!course.slug) continue;
+    // Micro courses live under their own canonical route family — never emit
+    // a micro slug under /courses/.
+    const routeBase = course.course_type === "micro" ? "/micro-courses" : "/courses";
     entries.push({
-      url: `${baseUrl}/courses/${course.slug}`,
+      url: `${baseUrl}${routeBase}/${course.slug}`,
       lastModified: course.updated_at ? new Date(course.updated_at) : new Date(),
       changeFrequency: "weekly" as const,
       priority: 0.8,

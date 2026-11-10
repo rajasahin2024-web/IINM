@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import CourseDetailClient from "./CourseDetailClient";
 import { serverFetch, isDbDown } from "@/lib/serverFetch";
 import { API_BASE_URL as API } from "@/lib/config";
@@ -82,6 +82,12 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
 
   if (!course) {
     notFound();
+  }
+
+  // Micro courses have their own canonical route family — send anyone who
+  // lands on the legacy /courses/{slug} URL to the micro landing.
+  if (course.course_type === "micro") {
+    permanentRedirect(`/micro-courses/${slug}`);
   }
 
   const baseUrl = (site && !isDbDown(site) && (site as any).canonical_base_url)

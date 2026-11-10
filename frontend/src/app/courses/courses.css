@@ -485,6 +485,11 @@
   color: #1d4ed8;
   border: 1px solid #c7d9fe;
 }
+.cc-type-micro {
+  background: #eef1f6;
+  color: var(--cc-navy);
+  border: 1px solid #d5dce8;
+}
 
 .cc-filter-spacer { flex: 1; }
 
