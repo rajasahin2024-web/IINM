@@ -173,16 +173,21 @@ en4 = db.query(models.BatchEnrollment).filter(models.BatchEnrollment.student_id 
 check("still lands in micro batch", en4.batch_id == mbatch.id,
       f"enrolled in {en4.batch_id}, expected {mbatch.id}")
 
-# a live_batch purchase passing a hidden auto batch_id is rejected.
+# a live_batch purchase passing a hidden auto batch_id is rejected — even
+# when the batch hangs off the same course.
 live = models.Course(title=f"MicroSmokeLive {SUFFIX}", price=999,
                      course_type="live_batch", status="PUBLISHED",
                      slug=f"microsmokelive-{SUFFIX}")
-db.add(live); db.commit()
+db.add(live); db.flush()
+hidden = models.Batch(course_id=live.id, name=f"Hidden {SUFFIX}",
+                      batch_type="micro", status="Upcoming",
+                      max_capacity=50, mode="Online")
+db.add(hidden); db.commit()
 o5, p5 = f"order_live{SUFFIX}", f"pay_live{SUFFIX}"
 r = requests.post(f"{BASE}/api/public/slot-booking/verify-and-register", json={
     "razorpay_order_id": o5, "razorpay_payment_id": p5,
     "razorpay_signature": sig(o5, p5),
-    "course_id": live.id, "batch_id": mbatch.id,
+    "course_id": live.id, "batch_id": hidden.id,
     "email": f"liveg_{SUFFIX}@test.local", "first_name": "Live",
     "phone": f"96{int(SUFFIX, 16) % 100000000:08d}",
     "amount_paid": 999.0, "agree_terms": True,
