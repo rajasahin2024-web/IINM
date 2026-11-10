@@ -18,7 +18,7 @@ MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
 # allow-list helpers — never binary `!= "live_batch"` checks — so a new
 # type can never silently fall into an existing bucket.
 EBOOK_COURSE_TYPES = ("ebook", "ebook_video")
-INSTANT_ACCESS_COURSE_TYPES = EBOOK_COURSE_TYPES
+INSTANT_ACCESS_COURSE_TYPES = ("ebook", "ebook_video", "micro")
 
 
 def is_ebook_type(course_type: str | None) -> bool:

@@ -181,7 +181,7 @@ class Course(Base):
     certificate_image_url = Column(Text, nullable=True)
 
     # ── Course Type & Mock Test (IIN-152)
-    course_type          = Column(String(20), nullable=False, default="live_batch", server_default="live_batch")  # live_batch | ebook | ebook_video
+    course_type          = Column(String(20), nullable=False, default="live_batch", server_default="live_batch")  # live_batch | ebook | ebook_video | micro
     mock_test_exam_id    = Column(Integer, ForeignKey("exams.id", ondelete="SET NULL"), nullable=True)             # exam template used as this course's mock test
     mock_test_price      = Column(Float, nullable=True)                                                          # NULL/<=0 → free mock test
     ebook_batch_capacity = Column(Integer, nullable=True)                                                        # capacity for auto-created eBook batches
@@ -546,7 +546,7 @@ class Batch(Base):
     id                  = Column(Integer, primary_key=True, index=True)
     course_id           = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"))
     name                = Column(String(255), nullable=False)
-    batch_type          = Column(String(20), nullable=False, default="standard", server_default="standard")  # standard | ebook (auto-created on eBook purchase)
+    batch_type          = Column(String(20), nullable=False, default="standard", server_default="standard")  # standard | ebook | micro (auto-created on instant-access purchase)
     mode                = Column(String(50), default="Online")      # Online, Offline, Hybrid
     meeting_url         = Column(String(500), nullable=True)
     status              = Column(String(50), default="Upcoming")    # Upcoming, Ongoing, Completed, Cancelled

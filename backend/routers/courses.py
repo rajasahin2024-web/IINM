@@ -136,7 +136,7 @@ class CourseBase(BaseModel):
     target_audience: Optional[str] = None
     has_certificate: bool = False
     certificate_image_url: Optional[str] = None
-    course_type: str = "live_batch"                    # live_batch | ebook | ebook_video
+    course_type: str = "live_batch"                    # live_batch | ebook | ebook_video | micro
     mock_test_exam_id: Optional[int] = None            # exam template used as this course's mock test
     mock_test_price: Optional[float] = None            # NULL/<=0 → free mock test
     ebook_batch_capacity: Optional[int] = None         # capacity for auto-created eBook batches
@@ -505,11 +505,13 @@ def get_public_instructors(db: Session = Depends(get_db)):
 
 # 4. Courses — PUBLIC endpoint (no auth required, for homepage catalog)
 @router.get("/public/courses")
-def get_public_courses(search: Optional[str] = None, db: Session = Depends(get_db)):
+def get_public_courses(search: Optional[str] = None, course_type: Optional[str] = None, db: Session = Depends(get_db)):
     """Returns all PUBLISHED courses publicly without auth."""
     query = db.query(models.Course).options(joinedload(models.Course.instructors)).filter(models.Course.status == "PUBLISHED")
     if search:
         query = query.filter(models.Course.title.ilike(f"%{search}%"))
+    if course_type:
+        query = query.filter(models.Course.course_type == course_type)
     courses = query.order_by(models.Course.is_featured.desc(), models.Course.id.desc()).all()
     result = []
     for c in courses:
@@ -1334,7 +1336,7 @@ def get_course(course_id: int, device: str = Depends(require_device), db: Sessio
         raise HTTPException(status_code=404, detail="Course not found")
     return CourseResponse.from_orm_model(course)
 
-VALID_COURSE_TYPES = {"live_batch", "ebook", "ebook_video"}
+VALID_COURSE_TYPES = {"live_batch", "ebook", "ebook_video", "micro"}
 
 @router.post("/courses", response_model=CourseResponse)
 def create_course(course: CourseCreate, device: str = Depends(require_device), db: Session = Depends(get_db)):

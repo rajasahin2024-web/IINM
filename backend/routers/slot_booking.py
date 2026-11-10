@@ -137,20 +137,27 @@ def _instant_access_full_price(course: models.Course) -> float:
     return float(course.discount_price if course.discount_price else (course.price or 0.0))
 
 
-DEFAULT_EBOOK_BATCH_CAPACITY = 500
+DEFAULT_AUTO_BATCH_CAPACITY = 500
+
+# course_type -> batch_type for auto-created hidden batches. eBook-family
+# courses share "ebook" batches; every other instant-access type gets its
+# own batch family.
+AUTO_BATCH_TYPE_BY_COURSE_TYPE = {"ebook": "ebook", "ebook_video": "ebook", "micro": "micro"}
+_AUTO_BATCH_LABELS = {"ebook": "eBook", "micro": "Micro"}
+_INSTANT_ACCESS_LABELS = {"ebook": "eBook", "ebook_video": "eBook", "micro": "Micro course"}
 
 
-def _pick_or_create_ebook_batch(db: Session, course: models.Course) -> models.Batch:
-    """Pick the current open eBook batch for the course, or auto-create the
-    next one when all existing eBook batches are full. The caller must hold a
-    row lock on the course (SELECT ... FOR UPDATE) so concurrent purchases
-    serialize on capacity checks."""
-    cap = course.ebook_batch_capacity or DEFAULT_EBOOK_BATCH_CAPACITY
+def _pick_or_create_auto_batch(db: Session, course: models.Course, batch_type: str) -> models.Batch:
+    """Pick the current open auto batch of `batch_type` for the course, or
+    auto-create the next one when all existing batches of that type are full.
+    The caller must hold a row lock on the course (SELECT ... FOR UPDATE) so
+    concurrent purchases serialize on capacity checks."""
+    cap = course.ebook_batch_capacity or DEFAULT_AUTO_BATCH_CAPACITY
     open_batches = (
         db.query(models.Batch)
         .filter(
             models.Batch.course_id == course.id,
-            models.Batch.batch_type == "ebook",
+            models.Batch.batch_type == batch_type,
             models.Batch.status.in_(["Upcoming", "Ongoing"]),
         )
         .order_by(models.Batch.id.desc())
@@ -168,18 +175,19 @@ def _pick_or_create_ebook_batch(db: Session, course: models.Course) -> models.Ba
         if enrolled < (b.max_capacity or cap):
             return b
 
-    total_ebook = (
+    total_typed = (
         db.query(func.count(models.Batch.id))
         .filter(
             models.Batch.course_id == course.id,
-            models.Batch.batch_type == "ebook",
+            models.Batch.batch_type == batch_type,
         )
         .scalar() or 0
     )
+    label = _AUTO_BATCH_LABELS.get(batch_type, batch_type.replace("_", " ").title())
     batch = models.Batch(
         course_id=course.id,
-        name=f"eBook Batch {total_ebook + 1}",
-        batch_type="ebook",
+        name=f"{label} Batch {total_typed + 1}",
+        batch_type=batch_type,
         mode="Online",
         status="Upcoming",
         start_date=date.today(),
@@ -187,7 +195,7 @@ def _pick_or_create_ebook_batch(db: Session, course: models.Course) -> models.Ba
     )
     db.add(batch)
     db.flush()
-    # The course's configured mock test rides along with every new eBook batch.
+    # The course's configured mock test rides along with every new auto batch.
     if course.mock_test_exam_id:
         db.add(models.BatchExamAssignment(
             batch_id=batch.id,
@@ -702,7 +710,8 @@ def verify_and_register(req: VerifyAndRegisterRequest, request: Request, respons
         raise HTTPException(status_code=404, detail="Course not found")
 
     # 3. Validate batch (if provided) — live-batch path only; instant-access
-    # courses auto-assign a hidden batch below.
+    # courses ignore any client-sent batch_id and auto-assign a hidden batch
+    # of the matching type below, so a wrong-type batch can never enroll.
     batch = None
     is_instant = _is_instant_access_course(course)
     if is_instant:
@@ -719,6 +728,14 @@ def verify_and_register(req: VerifyAndRegisterRequest, request: Request, respons
         ).first()
         if not batch:
             raise HTTPException(status_code=404, detail="Batch not found for this course.")
+
+        # Hidden auto batches (ebook/micro) are never bookable via this path —
+        # instant-access purchases ignore batch_id and auto-assign their own.
+        if (batch.batch_type or "standard") != "standard":
+            raise HTTPException(
+                status_code=400,
+                detail="This batch is not open for slot booking."
+            )
 
         if (batch.status or "").lower() != "upcoming":
             raise HTTPException(
@@ -858,7 +875,8 @@ def verify_and_register(req: VerifyAndRegisterRequest, request: Request, respons
     # row lock serializes concurrent purchases on the capacity check.
     if is_instant:
         db.query(models.Course).filter(models.Course.id == course.id).with_for_update().first()
-        batch = _pick_or_create_ebook_batch(db, course)
+        auto_batch_type = AUTO_BATCH_TYPE_BY_COURSE_TYPE.get(course.course_type, course.course_type)
+        batch = _pick_or_create_auto_batch(db, course, auto_batch_type)
 
     enrollment_status = "active"
     if batch:
@@ -928,7 +946,10 @@ def verify_and_register(req: VerifyAndRegisterRequest, request: Request, respons
     contact = db.query(models.ContactSettings).first()
     return {
         "status": "success",
-        "message": "eBook purchased successfully!" if is_instant else "Slot booked successfully!",
+        "message": (
+            f"{_INSTANT_ACCESS_LABELS.get(course.course_type or '', 'Course')} purchased successfully!"
+            if is_instant else "Slot booked successfully!"
+        ),
         "invoice_uuid": inv_uuid,
         "student_id": student.id,
         "purchase_id": purchase.id,
