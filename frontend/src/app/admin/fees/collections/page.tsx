@@ -118,6 +118,7 @@ function ProgressBar({ collected, total }: { collected: number; total: number })
 function courseTypeBadge(t?: string) {
   if (t === "ebook") return <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 10, background: "#f5f3ff", color: "#7c3aed", border: "1px solid #ddd6fe", whiteSpace: "nowrap" }}>eBook</span>;
   if (t === "ebook_video") return <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 10, background: "#ecfdf5", color: "#059669", border: "1px solid #a7f3d0", whiteSpace: "nowrap" }}>eBook+Video</span>;
+  if (t === "micro") return <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 10, background: "#fffbeb", color: "#d97706", border: "1px solid #fde68a", whiteSpace: "nowrap" }}>Micro</span>;
   return <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 10, background: "#f0f9ff", color: "#0284c7", border: "1px solid #bae6fd", whiteSpace: "nowrap" }}>Live Batch</span>;
 }
 
@@ -188,6 +189,7 @@ function CourseRow({ course }: { course: CourseData }) {
                       <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 2, display: "flex", alignItems: "center", gap: 6 }}>
                         {b.batch_name}
                         {b.batch_type === "ebook" && <span style={{ fontSize: 9, fontWeight: 800, padding: "1px 6px", borderRadius: 8, background: "#f5f3ff", color: "#7c3aed", border: "1px solid #ddd6fe" }}>eBook · Auto</span>}
+                        {b.batch_type === "micro" && <span style={{ fontSize: 9, fontWeight: 800, padding: "1px 6px", borderRadius: 8, background: "#fffbeb", color: "#d97706", border: "1px solid #fde68a" }}>Micro · Auto</span>}
                       </div>
                       <div style={{ fontSize: 11, color: "#64748b" }}>{b.students_count} Student{b.students_count !== 1 ? "s" : ""}</div>
                     </div>

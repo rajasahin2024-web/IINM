@@ -1207,6 +1207,7 @@ function CoursePurchaseInner(){
   const typeBadge=(t?:string|null)=>{
     if(t==="ebook") return <span style={{background:"#f5f3ff",color:"#7c3aed",padding:"2px 6px",borderRadius:0,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.3px",whiteSpace:"nowrap"}}>eBook</span>;
     if(t==="ebook_video") return <span style={{background:"#ecfdf5",color:"#059669",padding:"2px 6px",borderRadius:0,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.3px",whiteSpace:"nowrap"}}>eBook+Video</span>;
+    if(t==="micro") return <span style={{background:"#fffbeb",color:"#d97706",padding:"2px 6px",borderRadius:0,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.3px",whiteSpace:"nowrap"}}>Micro</span>;
     return <span style={{background:"#f0f9ff",color:"#0284c7",padding:"2px 6px",borderRadius:0,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.3px",whiteSpace:"nowrap"}}>Live</span>;
   };
 
@@ -1318,6 +1319,7 @@ function CoursePurchaseInner(){
           <option value="live_batch">Live Batch</option>
           <option value="ebook">eBook Only</option>
           <option value="ebook_video">eBook + Video</option>
+          <option value="micro">Micro Course</option>
         </select>
         {(search!==""||filterCourse!=="all"||filterStatus!=="all"||filterPaymentType!=="all"||filterSource!=="all"||filterCourseType!=="all")&&(
           <button onClick={resetFilters} style={{background:"#fef2f2",color:"#ef4444",border:"1px solid #fecaca",padding:"10px 16px",borderRadius:0,fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
@@ -1361,7 +1363,7 @@ function CoursePurchaseInner(){
                 </div>
                 <div style={{fontSize:13,color:"#475569",fontWeight:600}}>
                   <div>{p.course_title}</div>
-                  <div style={{marginTop:4}}>{typeBadge(p.course_type)}{(p.course_type==="ebook"||p.course_type==="ebook_video")&&<span style={{marginLeft:6,fontSize:10,color:"#7c3aed",fontWeight:700}}>auto-enrolled</span>}</div>
+                  <div style={{marginTop:4}}>{typeBadge(p.course_type)}{(p.course_type==="ebook"||p.course_type==="ebook_video"||p.course_type==="micro")&&<span style={{marginLeft:6,fontSize:10,color:"#7c3aed",fontWeight:700}}>auto-enrolled</span>}</div>
                 </div>
                 <div style={{fontSize:13,fontWeight:600,color:"#0f172a"}}>{fmt(p.net_fee)}</div>
                 <div style={{fontSize:13,fontWeight:700,color:"#16a34a"}}>{fmt(p.paid_amount)}</div>

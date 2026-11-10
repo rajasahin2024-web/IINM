@@ -261,6 +261,7 @@ function CourseMockTestsPanel({ onNavigate }: { onNavigate: (href: string) => vo
             const paid = price != null && price > 0;
             const tb = c.course_type === "ebook" ? { bg: "#f5f3ff", color: "#7c3aed", label: "eBook" }
               : c.course_type === "ebook_video" ? { bg: "#ecfdf5", color: "#059669", label: "eBook+Video" }
+              : c.course_type === "micro" ? { bg: "#fffbeb", color: "#d97706", label: "Micro" }
               : { bg: "#f0f9ff", color: "#0284c7", label: "Live Batch" };
             return (
               <div key={c.id} className="exam-card" style={{ padding: "18px 20px", cursor: "pointer", "--card-accent": "#7c3aed" } as React.CSSProperties}

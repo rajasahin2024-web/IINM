@@ -537,6 +537,7 @@ function BatchManagerInner() {
           <option value="all">All Types</option>
           <option value="standard">Standard</option>
           <option value="ebook">eBook (auto)</option>
+          <option value="micro">Micro (auto)</option>
         </select>
 
         <span style={{ fontSize: 13, color: "#64748b", marginLeft: "auto", whiteSpace: "nowrap" }}>
@@ -602,6 +603,9 @@ function BatchManagerInner() {
                     {batch.batch_type === "ebook" && (
                       <span title="Auto-created eBook batch — buyers are enrolled automatically on purchase" style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 10, background: "#f5f3ff", color: "#7c3aed", border: "1px solid #ddd6fe", whiteSpace: "nowrap" }}>eBook</span>
                     )}
+                    {batch.batch_type === "micro" && (
+                      <span title="Auto-created micro batch — buyers are enrolled automatically on purchase" style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 10, background: "#fffbeb", color: "#d97706", border: "1px solid #fde68a", whiteSpace: "nowrap" }}>Micro</span>
+                    )}
                   </div>
                   {batch.meeting_url && (
                     <a href={batch.meeting_url} target="_blank" rel="noreferrer"
@@ -614,11 +618,17 @@ function BatchManagerInner() {
                 {/* Course */}
                 <div style={{ fontSize: 13, color: "#475569", overflow: "hidden" }}>
                   <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{courseName}</div>
-                  {courseType !== "live_batch" && (
-                    <span style={{ display: "inline-block", marginTop: 3, fontSize: 9.5, fontWeight: 800, padding: "1px 7px", borderRadius: 9, background: courseType === "ebook" ? "#f5f3ff" : "#ecfdf5", color: courseType === "ebook" ? "#7c3aed" : "#059669", border: `1px solid ${courseType === "ebook" ? "#ddd6fe" : "#a7f3d0"}` }}>
-                      {courseType === "ebook" ? "eBook" : "eBook+Video"}
-                    </span>
-                  )}
+                  {(() => {
+                    const cb = courseType === "ebook" ? { bg: "#f5f3ff", color: "#7c3aed", border: "#ddd6fe", label: "eBook" }
+                      : courseType === "ebook_video" ? { bg: "#ecfdf5", color: "#059669", border: "#a7f3d0", label: "eBook+Video" }
+                      : courseType === "micro" ? { bg: "#fffbeb", color: "#d97706", border: "#fde68a", label: "Micro" }
+                      : null;
+                    return cb && (
+                      <span style={{ display: "inline-block", marginTop: 3, fontSize: 9.5, fontWeight: 800, padding: "1px 7px", borderRadius: 9, background: cb.bg, color: cb.color, border: `1px solid ${cb.border}` }}>
+                        {cb.label}
+                      </span>
+                    );
+                  })()}
                 </div>
 
                 {/* Mode */}

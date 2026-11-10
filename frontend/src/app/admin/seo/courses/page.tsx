@@ -68,6 +68,7 @@ function SeoCoursesInner() {
   const typeBadge = (t?: string) => {
     if (t === "ebook") return <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", background: "#f5f3ff", color: "#7c3aed" }}>eBook</span>;
     if (t === "ebook_video") return <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", background: "#ecfdf5", color: "#059669" }}>eBook+Video</span>;
+    if (t === "micro") return <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", background: "#fffbeb", color: "#d97706" }}>Micro</span>;
     return <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", background: "#f0f9ff", color: "#0284c7" }}>Live Batch</span>;
   };
 
@@ -96,6 +97,7 @@ function SeoCoursesInner() {
           <option value="live_batch">Live Batch</option>
           <option value="ebook">eBook Only</option>
           <option value="ebook_video">eBook + Video</option>
+          <option value="micro">Micro Course</option>
         </select>
       </div>
 

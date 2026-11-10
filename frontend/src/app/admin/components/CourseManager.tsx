@@ -61,12 +61,21 @@ const COURSE_TYPES = [
     points: ["Everything in eBook Only", "Recorded videos unlock after reading", "Optional mock test + certificate"],
     accent: "#059669",
   },
+  {
+    value: "micro",
+    label: "Micro Course",
+    icon: "⚡",
+    desc: "Short, content-based course sold at a single instant price — like an eBook purchase, but built from regular chapters & materials.",
+    points: ["Instant full-price purchase", "Auto-enrolled into a hidden micro batch", "Content chapters — no teachers or live classes"],
+    accent: "#d97706",
+  },
 ] as const;
 
 function courseTypeBadge(courseType?: string | null): { bg: string; color: string; label: string } {
   switch (courseType) {
     case "ebook": return { bg: "#f5f3ff", color: "#7c3aed", label: "eBook" };
     case "ebook_video": return { bg: "#ecfdf5", color: "#059669", label: "eBook+Video" };
+    case "micro": return { bg: "#fffbeb", color: "#d97706", label: "Micro" };
     default: return { bg: "#f0f9ff", color: "#0284c7", label: "Live Batch" };
   }
 }
@@ -998,7 +1007,8 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
       setFormMockTestPrice(course.mock_test_price ?? "");
       setFormEbookBatchCapacity(course.ebook_batch_capacity ?? "");
       setWizardEbooks([]);
-      if ((course.course_type || "live_batch") !== "live_batch") {
+      const editCourseType = course.course_type || "live_batch";
+      if (editCourseType === "ebook" || editCourseType === "ebook_video") {
         (async () => {
           const found: EbookMaterial[] = [];
           for (const s of course.subjects || []) {
@@ -1790,6 +1800,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
             <option value="live_batch">Live Batch</option>
             <option value="ebook">eBook Only</option>
             <option value="ebook_video">eBook + Video</option>
+            <option value="micro">Micro Course</option>
           </select>
           <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#94a3b8" }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
@@ -2141,7 +2152,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                  { id: 1, label: "Basic Info & SEO" },
                  { id: 2, label: "Media & Pricing" },
                  { id: 3, label: "Curriculum Mapping" },
-                 ...(formCourseType !== "ebook" ? [{ id: 4, label: "Teachers" }] : []),
+                 ...(formCourseType !== "ebook" && formCourseType !== "micro" ? [{ id: 4, label: "Teachers" }] : []),
                ].map((s, i) => (
                  <button key={s.id} type="button" onClick={() => setWizardStep(s.id)} style={wizardTabStyle(wizardStep === s.id)}>
                    <div style={wizardBadgeStyle(wizardStep === s.id)}>{i + 1}</div> {s.label}
@@ -2157,7 +2168,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                   <div style={{ width: "100%", flex: 1, minHeight: 0, overflowY: "auto", animation: "slideUp 0.2s ease-out" }}>
                     <div style={{ maxWidth: 980, margin: "0 auto" }}>
                       <h3 style={{ margin: "8px 0 4px", fontSize: 18, fontWeight: 800, color: "#0f172a" }}>What kind of course is this?</h3>
-                      <p style={{ margin: "0 0 20px", fontSize: 13, color: "#64748b" }}>The wizard adapts to the type you pick — eBook courses skip teachers and live-class scheduling.</p>
+                      <p style={{ margin: "0 0 20px", fontSize: 13, color: "#64748b" }}>The wizard adapts to the type you pick — eBook and micro courses skip teachers and live-class scheduling.</p>
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
                         {COURSE_TYPES.map(t => {
                           const active = formCourseType === t.value;
@@ -2199,10 +2210,10 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                       {formCourseType !== "live_batch" && (
                         <div style={{ marginTop: 20, border: "1px solid #e2e8f0", borderRadius: 12, padding: "18px 20px", background: "#f8fafc", display: "flex", gap: 20, alignItems: "flex-end", flexWrap: "wrap" }}>
                           <div style={{ minWidth: 220, flex: "0 0 260px" }}>
-                            <FloatingField label="eBook Batch Capacity" type="number" min="1" value={formEbookBatchCapacity} onChange={(v: string) => setFormEbookBatchCapacity(v === "" ? "" : Math.max(1, Number(v) || 1))} placeholder="Default 500" />
+                            <FloatingField label={formCourseType === "micro" ? "Micro Batch Capacity" : "eBook Batch Capacity"} type="number" min="1" value={formEbookBatchCapacity} onChange={(v: string) => setFormEbookBatchCapacity(v === "" ? "" : Math.max(1, Number(v) || 1))} placeholder="Default 500" />
                           </div>
                           <p style={{ margin: "0 0 6px", fontSize: 12, color: "#64748b", flex: 1, minWidth: 260, lineHeight: 1.6 }}>
-                            Buyers are auto-enrolled into an eBook batch after payment. When a batch fills up, the next one is created automatically.
+                            Buyers are auto-enrolled into {formCourseType === "micro" ? "a hidden micro" : "an eBook"} batch after payment. When a batch fills up, the next one is created automatically.
                           </p>
                         </div>
                       )}
@@ -2474,7 +2485,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                           )}
                         </SectionPanel>
 
-                        {formCourseType !== "live_batch" && (
+                        {(formCourseType === "ebook" || formCourseType === "ebook_video") && (
                           <SectionPanel title="eBook Files" icon="📖" accent="#7c3aed" marginBottom={0}>
                             <div style={{ marginBottom: 16 }}>
                               <button
@@ -2785,7 +2796,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                        {addingMaterial && activeChapterId && (
                          <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10, flexShrink: 0 }}>
                            <div style={{ display: "flex", gap: 6 }}>
-                             {([["youtube", "YouTube Link"], ["upload", "File Upload (R2)"], ["ebook", "eBook (Private)"], ["library", "From Library"]] as const).map(([m, label]) => (
+                             {([["youtube", "YouTube Link"], ["upload", "File Upload (R2)"], ["ebook", "eBook (Private)"], ["library", "From Library"]] as const).filter(([m]) => m !== "ebook" || formCourseType !== "micro").map(([m, label]) => (
                                <button key={m} type="button" onClick={() => setMaterialMode(m)} style={{ flex: 1, padding: "6px 6px", borderRadius: 6, border: "1px solid", borderColor: materialMode === m ? "#059669" : "#bbf7d0", background: materialMode === m ? "#059669" : "#fff", color: materialMode === m ? "#fff" : "#059669", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                                  {label}
                                </button>
@@ -2809,7 +2820,7 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                              </button>
                            )}
 
-                           {materialMode === "ebook" && (
+                           {materialMode === "ebook" && formCourseType !== "micro" && (
                              <>
                                <button type="button" onClick={() => setEbookModalOpen(true)} style={{ padding: "10px 12px", borderRadius: 8, border: "1.5px dashed #7c3aed", background: "#faf5ff", color: "#7c3aed", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                                  <Icon name="book" size={15} /> Upload Private eBook PDF (+ cover & TOC)
@@ -3029,8 +3040,8 @@ export default function CourseManager({ isInlineModal = false, onCloseInline, on
                   </div>
                )}
 
-               {/* ── STEP 4: Teachers (skipped for eBook-only courses) ── */}
-               {wizardStep === 4 && formCourseType !== "ebook" && (
+               {/* ── STEP 4: Teachers (skipped for eBook-only and micro courses) ── */}
+               {wizardStep === 4 && formCourseType !== "ebook" && formCourseType !== "micro" && (
                  <div style={{ width: "100%", flex: 1, minHeight: 0, overflowY: "auto", animation: "slideUp 0.2s ease-out" }}>
                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                      <div style={{
