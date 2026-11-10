@@ -28,7 +28,7 @@ from pydantic import BaseModel, EmailStr
 from database import get_db
 from cache import cache
 import models
-from helpers import rewrite_url, send_email
+from helpers import rewrite_url, send_email, is_instant_access_type
 from security import (
     check_public_rate_limit,
     get_client_ip,
@@ -127,13 +127,13 @@ def _compute_booking_amount(course: models.Course) -> float:
     return float(course.discount_price if course.discount_price else (course.price or 0.0))
 
 
-def _is_ebook_course(course: models.Course) -> bool:
-    return (course.course_type or "live_batch") in ("ebook", "ebook_video")
+def _is_instant_access_course(course: models.Course) -> bool:
+    return is_instant_access_type(course.course_type)
 
 
-def _ebook_full_price(course: models.Course) -> float:
-    """eBook purchases are always the full course price — no slot-booking
-    partial payments or installments."""
+def _instant_access_full_price(course: models.Course) -> float:
+    """Instant-access purchases are always the full course price — no
+    slot-booking partial payments or installments."""
     return float(course.discount_price if course.discount_price else (course.price or 0.0))
 
 
@@ -619,9 +619,9 @@ def create_booking_order(req: CreateOrderRequest, request: Request, db: Session 
             )
 
     # Verify the amount matches the expected booking amount (prevent tampering)
-    if _is_ebook_course(course):
-        # eBook purchase = full course price, always (no slot-booking splits)
-        expected = _ebook_full_price(course)
+    if _is_instant_access_course(course):
+        # Instant-access purchase = full course price, always (no slot-booking splits)
+        expected = _instant_access_full_price(course)
     elif req.pay_mode == "full":
         expected = _compute_full_payment_discounted(course)
         if expected <= 0:
@@ -666,8 +666,8 @@ def create_booking_order(req: CreateOrderRequest, request: Request, db: Session 
 def verify_and_register(req: VerifyAndRegisterRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     """Public: verify Razorpay signature, create Student + CoursePurchase + BatchEnrollment +
     PaymentTransaction, send email + push notification, return receipt data.
-    eBook-type courses additionally auto-pick/auto-create an eBook batch and
-    set the student session cookie (auto-login) in the same transaction."""
+    Instant-access courses additionally auto-pick/auto-create a hidden batch
+    and set the student session cookie (auto-login) in the same transaction."""
     client_ip = get_client_ip(request)
     check_public_rate_limit(client_ip, limit=10, window=300)
 
@@ -701,12 +701,12 @@ def verify_and_register(req: VerifyAndRegisterRequest, request: Request, respons
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
 
-    # 3. Validate batch (if provided) — live-batch path only; eBook courses
-    # auto-assign an eBook batch below.
+    # 3. Validate batch (if provided) — live-batch path only; instant-access
+    # courses auto-assign a hidden batch below.
     batch = None
-    is_ebook = _is_ebook_course(course)
-    if is_ebook:
-        expected_price = _ebook_full_price(course)
+    is_instant = _is_instant_access_course(course)
+    if is_instant:
+        expected_price = _instant_access_full_price(course)
         if abs(req.amount_paid - expected_price) > 0.01:
             raise HTTPException(
                 status_code=400,
@@ -853,10 +853,10 @@ def verify_and_register(req: VerifyAndRegisterRequest, request: Request, respons
     if not txn.reference_no or not txn.reference_no.startswith("IINM-TXN"):
         txn.reference_no = f"IINM-TXN-{datetime.now().strftime('%Y%m')}-{txn.id:04d}"
 
-    # 9. Create BatchEnrollment — eBook buyers are auto-enrolled into the
-    # current open eBook batch (auto-created when all are full). The course
+    # 9. Create BatchEnrollment — instant-access buyers are auto-enrolled into
+    # the current open auto batch (auto-created when all are full). The course
     # row lock serializes concurrent purchases on the capacity check.
-    if is_ebook:
+    if is_instant:
         db.query(models.Course).filter(models.Course.id == course.id).with_for_update().first()
         batch = _pick_or_create_ebook_batch(db, course)
 
@@ -885,9 +885,9 @@ def verify_and_register(req: VerifyAndRegisterRequest, request: Request, respons
     if batch:
         cache.invalidate(f"slot_booking_batches_{course.id}")
 
-    # 9b. eBook buyers are auto-logged in — issue the student session cookie.
+    # 9b. Instant-access buyers are auto-logged in — issue the student session cookie.
     auto_login = False
-    if is_ebook:
+    if is_instant:
         try:
             token = make_student_token(student.id)
             response.set_cookie(
@@ -928,7 +928,7 @@ def verify_and_register(req: VerifyAndRegisterRequest, request: Request, respons
     contact = db.query(models.ContactSettings).first()
     return {
         "status": "success",
-        "message": "eBook purchased successfully!" if is_ebook else "Slot booked successfully!",
+        "message": "eBook purchased successfully!" if is_instant else "Slot booked successfully!",
         "invoice_uuid": inv_uuid,
         "student_id": student.id,
         "purchase_id": purchase.id,

@@ -12,6 +12,26 @@ BASE_URL = os.getenv("BASE_URL", "http://localhost:2007")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
 
+# ─── Course-type predicates ─────────────────────────────────────
+# courses.course_type is an unconstrained string; NULL/unknown values
+# degrade to "live_batch". Every type-branch must go through these
+# allow-list helpers — never binary `!= "live_batch"` checks — so a new
+# type can never silently fall into an existing bucket.
+EBOOK_COURSE_TYPES = ("ebook", "ebook_video")
+INSTANT_ACCESS_COURSE_TYPES = EBOOK_COURSE_TYPES
+
+
+def is_ebook_type(course_type: str | None) -> bool:
+    """True for eBook-family course types (ebook, ebook_video)."""
+    return (course_type or "live_batch") in EBOOK_COURSE_TYPES
+
+
+def is_instant_access_type(course_type: str | None) -> bool:
+    """True for types sold as instant full-price purchases: no slot-booking
+    split, no batch choice, no installments; enrollment rides on an
+    auto-created hidden batch."""
+    return (course_type or "live_batch") in INSTANT_ACCESS_COURSE_TYPES
+
 
 def validate_upload(file: "UploadFile", allowed_exts: set[str] = ALLOWED_IMAGE_EXTENSIONS, max_size: int = MAX_IMAGE_SIZE_BYTES) -> str:
     """Validate uploaded file extension and size. Returns the file extension (e.g. '.jpg')."""

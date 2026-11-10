@@ -38,7 +38,7 @@ from pydantic import BaseModel, Field
 
 from database import get_db
 import models
-from helpers import rewrite_url_relative
+from helpers import rewrite_url_relative, is_ebook_type
 from security import hash_password, verify_password
 from routers.student_auth import require_student, _ACTIVE_ENROLLMENT_STATUSES
 from routers.verification import format_reg_no
@@ -1152,7 +1152,7 @@ def course_certificate(course_id: int, student: models.Student = Depends(require
     # eBook-type courses with a configured mock test issue the certificate on
     # a passed mock-test attempt instead of raw material completion.
     mock_test_gate = (
-        (course.course_type or "live_batch") in ("ebook", "ebook_video")
+        is_ebook_type(course.course_type)
         and course.mock_test_exam_id is not None
         and batch_ids
     )

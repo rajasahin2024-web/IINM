@@ -14,7 +14,7 @@ from database import get_db
 import models
 import ebook_storage
 from routers.auth import require_device
-from helpers import rewrite_url, BASE_URL
+from helpers import rewrite_url, BASE_URL, is_ebook_type, EBOOK_COURSE_TYPES
 from security import check_public_rate_limit, get_client_ip
 
 router = APIRouter(prefix="/api", tags=["courses"])
@@ -581,7 +581,7 @@ def _ebook_sample_end_page(mat: models.CourseMaterial) -> int:
 def _public_ebook_blocks(c: models.Course) -> list:
     """Public eBook metadata for the landing page — cover, chapter list and
     per-chapter sample flags. Never exposes file keys or file URLs."""
-    if (c.course_type or "live_batch") not in ("ebook", "ebook_video"):
+    if not is_ebook_type(c.course_type):
         return []
     ebooks = []
     for ch in sorted(c.chapters, key=lambda x: x.order_position):
@@ -635,7 +635,7 @@ def get_public_ebook_sample(material_id: int, request: Request, db: Session = De
     published = db.query(models.Course.id).filter(
         models.Course.id.in_(course_ids or [-1]),
         models.Course.status == "PUBLISHED",
-        models.Course.course_type.in_(["ebook", "ebook_video"]),
+        models.Course.course_type.in_(EBOOK_COURSE_TYPES),
     ).first()
     if not published:
         raise HTTPException(status_code=404, detail="eBook sample not found")
@@ -1028,7 +1028,7 @@ def get_public_course_extended_details(slug: str, db: Session = Depends(get_db))
 
     # eBook landings get neutral defaults instead of live-cohort copy so an
     # unconfigured eBook page never advertises "Live Cohorts & 1:1 Mentorship".
-    if (c.course_type or "live_batch") in ("ebook", "ebook_video"):
+    if is_ebook_type(c.course_type):
         defaults["hero_badges"] = [
             "Instant Access After Purchase",
             "Read In Your Browser — No Downloads",
